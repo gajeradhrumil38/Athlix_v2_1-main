@@ -11,6 +11,7 @@ import * as localData from './localData';
 import { hasSupabaseConfig, supabase } from './supabase';
 import { convertWeight, isWeightUnit, type WeightUnit } from './units';
 import type { ExerciseInputType } from './exerciseTypes';
+import { resolveExerciseInputType, isWeightExerciseType } from './exerciseTypes';
 
 export type LocalUser = localData.LocalUser;
 export type LocalProfile = localData.LocalProfile;
@@ -1585,13 +1586,18 @@ export const findLastSimilarWorkout = (
   finished: { title: string; muscleGroups: string[]; totalVolume: number; totalSets: number; durationMinutes: number },
   priorWorkouts: (LocalWorkout & { exercises?: LocalExercise[] })[],
 ): WorkoutComparison | null => {
+  const sorted = [...priorWorkouts].sort((a, b) => {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    return b.created_at.localeCompare(a.created_at);
+  });
+
   const finishedTitle = finished.title.trim().toLowerCase();
   const finishedGroups = new Set(finished.muscleGroups.map((g) => g.toLowerCase()));
 
-  const titleMatch = priorWorkouts.find((w) => w.title.trim().toLowerCase() === finishedTitle);
+  const titleMatch = sorted.find((w) => w.title.trim().toLowerCase() === finishedTitle);
 
   const overlapMatch = !titleMatch
-    ? priorWorkouts.find((w) => {
+    ? sorted.find((w) => {
         const groups = new Set((w.muscle_groups || []).map((g) => g.toLowerCase()));
         if (groups.size === 0 || finishedGroups.size === 0) return false;
         const shared = [...groups].filter((g) => finishedGroups.has(g)).length;
@@ -1603,7 +1609,9 @@ export const findLastSimilarWorkout = (
   const match = titleMatch || overlapMatch;
   if (!match) return null;
 
-  const prevVolume = (match.exercises || []).reduce((sum, ex) => sum + ex.weight * ex.reps * ex.sets, 0);
+  const prevVolume = (match.exercises || [])
+    .filter((ex) => isWeightExerciseType(resolveExerciseInputType(ex.name)))
+    .reduce((sum, ex) => sum + ex.weight * ex.reps * ex.sets, 0);
   const prevSets = (match.exercises || []).reduce((sum, ex) => sum + ex.sets, 0);
 
   return {
