@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Trophy, X } from 'lucide-react';
 import { getGoals, addGoal, deleteGoal, getPersonalRecords, type LocalExerciseGoal, type LocalPersonalRecord } from '../../lib/supabaseData';
+import { convertWeight } from '../../lib/units';
 import toast from 'react-hot-toast';
 
 interface GoalsSectionProps {
@@ -12,6 +13,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({ userId, weightUnit }
   const [goals, setGoals] = useState<LocalExerciseGoal[]>([]);
   const [records, setRecords] = useState<LocalPersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [weight, setWeight] = useState('');
@@ -20,9 +22,10 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({ userId, weightUnit }
 
   const load = () => {
     setLoading(true);
+    setLoadError(false);
     Promise.all([getGoals(userId), getPersonalRecords(userId)])
       .then(([g, r]) => { setGoals(g); setRecords(r); })
-      .catch(() => toast.error('Failed to load goals'))
+      .catch(() => { toast.error('Failed to load goals'); setLoadError(true); })
       .finally(() => setLoading(false));
   };
 
@@ -60,6 +63,19 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({ userId, weightUnit }
 
   if (loading) {
     return <div className="p-4 space-y-2">{[1, 2].map((i) => <div key={i} className="h-20 rounded-xl animate-pulse bg-white/5" />)}</div>;
+  }
+
+  if (loadError) {
+    return (
+      <button
+        type="button"
+        onClick={load}
+        className="w-full p-6 text-center text-[12px] rounded-2xl cursor-pointer"
+        style={{ color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+      >
+        Couldn't load goals — tap to retry
+      </button>
+    );
   }
 
   const active = goals.filter((g) => g.status === 'active');
@@ -128,7 +144,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({ userId, weightUnit }
 
       {active.map((goal) => {
         const pr = records.find((r) => r.exercise_name.toLowerCase() === goal.exercise_name.toLowerCase());
-        const currentWeight = pr?.best_weight ?? 0;
+        const currentWeight = pr ? convertWeight(pr.best_weight, weightUnit, goal.unit) : 0;
         const progressPct = Math.min(100, Math.round((currentWeight / goal.target_weight) * 100));
         return (
           <div key={goal.id} className="p-4 rounded-2xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
