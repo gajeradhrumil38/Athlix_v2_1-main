@@ -1570,6 +1570,51 @@ export const getWorkouts = async (
   return attachExercises(workouts, (exerciseRows || []) as LocalExercise[]);
 };
 
+export interface WorkoutComparison {
+  previousDate: string;
+  previousTitle: string;
+  volumeDelta: number;
+  setsDelta: number;
+  durationDeltaMinutes: number;
+}
+
+// Pure — takes the already-finished workout's own totals plus a list of prior
+// workouts (fetched once, before save) and finds the best match to compare against.
+// Matches by title first (case-insensitive), falling back to >50% muscle-group overlap.
+export const findLastSimilarWorkout = (
+  finished: { title: string; muscleGroups: string[]; totalVolume: number; totalSets: number; durationMinutes: number },
+  priorWorkouts: (LocalWorkout & { exercises?: LocalExercise[] })[],
+): WorkoutComparison | null => {
+  const finishedTitle = finished.title.trim().toLowerCase();
+  const finishedGroups = new Set(finished.muscleGroups.map((g) => g.toLowerCase()));
+
+  const titleMatch = priorWorkouts.find((w) => w.title.trim().toLowerCase() === finishedTitle);
+
+  const overlapMatch = !titleMatch
+    ? priorWorkouts.find((w) => {
+        const groups = new Set((w.muscle_groups || []).map((g) => g.toLowerCase()));
+        if (groups.size === 0 || finishedGroups.size === 0) return false;
+        const shared = [...groups].filter((g) => finishedGroups.has(g)).length;
+        const union = new Set([...groups, ...finishedGroups]).size;
+        return shared / union > 0.5;
+      })
+    : undefined;
+
+  const match = titleMatch || overlapMatch;
+  if (!match) return null;
+
+  const prevVolume = (match.exercises || []).reduce((sum, ex) => sum + ex.weight * ex.reps * ex.sets, 0);
+  const prevSets = (match.exercises || []).reduce((sum, ex) => sum + ex.sets, 0);
+
+  return {
+    previousDate: match.date,
+    previousTitle: match.title,
+    volumeDelta: finished.totalVolume - prevVolume,
+    setsDelta: finished.totalSets - prevSets,
+    durationDeltaMinutes: finished.durationMinutes - match.duration_minutes,
+  };
+};
+
 export const saveWorkout = async (
   userId: string,
   input: {
