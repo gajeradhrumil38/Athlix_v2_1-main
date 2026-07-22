@@ -21,6 +21,7 @@ export type LocalTemplate = localData.LocalTemplate;
 export type LocalTemplateExercise = localData.LocalTemplateExercise;
 export type LocalBodyWeightLog = localData.LocalBodyWeightLog;
 export type LocalPersonalRecord = localData.LocalPersonalRecord;
+export type LocalExerciseGoal = localData.LocalExerciseGoal;
 export type LocalExerciseSessionSummary = localData.LocalExerciseSessionSummary;
 export type LocalExerciseLibraryItem = localData.LocalExerciseLibraryItem;
 export type LocalHeartRateSession = localData.LocalHeartRateSession;
@@ -2304,6 +2305,68 @@ const renameExerciseTypeOverride = async (userId: string, oldName: string, newNa
     { user_id: userId, exercise_name: normalizedNew, input_type: data.input_type, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,exercise_name' },
   );
+};
+
+// ── Exercise goals ──────────────────────────────────────────────────────────
+
+export const getGoals = async (userId: string): Promise<LocalExerciseGoal[]> => {
+  if (!hasSupabaseConfig) return localData.getGoals(userId);
+
+  const { data, error } = await supabase
+    .from('exercise_goals')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw normalizeError(error, 'Failed to load goals.');
+  return (data || []) as LocalExerciseGoal[];
+};
+
+export const addGoal = async (
+  userId: string,
+  input: { exerciseName: string; targetWeight: number; targetReps: number; unit: 'kg' | 'lbs' },
+): Promise<LocalExerciseGoal> => {
+  if (!hasSupabaseConfig) return localData.addGoal(userId, input);
+
+  const { data, error } = await supabase
+    .from('exercise_goals')
+    .insert({
+      user_id: userId,
+      exercise_name: input.exerciseName.trim(),
+      target_weight: input.targetWeight,
+      target_reps: input.targetReps,
+      unit: input.unit,
+      status: 'active',
+    })
+    .select()
+    .single();
+  if (error) throw normalizeError(error, 'Failed to save goal.');
+  return data as LocalExerciseGoal;
+};
+
+export const updateGoal = async (
+  userId: string,
+  goalId: string,
+  updates: Partial<Pick<LocalExerciseGoal, 'target_weight' | 'target_reps' | 'unit' | 'status' | 'achieved_at'>>,
+): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.updateGoal(userId, goalId, updates);
+
+  const { error } = await supabase
+    .from('exercise_goals')
+    .update(updates)
+    .eq('id', goalId)
+    .eq('user_id', userId);
+  if (error) throw normalizeError(error, 'Failed to update goal.');
+};
+
+export const deleteGoal = async (userId: string, goalId: string): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.deleteGoal(userId, goalId);
+
+  const { error } = await supabase
+    .from('exercise_goals')
+    .delete()
+    .eq('id', goalId)
+    .eq('user_id', userId);
+  if (error) throw normalizeError(error, 'Failed to delete goal.');
 };
 
 export const addCustomExercise = async (
