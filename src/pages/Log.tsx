@@ -158,6 +158,7 @@ export const Log: React.FC = () => {
   const [openPickerOnStart, setOpenPickerOnStart] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
   const [finishPersonalRecords, setFinishPersonalRecords] = useState<LocalPersonalRecord[]>([]);
+  const [finishPersonalRecordsLoaded, setFinishPersonalRecordsLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveInFlightRef = useRef(false);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
@@ -398,7 +399,10 @@ export const Log: React.FC = () => {
   const handleFinish = () => {
     setShowFinish(true);
     if (user) {
-      getPersonalRecords(user.id).then(setFinishPersonalRecords).catch(() => setFinishPersonalRecords([]));
+      setFinishPersonalRecordsLoaded(false);
+      getPersonalRecords(user.id)
+        .then((records) => { setFinishPersonalRecords(records); setFinishPersonalRecordsLoaded(true); })
+        .catch(() => { setFinishPersonalRecords([]); setFinishPersonalRecordsLoaded(true); });
     }
   };
 
@@ -556,6 +560,7 @@ export const Log: React.FC = () => {
             bodyWeight={profile?.body_weight ?? null}
             bodyWeightUnit={(profile?.body_weight_unit || 'lbs') as 'kg' | 'lbs'}
             personalRecords={finishPersonalRecords}
+            personalRecordsLoaded={finishPersonalRecordsLoaded}
             onConfirm={handleSave}
             onAddMore={() => { if (!saving) setShowFinish(false); }}
             onCancel={() => { if (!saving) setShowFinish(false); }}

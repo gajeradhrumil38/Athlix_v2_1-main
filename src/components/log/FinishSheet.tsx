@@ -13,6 +13,7 @@ interface FinishSheetProps {
   bodyWeight?: number | null;
   bodyWeightUnit?: WeightUnit;
   personalRecords?: LocalPersonalRecord[];
+  personalRecordsLoaded?: boolean;
   onConfirm: (title: string, notes: string) => void;
   onCancel: () => void;
   onAddMore?: () => void;
@@ -25,6 +26,7 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
   bodyWeight,
   bodyWeightUnit = 'lbs',
   personalRecords = [],
+  personalRecordsLoaded = true,
   onConfirm,
   onCancel,
   onAddMore,
@@ -41,6 +43,7 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
     return acc + (ex.sets || []).filter((s) => s.done).reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0);
   }, 0);
   const prCount = useMemo(() => {
+    if (!personalRecordsLoaded) return 0;
     const prByName = new Map(personalRecords.map((pr) => [pr.exercise_name.toLowerCase(), pr]));
     let count = 0;
     for (const ex of workout.exercises || []) {
@@ -54,7 +57,7 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
       if (!existing || bestWeight > existing.best_weight) count++;
     }
     return count;
-  }, [workout.exercises, personalRecords, typeOverrides]);
+  }, [workout.exercises, personalRecords, personalRecordsLoaded, typeOverrides]);
   const bodyWeightForMath = useMemo(() => {
     if (!bodyWeight || !Number.isFinite(bodyWeight) || bodyWeight <= 0) return null;
     return convertWeight(bodyWeight, bodyWeightUnit, weightUnit, 0.1);
