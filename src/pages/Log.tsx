@@ -4,7 +4,7 @@ import { AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useExerciseOverrides } from '../contexts/ExerciseOverridesContext';
-import { saveWorkout, getWorkouts, type LocalExercise } from '../lib/supabaseData';
+import { saveWorkout, getWorkouts, getPersonalRecords, type LocalExercise, type LocalPersonalRecord } from '../lib/supabaseData';
 import { resolveEffectiveInputType } from '../lib/exerciseTypes';
 import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
@@ -157,6 +157,7 @@ export const Log: React.FC = () => {
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [openPickerOnStart, setOpenPickerOnStart] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
+  const [finishPersonalRecords, setFinishPersonalRecords] = useState<LocalPersonalRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const saveInFlightRef = useRef(false);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
@@ -396,6 +397,9 @@ export const Log: React.FC = () => {
 
   const handleFinish = () => {
     setShowFinish(true);
+    if (user) {
+      getPersonalRecords(user.id).then(setFinishPersonalRecords).catch(() => setFinishPersonalRecords([]));
+    }
   };
 
   const handleBackToPrevious = useCallback(() => {
@@ -551,6 +555,7 @@ export const Log: React.FC = () => {
             weightUnit={weightUnit}
             bodyWeight={profile?.body_weight ?? null}
             bodyWeightUnit={(profile?.body_weight_unit || 'lbs') as 'kg' | 'lbs'}
+            personalRecords={finishPersonalRecords}
             onConfirm={handleSave}
             onAddMore={() => { if (!saving) setShowFinish(false); }}
             onCancel={() => { if (!saving) setShowFinish(false); }}
