@@ -1,0 +1,9 @@
+/* src/components/home/MuscleMap.css */
+@keyframes maxIntensity {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; filter: brightness(1.3); }
+}
+
+.muscle-max {
+  animation: maxIntensity 2s ease-in-out infinite;
+}

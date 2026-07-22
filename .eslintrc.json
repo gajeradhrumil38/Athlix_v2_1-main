@@ -1,0 +1,4 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "ignorePatterns": ["src/**", "dist/**", "opentraining-exercises-master/**", "node_modules/**"]
+}

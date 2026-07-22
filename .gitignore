@@ -1,0 +1,18 @@
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+dist/
+public/legacy-app/
+.legacy-build/
+build/
+coverage/
+.DS_Store
+*.log
+
+.env.local
+.env*.local
+.env*
+!.env.example
+
+# Supabase CLI cache
+supabase/.temp/

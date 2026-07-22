@@ -1,0 +1,467 @@
+{
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/App.tsx": {
+    "mtime": 1780171354.72535,
+    "ast_hash": "3affabd38bf7d6cc68fdc1e442058a8a",
+    "semantic_hash": "3affabd38bf7d6cc68fdc1e442058a8a"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/ai/AiChat.tsx": {
+    "mtime": 1780009840.1121738,
+    "ast_hash": "a71c21f8684f44781b74541a39fb2739",
+    "semantic_hash": "a71c21f8684f44781b74541a39fb2739"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/home/GoalEditSheet.tsx": {
+    "mtime": 1777704252.0210707,
+    "ast_hash": "b149507f03df81e8b4f1aa38999fa8b9",
+    "semantic_hash": "b149507f03df81e8b4f1aa38999fa8b9"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/home/MuscleMap.tsx": {
+    "mtime": 1778966442.6649532,
+    "ast_hash": "9aee08dec1dfa92017c56f72c75f3477",
+    "semantic_hash": "9aee08dec1dfa92017c56f72c75f3477"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/home/MuscleRadar.tsx": {
+    "mtime": 1778962562.6250613,
+    "ast_hash": "02b8996d050c1b1a19962cae7bf34d9c",
+    "semantic_hash": "02b8996d050c1b1a19962cae7bf34d9c"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/home/ThreeRingHero.tsx": {
+    "mtime": 1778302450.8442247,
+    "ast_hash": "94f1c1728e1adc951d8cc296db41d6f8",
+    "semantic_hash": "94f1c1728e1adc951d8cc296db41d6f8"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/home/TrainNext.tsx": {
+    "mtime": 1776495627.278759,
+    "ast_hash": "8f7801dab15820b838c712a628b0e84a",
+    "semantic_hash": "8f7801dab15820b838c712a628b0e84a"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/home/WeeklyRing.tsx": {
+    "mtime": 1778302498.7572925,
+    "ast_hash": "3b7ee19797062615a15181b90dad2f44",
+    "semantic_hash": "3b7ee19797062615a15181b90dad2f44"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/layout/Layout.tsx": {
+    "mtime": 1780171373.8820791,
+    "ast_hash": "4b51b85db22b9913efdcc06a6dfe8961",
+    "semantic_hash": "4b51b85db22b9913efdcc06a6dfe8961"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/layout/LoadingScreen.tsx": {
+    "mtime": 1777352876.8933754,
+    "ast_hash": "5221d5de95391105a689aa8c63094e77",
+    "semantic_hash": "5221d5de95391105a689aa8c63094e77"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/ActiveWorkout.tsx": {
+    "mtime": 1780009849.7476532,
+    "ast_hash": "0b35eaa1af77a12254ca367cc66733d3",
+    "semantic_hash": "0b35eaa1af77a12254ca367cc66733d3"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/CelebrationScreen.tsx": {
+    "mtime": 1778304267.0495574,
+    "ast_hash": "7df7bf8b43c1c22572fd1eab49e530e7",
+    "semantic_hash": "7df7bf8b43c1c22572fd1eab49e530e7"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/DialPicker.tsx": {
+    "mtime": 1778444362.6534932,
+    "ast_hash": "210c9077384d79f60a81b350b06deafc",
+    "semantic_hash": "210c9077384d79f60a81b350b06deafc"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/ExerciseBlock.tsx": {
+    "mtime": 1780009849.7491639,
+    "ast_hash": "42ccbebb4dee153404ba49870ba3f82e",
+    "semantic_hash": "42ccbebb4dee153404ba49870ba3f82e"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/ExerciseContent.tsx": {
+    "mtime": 1780009849.7501788,
+    "ast_hash": "f7d5d6509ccd4bbd597e4cd98495bddc",
+    "semantic_hash": "f7d5d6509ccd4bbd597e4cd98495bddc"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/ExercisePicker.tsx": {
+    "mtime": 1778991766.4101086,
+    "ast_hash": "1385ee0a9f6674219bcad93af019b53b",
+    "semantic_hash": "1385ee0a9f6674219bcad93af019b53b"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/ExerciseTabBar.tsx": {
+    "mtime": 1780009849.750807,
+    "ast_hash": "4e5eb689de0dbbbc47bca7dd620349e5",
+    "semantic_hash": "4e5eb689de0dbbbc47bca7dd620349e5"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/FinishSheet.tsx": {
+    "mtime": 1780009849.7515733,
+    "ast_hash": "0af125f67963dc990f431e50422df8cb",
+    "semantic_hash": "0af125f67963dc990f431e50422df8cb"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/PlanTodaySheet.tsx": {
+    "mtime": 1780009849.7526884,
+    "ast_hash": "65488760786be8dcaff6d2c61c76e041",
+    "semantic_hash": "65488760786be8dcaff6d2c61c76e041"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/QuickStartSheet.tsx": {
+    "mtime": 1780009849.75336,
+    "ast_hash": "59409e94cf7f78b4cd40313367381a48",
+    "semantic_hash": "59409e94cf7f78b4cd40313367381a48"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/RestTimer.tsx": {
+    "mtime": 1778190674.733075,
+    "ast_hash": "e4c301ead514c2ef0e96a8da7abe51f6",
+    "semantic_hash": "e4c301ead514c2ef0e96a8da7abe51f6"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/SetRow.tsx": {
+    "mtime": 1780009849.7539458,
+    "ast_hash": "3c8d64fe83c358a9f5b580b3817377a7",
+    "semantic_hash": "3c8d64fe83c358a9f5b580b3817377a7"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/WeightRepsModal.tsx": {
+    "mtime": 1778359708.4425166,
+    "ast_hash": "32ad0a6e9a9660f2670d7c0e00070e3a",
+    "semantic_hash": "32ad0a6e9a9660f2670d7c0e00070e3a"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/log/WeightRepsPicker.tsx": {
+    "mtime": 1777394381.7773855,
+    "ast_hash": "3f0b4d69507f53bcd422c52a68252001",
+    "semantic_hash": "3f0b4d69507f53bcd422c52a68252001"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/progress/DopamineTracker.tsx": {
+    "mtime": 1779780585.929824,
+    "ast_hash": "a8a2211e5a9b5a3956cf8b854300396c",
+    "semantic_hash": "a8a2211e5a9b5a3956cf8b854300396c"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/shared/ExerciseImage.tsx": {
+    "mtime": 1777064789.6637576,
+    "ast_hash": "24ae3cd313639a5e51dab0db5d1b3a8f",
+    "semantic_hash": "24ae3cd313639a5e51dab0db5d1b3a8f"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/components/shared/HapticPicker.tsx": {
+    "mtime": 1776495627.2943003,
+    "ast_hash": "b5dd8dff00834f51d29384cebb8470e8",
+    "semantic_hash": "b5dd8dff00834f51d29384cebb8470e8"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/config/icons.tsx": {
+    "mtime": 1780171201.5323904,
+    "ast_hash": "6c5c6d66042f7bb6c7ef58bbd8a4fac9",
+    "semantic_hash": "6c5c6d66042f7bb6c7ef58bbd8a4fac9"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/config/media.ts": {
+    "mtime": 1777064782.3934603,
+    "ast_hash": "1b272e4d1c09a24148f7857914db0feb",
+    "semantic_hash": "1b272e4d1c09a24148f7857914db0feb"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/config/widgets.ts": {
+    "mtime": 1777231426.3516934,
+    "ast_hash": "9202abc4bb76382febaf32232d8892e1",
+    "semantic_hash": "9202abc4bb76382febaf32232d8892e1"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/contexts/AuthContext.tsx": {
+    "mtime": 1777495854.1817875,
+    "ast_hash": "5df3d45faa7365043c0d506ec46fe4a5",
+    "semantic_hash": "5df3d45faa7365043c0d506ec46fe4a5"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/contexts/HeartRateContext.tsx": {
+    "mtime": 1776495627.2955873,
+    "ast_hash": "721e2b137c4f5666330c3a2cd209ab74",
+    "semantic_hash": "721e2b137c4f5666330c3a2cd209ab74"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/contexts/RestTimerContext.tsx": {
+    "mtime": 1778302652.7105627,
+    "ast_hash": "2267b0dc4c456536dbb055d0e96c2fd4",
+    "semantic_hash": "2267b0dc4c456536dbb055d0e96c2fd4"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/data/opentrainingCatalog.ts": {
+    "mtime": 1774679336.1924186,
+    "ast_hash": "08ad9d72c0ffa06aca2c69382c25ce22",
+    "semantic_hash": "08ad9d72c0ffa06aca2c69382c25ce22"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/components/FoodDetailModal.tsx": {
+    "mtime": 1780009865.3012407,
+    "ast_hash": "c87639711bbbca9a3d6fa510b87599fe",
+    "semantic_hash": "c87639711bbbca9a3d6fa510b87599fe"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/components/FoodHistory.tsx": {
+    "mtime": 1780009865.3025596,
+    "ast_hash": "92a4c058fa140938344437ba9de722dc",
+    "semantic_hash": "92a4c058fa140938344437ba9de722dc"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/components/FoodResults.tsx": {
+    "mtime": 1780009865.3039408,
+    "ast_hash": "85bad6aaaef4cbe044e801c558a11913",
+    "semantic_hash": "85bad6aaaef4cbe044e801c558a11913"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/components/FoodScanner.tsx": {
+    "mtime": 1780009865.3054037,
+    "ast_hash": "bddcf54b832ae93b677d7bfb987efbf2",
+    "semantic_hash": "bddcf54b832ae93b677d7bfb987efbf2"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/pages/FoodHistoryPage.tsx": {
+    "mtime": 1779779189.0729184,
+    "ast_hash": "7d15a24d3fd400dd7b9ef629ffb98788",
+    "semantic_hash": "7d15a24d3fd400dd7b9ef629ffb98788"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/pages/FoodScannerPage.tsx": {
+    "mtime": 1780009865.308171,
+    "ast_hash": "7968a0608197db43a140d40f6ada03ed",
+    "semantic_hash": "7968a0608197db43a140d40f6ada03ed"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/services/foodRecognition.service.ts": {
+    "mtime": 1780097967.9366848,
+    "ast_hash": "00cd113c34bd4a5fe8ee5bbdd0acb927",
+    "semantic_hash": "00cd113c34bd4a5fe8ee5bbdd0acb927"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/food/types.ts": {
+    "mtime": 1779778800.835008,
+    "ast_hash": "72084de57035c6dd10e78023e6119bba",
+    "semantic_hash": "72084de57035c6dd10e78023e6119bba"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/components/RunMap.tsx": {
+    "mtime": 1777752353.7449179,
+    "ast_hash": "42576421c503216ac4e29ad7f8e690cd",
+    "semantic_hash": "42576421c503216ac4e29ad7f8e690cd"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/components/RunRouteBackground.tsx": {
+    "mtime": 1779999675.082241,
+    "ast_hash": "607fdc02681f9cb961db7fa7402846e2",
+    "semantic_hash": "607fdc02681f9cb961db7fa7402846e2"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/components/RunStats.tsx": {
+    "mtime": 1777703281.0514886,
+    "ast_hash": "9da064bbea1b6a3559e03005373c1e69",
+    "semantic_hash": "9da064bbea1b6a3559e03005373c1e69"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/hooks/useGPS.ts": {
+    "mtime": 1779830555.1087837,
+    "ast_hash": "9de3d2fae9e91b8178f2dc50e78dbcc7",
+    "semantic_hash": "9de3d2fae9e91b8178f2dc50e78dbcc7"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/hooks/useRunTracking.ts": {
+    "mtime": 1778186549.3901908,
+    "ast_hash": "588a8600f84d83b19e37dfca9bc56a2f",
+    "semantic_hash": "588a8600f84d83b19e37dfca9bc56a2f"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/pages/ActiveRun.tsx": {
+    "mtime": 1780097191.5065818,
+    "ast_hash": "b72d34e34530837ca0e504b094875a73",
+    "semantic_hash": "b72d34e34530837ca0e504b094875a73"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/pages/RunHistory.tsx": {
+    "mtime": 1780096508.1503537,
+    "ast_hash": "8ccf613651e4be012124142443802767",
+    "semantic_hash": "8ccf613651e4be012124142443802767"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/utils/gpsCalculations.ts": {
+    "mtime": 1777752297.0028813,
+    "ast_hash": "60e84493432a6b59c46fa1113cf500fb",
+    "semantic_hash": "60e84493432a6b59c46fa1113cf500fb"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/running/utils/storage.ts": {
+    "mtime": 1779999659.5892644,
+    "ast_hash": "2d6d0569c444c5b53cc8d9523676530d",
+    "semantic_hash": "2d6d0569c444c5b53cc8d9523676530d"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/skincare/SkincareRoutinePage.tsx": {
+    "mtime": 1780258927.636514,
+    "ast_hash": "778f3705f28705b7b96fc2dce5f4224b",
+    "semantic_hash": "778f3705f28705b7b96fc2dce5f4224b"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/whoop/components/WhoopDashboard.tsx": {
+    "mtime": 1780097928.3248708,
+    "ast_hash": "17b94cb0d006a03c68950af152ae9eb1",
+    "semantic_hash": "17b94cb0d006a03c68950af152ae9eb1"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/whoop/services/whoopService.ts": {
+    "mtime": 1780009896.7683806,
+    "ast_hash": "92f2f30fdaba1202e955acf870a1fcb8",
+    "semantic_hash": "92f2f30fdaba1202e955acf870a1fcb8"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/features/whoop/types.ts": {
+    "mtime": 1777228986.4925194,
+    "ast_hash": "62554c85791f3d455af2d46433e0263d",
+    "semantic_hash": "62554c85791f3d455af2d46433e0263d"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/hooks/useDashboardLayout.ts": {
+    "mtime": 1776495627.2949975,
+    "ast_hash": "aa188bf2c13ce954739c7169fc0e00fe",
+    "semantic_hash": "aa188bf2c13ce954739c7169fc0e00fe"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/hooks/useExerciseDB.ts": {
+    "mtime": 1776495627.294647,
+    "ast_hash": "5c1e973661fb9987bd16e6a18b443532",
+    "semantic_hash": "5c1e973661fb9987bd16e6a18b443532"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/dates.ts": {
+    "mtime": 1775934242.482633,
+    "ast_hash": "d3e14c0a05e97cab29807655773a93eb",
+    "semantic_hash": "d3e14c0a05e97cab29807655773a93eb"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/exerciseMuscles.ts": {
+    "mtime": 1778909508.0661955,
+    "ast_hash": "42ad7f9181a76d38ab3936cb9514fc2c",
+    "semantic_hash": "42ad7f9181a76d38ab3936cb9514fc2c"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/exerciseTypes.ts": {
+    "mtime": 1780097459.802481,
+    "ast_hash": "3f58d1fd4aa84c02fda7be6f8adf5844",
+    "semantic_hash": "3f58d1fd4aa84c02fda7be6f8adf5844"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/foodData.ts": {
+    "mtime": 1779778868.447008,
+    "ast_hash": "7d4bf2ed489e7f746023c75ec0c63607",
+    "semantic_hash": "7d4bf2ed489e7f746023c75ec0c63607"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/fuzzySearch.ts": {
+    "mtime": 1778442044.737178,
+    "ast_hash": "ed96aac046bf6df0a6eaa70180194695",
+    "semantic_hash": "ed96aac046bf6df0a6eaa70180194695"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/haptics.ts": {
+    "mtime": 1776037836.6902556,
+    "ast_hash": "2b689eb0b0e99d13ecfb1261574f3c3d",
+    "semantic_hash": "2b689eb0b0e99d13ecfb1261574f3c3d"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/localData.ts": {
+    "mtime": 1778968312.2717955,
+    "ast_hash": "56d4da0b05312932211d731182cc6bde",
+    "semantic_hash": "56d4da0b05312932211d731182cc6bde"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/machineLabels.ts": {
+    "mtime": 1778907935.0768385,
+    "ast_hash": "cda5063bcf90294d7083de89aac347ff",
+    "semantic_hash": "cda5063bcf90294d7083de89aac347ff"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/muscleColors.ts": {
+    "mtime": 1778798585.0190704,
+    "ast_hash": "c359d50482e1c2629ed6d359a1f56337",
+    "semantic_hash": "c359d50482e1c2629ed6d359a1f56337"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/supabase.ts": {
+    "mtime": 1778195103.0816054,
+    "ast_hash": "4b9021f7652de7963f1c7bd726e0dd06",
+    "semantic_hash": "4b9021f7652de7963f1c7bd726e0dd06"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/supabaseData.ts": {
+    "mtime": 1779441106.087324,
+    "ast_hash": "3953cf905fd3d97347fccc85b6b66e50",
+    "semantic_hash": "3953cf905fd3d97347fccc85b6b66e50"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/lib/units.ts": {
+    "mtime": 1777064084.194048,
+    "ast_hash": "4f5d704e02f4d7c129311db6b554f0f2",
+    "semantic_hash": "4f5d704e02f4d7c129311db6b554f0f2"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/main.tsx": {
+    "mtime": 1779568771.3014402,
+    "ast_hash": "a21e3d428387f2fea1255db43506fcbb",
+    "semantic_hash": "a21e3d428387f2fea1255db43506fcbb"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Auth.tsx": {
+    "mtime": 1778303022.2237852,
+    "ast_hash": "636fc54d46b4aca73ed83990629c3ae0",
+    "semantic_hash": "636fc54d46b4aca73ed83990629c3ae0"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Calendar.tsx": {
+    "mtime": 1779493967.443559,
+    "ast_hash": "233de6180bf1c5b345346906a5b5e429",
+    "semantic_hash": "233de6180bf1c5b345346906a5b5e429"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/DashboardLayoutEditor.tsx": {
+    "mtime": 1777229663.666383,
+    "ast_hash": "6ae8e84a95c1547218f6e18d59fdc4ca",
+    "semantic_hash": "6ae8e84a95c1547218f6e18d59fdc4ca"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Home.tsx": {
+    "mtime": 1780009903.4646862,
+    "ast_hash": "7e431b3b8ab9cf2cbad2aa9f91fcf377",
+    "semantic_hash": "7e431b3b8ab9cf2cbad2aa9f91fcf377"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Log.tsx": {
+    "mtime": 1779047887.123409,
+    "ast_hash": "c7db82eb2097083cb771de361edcc0d8",
+    "semantic_hash": "c7db82eb2097083cb771de361edcc0d8"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Progress.tsx": {
+    "mtime": 1779780241.1362796,
+    "ast_hash": "aeae643c27f641d8982175575b5880de",
+    "semantic_hash": "aeae643c27f641d8982175575b5880de"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/ResetPassword.tsx": {
+    "mtime": 1778303032.0516648,
+    "ast_hash": "874e632e60e996757638bd23ba33fb66",
+    "semantic_hash": "874e632e60e996757638bd23ba33fb66"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Settings.tsx": {
+    "mtime": 1780009903.4717357,
+    "ast_hash": "eb54b5070fc80c835302a935dfe8c0e1",
+    "semantic_hash": "eb54b5070fc80c835302a935dfe8c0e1"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Templates.tsx": {
+    "mtime": 1778714144.1945186,
+    "ast_hash": "64ee9d1b4b32ff81dd143ef939171640",
+    "semantic_hash": "64ee9d1b4b32ff81dd143ef939171640"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/Timeline.tsx": {
+    "mtime": 1779493974.7435515,
+    "ast_hash": "317fb16aff621f434d6351c22ee1659b",
+    "semantic_hash": "317fb16aff621f434d6351c22ee1659b"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/pages/WhoopCallback.tsx": {
+    "mtime": 1777181070.3580437,
+    "ast_hash": "42d09412021225b6766f5da4b97c72f2",
+    "semantic_hash": "42d09412021225b6766f5da4b97c72f2"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/theme/colors.ts": {
+    "mtime": 1778194035.0940902,
+    "ast_hash": "78c5031bca07feb6b2cf6126617d1427",
+    "semantic_hash": "78c5031bca07feb6b2cf6126617d1427"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/tsconfig.json": {
+    "mtime": 1778909997.7484014,
+    "ast_hash": "6d1926526a3f8b881bbc9d3c169c2ddc",
+    "semantic_hash": "6d1926526a3f8b881bbc9d3c169c2ddc"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/src/vite-env.d.ts": {
+    "mtime": 1777702961.9929016,
+    "ast_hash": "eca8e18ea52cf9eb39fe9726392e1af6",
+    "semantic_hash": "eca8e18ea52cf9eb39fe9726392e1af6"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/functions/food-scan/index.ts": {
+    "mtime": 1779778741.999252,
+    "ast_hash": "5073f2b07b793fa77cc676364e5b0832",
+    "semantic_hash": "5073f2b07b793fa77cc676364e5b0832"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/functions/whoop-oauth/index.ts": {
+    "mtime": 1777230629.1889975,
+    "ast_hash": "81ebd0cc0d83071ff9be583c762407c7",
+    "semantic_hash": "81ebd0cc0d83071ff9be583c762407c7"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/migrations/202604120001_sync_remote_schema.sql": {
+    "mtime": 1778993355.830761,
+    "ast_hash": "811305bdc1a201cb9ba14abd4c4d7f08",
+    "semantic_hash": "811305bdc1a201cb9ba14abd4c4d7f08"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/migrations/202604240001_exercise_distance_units.sql": {
+    "mtime": 1777064074.303388,
+    "ast_hash": "4acc4d30b19c35a7cc4816dee5782f9f",
+    "semantic_hash": "4acc4d30b19c35a7cc4816dee5782f9f"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/migrations/202605160001_default_unit_lbs.sql": {
+    "mtime": 1778993328.8214233,
+    "ast_hash": "8d9d7f798738bed8ca8062f6d83205a9",
+    "semantic_hash": "8d9d7f798738bed8ca8062f6d83205a9"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/migrations/20260525000001_food_scans.sql": {
+    "mtime": 1779778704.1523826,
+    "ast_hash": "84da7a4828b74fd9bbf89d5f6ad7e054",
+    "semantic_hash": "84da7a4828b74fd9bbf89d5f6ad7e054"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/rls_policies.sql": {
+    "mtime": 1775967088.5458121,
+    "ast_hash": "9841f491d150052db90dcc83d8192830",
+    "semantic_hash": "9841f491d150052db90dcc83d8192830"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/schema.sql": {
+    "mtime": 1778993244.3195853,
+    "ast_hash": "dfd69122df5bccd685047d798606e8c0",
+    "semantic_hash": "dfd69122df5bccd685047d798606e8c0"
+  },
+  "/Users/dhrumilgajera/Desktop/AthlixV2.1-1/supabase/email-templates/confirmation.html": {
+    "mtime": 1776025818.2101595,
+    "ast_hash": "93b37913b3199bdc2d67b38b99098097",
+    "semantic_hash": "93b37913b3199bdc2d67b38b99098097"
+  }
+}

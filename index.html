@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Athlix</title>
+    <!-- Preload local font first so it's ready before first paint -->
+    <link rel="preload" href="/fonts/VictoryStrikerSans.otf" as="font" type="font/otf" crossorigin="anonymous">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-black text-white antialiased">
+    <!--
+      Liquid Glass SVG filters (nikdelvin technique):
+
+      #lg-surface — surface texture filter applied to .lg-nav/.lg-sheet ::after
+      pseudo-element specular highlight. feTurbulence + feDisplacementMap warps
+      the diagonal gradient so the specular edge looks organic, not straight-ruled.
+
+      #lg-edge — edge-weighted lens refraction (the nikdelvin innovation).
+      A radial gradient acts as the displacement MAP: dark (0) in the center
+      means zero displacement there; bright (255) at the perimeter means maximum
+      displacement at the glass edge — exactly how a physical glass lens refracts
+      light at its boundary. Applied as filter on the ::before pseudo-element of
+      .lg-nav, creating the "lens rim" refraction visible on real iOS glass.
+    -->
+    <svg style="display:none;position:absolute;width:0;height:0" aria-hidden="true" focusable="false">
+      <defs>
+        <!--
+          lg-liquid (creativoma technique) — full liquid glass displacement filter.
+          Applied to the backdrop-filter layer of the nav pill, warping the blurred
+          background pixels organically. Low baseFrequency = large smooth lens waves.
+          feComponentTransfer sharpens R channel → edge-weighted displacement map.
+          feSpecularLighting adds a point-light specular highlight from upper-left.
+          feDisplacementMap warps SourceGraphic (the blurred backdrop) using the
+          softened turbulence map — max warp at glass edges, near-zero at center.
+          Chrome/non-Safari only; Safari falls back to lg-liquid-simple.
+        -->
+        <!-- Pure displacement — no specular lighting so no white flash -->
+        <filter id="lg-liquid" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.005 0.017" numOctaves="1" seed="0" result="turbulence"/>
+          <feGaussianBlur in="turbulence" stdDeviation="2.5" result="softMap"/>
+          <feDisplacementMap in="SourceGraphic" in2="softMap" scale="100" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+
+        <!--
+          lg-liquid-simple — Safari/iOS fallback.
+          No displacement (Safari has issues with feDisplacementMap + backdrop-filter).
+          Instead blends a faint turbulence noise over the blurred glass for texture.
+        -->
+        <filter id="lg-liquid-simple" x="-20%" y="-20%" width="140%" height="140%" filterUnits="objectBoundingBox" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.008" numOctaves="2" seed="2" result="turbulence"/>
+          <feGaussianBlur in="turbulence" stdDeviation="2" result="blur"/>
+          <feColorMatrix in="blur" type="matrix"
+            values="1 0 0 0 0
+                    0 1 0 0 0
+                    0 0 1 0 0
+                    0 0 0 0.12 0"
+            result="transparency"/>
+          <feBlend in="SourceGraphic" in2="transparency" mode="normal"/>
+        </filter>
+
+        <!-- lg-surface — micro-texture for the specular shimmer sweep (::after) -->
+        <filter id="lg-surface" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.42 0.58" numOctaves="2" seed="7" result="rawNoise"/>
+          <feGaussianBlur in="rawNoise" stdDeviation="0.4" result="noise"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+
+        <!-- lg-edge — edge-weighted rim refraction (::before) -->
+        <filter id="lg-edge" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.006 0.009" numOctaves="2" seed="11" result="lensWave"/>
+          <feDisplacementMap in="SourceGraphic" in2="lensWave" scale="9" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+    </svg>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

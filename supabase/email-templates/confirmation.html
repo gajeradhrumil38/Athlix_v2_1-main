@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirm your Athlix account</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#0A0F1E; font-family:-apple-system, Arial, sans-serif; color:#0F172A;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0A0F1E; margin:0; padding:24px 0;">
+      <tr>
+        <td align="center" style="padding:0 12px;">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; border-collapse:collapse; background-color:#0A0F1E; border-radius:14px; overflow:hidden;">
+            <tr>
+              <td style="padding:28px 28px 20px 28px; background-color:#0A0F1E; text-align:left;">
+                <div style="font-size:24px; line-height:1.2; font-weight:800; letter-spacing:0.18em; color:#00D4FF;">ATHLIX</div>
+                <div style="margin-top:8px; font-size:14px; line-height:1.4; color:#8EA4BC;">Track. Recover. Perform.</div>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 20px 0 20px; background-color:#0A0F1E;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; border-collapse:collapse; background-color:#FFFFFF; border-radius:14px;">
+                  <tr>
+                    <td style="padding:28px 24px 18px 24px; font-size:26px; line-height:1.3; font-weight:700; color:#0F172A;">
+                      Hey {{ if .Data.full_name }}{{ .Data.full_name }}{{ else }}Athlete{{ end }}! 👋
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 24px 14px 24px; font-size:17px; line-height:1.55; color:#334155;">
+                      You are one tap away from your performance dashboard.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:16px 24px 10px 24px;">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block; min-height:44px; padding:16px 32px; border-radius:8px; background-color:#00D4FF; color:#000000; text-decoration:none; font-size:18px; line-height:1.2; font-weight:700;">
+                        ✓ Confirm your email
+                      </a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 24px 28px 24px; font-size:14px; line-height:1.55; color:#475569;">
+                      This link expires in 24 hours.<br />
+                      If you did not create an Athlix account, you can safely ignore this email.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:20px 28px 26px 28px; text-align:center; font-size:12px; line-height:1.5; color:#6B8199;">
+                © 2024 Athlix · <a href="mailto:support@athlix.app?subject=Unsubscribe" style="color:#6B8199; text-decoration:underline;">Unsubscribe</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
