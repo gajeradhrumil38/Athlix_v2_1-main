@@ -164,6 +164,7 @@ interface LocalDatabase {
   heartRateSamples: LocalHeartRateSample[];
   dashboardLayouts: LocalDashboardLayout[];
   exerciseTypeOverrides: LocalExerciseTypeOverride[];
+  exerciseGoals: LocalExerciseGoal[];
 }
 
 interface LocalExerciseTypeOverride {
@@ -171,6 +172,18 @@ interface LocalExerciseTypeOverride {
   exercise_name: string;
   input_type: ExerciseInputType;
   updated_at: string;
+}
+
+export interface LocalExerciseGoal {
+  id: string;
+  user_id: string;
+  exercise_name: string;
+  target_weight: number;
+  target_reps: number;
+  unit: 'kg' | 'lbs';
+  status: 'active' | 'achieved';
+  achieved_at: string | null;
+  created_at: string;
 }
 
 const DB_KEY = 'athlix_local_db_v1';
@@ -569,6 +582,7 @@ const createInitialDb = (): LocalDatabase => ({
   heartRateSamples: [],
   dashboardLayouts: [],
   exerciseTypeOverrides: [],
+  exerciseGoals: [],
 });
 
 const readDb = (): LocalDatabase => {
@@ -1311,6 +1325,52 @@ export const renameExerciseTypeOverride = async (userId: string, oldName: string
   if (!existing) return;
   existing.exercise_name = normalizedNew;
   existing.updated_at = new Date().toISOString();
+  writeDb(db);
+};
+
+export const getGoals = async (userId: string): Promise<LocalExerciseGoal[]> => {
+  const db = readDb();
+  return db.exerciseGoals
+    .filter((g) => g.user_id === userId)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+};
+
+export const addGoal = async (
+  userId: string,
+  input: { exerciseName: string; targetWeight: number; targetReps: number; unit: 'kg' | 'lbs' },
+): Promise<LocalExerciseGoal> => {
+  const db = readDb();
+  const goal: LocalExerciseGoal = {
+    id: createId(),
+    user_id: userId,
+    exercise_name: input.exerciseName.trim(),
+    target_weight: input.targetWeight,
+    target_reps: input.targetReps,
+    unit: input.unit,
+    status: 'active',
+    achieved_at: null,
+    created_at: new Date().toISOString(),
+  };
+  db.exerciseGoals.push(goal);
+  writeDb(db);
+  return goal;
+};
+
+export const updateGoal = async (
+  userId: string,
+  goalId: string,
+  updates: Partial<Pick<LocalExerciseGoal, 'target_weight' | 'target_reps' | 'unit' | 'status' | 'achieved_at'>>,
+): Promise<void> => {
+  const db = readDb();
+  const goal = db.exerciseGoals.find((g) => g.id === goalId && g.user_id === userId);
+  if (!goal) return;
+  Object.assign(goal, updates);
+  writeDb(db);
+};
+
+export const deleteGoal = async (userId: string, goalId: string): Promise<void> => {
+  const db = readDb();
+  db.exerciseGoals = db.exerciseGoals.filter((g) => !(g.id === goalId && g.user_id === userId));
   writeDb(db);
 };
 
