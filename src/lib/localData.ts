@@ -2,6 +2,7 @@ import { DEFAULT_LAYOUT } from '../config/widgets';
 import { getExerciseMuscleProfile } from './exerciseMuscles';
 import { fuzzyFilter } from './fuzzySearch';
 import { convertWeight, isWeightUnit, type WeightUnit } from './units';
+import type { ExerciseInputType } from './exerciseTypes';
 import {
   OPENTRAINING_ASSETS_BY_ID,
   OPENTRAINING_EXERCISES,
@@ -162,6 +163,14 @@ interface LocalDatabase {
   heartRateSessions: LocalHeartRateSession[];
   heartRateSamples: LocalHeartRateSample[];
   dashboardLayouts: LocalDashboardLayout[];
+  exerciseTypeOverrides: LocalExerciseTypeOverride[];
+}
+
+interface LocalExerciseTypeOverride {
+  user_id: string;
+  exercise_name: string;
+  input_type: ExerciseInputType;
+  updated_at: string;
 }
 
 const DB_KEY = 'athlix_local_db_v1';
@@ -559,6 +568,7 @@ const createInitialDb = (): LocalDatabase => ({
   heartRateSessions: [],
   heartRateSamples: [],
   dashboardLayouts: [],
+  exerciseTypeOverrides: [],
 });
 
 const readDb = (): LocalDatabase => {
@@ -1248,6 +1258,60 @@ export const getExerciseLibraryByGroup = async (userId: string, muscleGroup: str
     .filter((exercise) => exercise.muscle_group === muscleGroup)
     .filter((exercise) => !exercise.is_custom || exercise.user_id === userId)
     .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+const normalizeOverrideName = (name: string) => name.trim().toLowerCase();
+
+export const getExerciseTypeOverrides = async (userId: string): Promise<Record<string, ExerciseInputType>> => {
+  const db = readDb();
+  const map: Record<string, ExerciseInputType> = {};
+  db.exerciseTypeOverrides
+    .filter((o) => o.user_id === userId)
+    .forEach((o) => { map[o.exercise_name] = o.input_type; });
+  return map;
+};
+
+export const setExerciseTypeOverride = async (
+  userId: string,
+  exerciseName: string,
+  inputType: ExerciseInputType,
+): Promise<void> => {
+  const db = readDb();
+  const normalized = normalizeOverrideName(exerciseName);
+  const existing = db.exerciseTypeOverrides.find((o) => o.user_id === userId && o.exercise_name === normalized);
+  if (existing) {
+    existing.input_type = inputType;
+    existing.updated_at = new Date().toISOString();
+  } else {
+    db.exerciseTypeOverrides.push({
+      user_id: userId,
+      exercise_name: normalized,
+      input_type: inputType,
+      updated_at: new Date().toISOString(),
+    });
+  }
+  writeDb(db);
+};
+
+export const clearExerciseTypeOverride = async (userId: string, exerciseName: string): Promise<void> => {
+  const db = readDb();
+  const normalized = normalizeOverrideName(exerciseName);
+  db.exerciseTypeOverrides = db.exerciseTypeOverrides.filter(
+    (o) => !(o.user_id === userId && o.exercise_name === normalized),
+  );
+  writeDb(db);
+};
+
+export const renameExerciseTypeOverride = async (userId: string, oldName: string, newName: string): Promise<void> => {
+  const db = readDb();
+  const normalizedOld = normalizeOverrideName(oldName);
+  const normalizedNew = normalizeOverrideName(newName);
+  if (normalizedOld === normalizedNew) return;
+  const existing = db.exerciseTypeOverrides.find((o) => o.user_id === userId && o.exercise_name === normalizedOld);
+  if (!existing) return;
+  existing.exercise_name = normalizedNew;
+  existing.updated_at = new Date().toISOString();
+  writeDb(db);
 };
 
 export const addCustomExercise = async (

@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ExerciseOverridesProvider } from './contexts/ExerciseOverridesContext';
 import { HeartRateProvider } from './contexts/HeartRateContext';
 import { RestTimerProvider } from './contexts/RestTimerContext';
 import { ProgressProvider } from './contexts/ProgressContext';
@@ -97,13 +98,15 @@ export default function App() {
   return (
     <ProgressProvider>
       <AuthProvider>
-        <HeartRateProvider>
-          <RestTimerProvider>
-            <HashRouter>
-              <AppRoutes />
-            </HashRouter>
-          </RestTimerProvider>
-        </HeartRateProvider>
+        <ExerciseOverridesProvider>
+          <HeartRateProvider>
+            <RestTimerProvider>
+              <HashRouter>
+                <AppRoutes />
+              </HashRouter>
+            </RestTimerProvider>
+          </HeartRateProvider>
+        </ExerciseOverridesProvider>
       </AuthProvider>
     </ProgressProvider>
   );

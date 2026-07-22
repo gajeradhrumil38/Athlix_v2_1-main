@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
+import { useExerciseOverrides } from '../contexts/ExerciseOverridesContext';
 import { saveWorkout, getWorkouts, type LocalExercise } from '../lib/supabaseData';
-import { resolveExerciseInputType, type ExerciseInputType } from '../lib/exerciseTypes';
+import { resolveEffectiveInputType } from '../lib/exerciseTypes';
 import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
 import { ActiveWorkout } from '../components/log/ActiveWorkout';
@@ -29,8 +30,6 @@ export interface ExerciseEntry {
   sets: Set[];
   /** true when user opts into tracking weight for a normally reps-only exercise */
   optionalWeight?: boolean;
-  /** overrides name-based input type inference (e.g. reps_only for bodyweight custom exercises) */
-  inputTypeOverride?: ExerciseInputType;
   lastSession?: {
     date: string;
     sets: number;
@@ -142,6 +141,7 @@ const clearDraft = () => {
 
 export const Log: React.FC = () => {
   const { user, profile, updateProfile } = useAuth();
+  const { overrides: typeOverrides } = useExerciseOverrides();
   const location = useLocation();
   const navigate = useNavigate();
   const showStartSheet = Boolean(profile?.show_start_sheet);
@@ -276,7 +276,7 @@ export const Log: React.FC = () => {
           const savedDistanceRow = [...savedRows]
             .sort((a, b) => a.order_index - b.order_index)
             .find((ex) => {
-              const type = resolveExerciseInputType(ex.name);
+              const type = resolveEffectiveInputType(ex.name, typeOverrides);
               return (
                 (type === 'distance_time' || type === 'distance_only') &&
                 (ex.unit === 'km' || ex.unit === 'mi')
@@ -306,10 +306,13 @@ export const Log: React.FC = () => {
                   sets: [],
                 });
               }
-              const exInputType = resolveExerciseInputType(ex.name);
+              const exInputType = resolveEffectiveInputType(ex.name, typeOverrides);
               const rawW = Number(ex.weight || 0);
-              const safeWeight = exInputType === 'reps_only' ? 0
-                : exInputType === 'time_only' ? Math.max(0, Math.min(120, rawW))
+              // For reps_only exercises, keep the raw weight around uncapped so the
+              // optionalWeight inference below can still see it — it gets zeroed
+              // afterward only if no valid historical weight turns up.
+              const safeWeight = exInputType === 'time_only' ? Math.max(0, Math.min(120, rawW))
+                : exInputType === 'reps_only' ? rawW
                 : Math.max(0, Math.min(9999, rawW));
               map.get(ex.name)!.sets.push({
                 id: crypto.randomUUID(),
@@ -322,9 +325,10 @@ export const Log: React.FC = () => {
           // Infer optionalWeight: only enable if exercise was intentionally saved with valid weight
           // Never trigger on corrupted values — a valid weighted set has weight in (0, 9999]
           const preloaded = Array.from(map.values()).map((entry) => {
-            if (resolveExerciseInputType(entry.name) === 'reps_only') {
+            if (resolveEffectiveInputType(entry.name, typeOverrides) === 'reps_only') {
               const hasValidWeight = entry.sets.some((s) => Number(s.weight || 0) > 0 && Number(s.weight || 0) <= 9999);
               if (hasValidWeight) return { ...entry, optionalWeight: true };
+              return { ...entry, sets: entry.sets.map((s) => ({ ...s, weight: 0 })) };
             }
             return entry;
           });
@@ -440,7 +444,7 @@ export const Log: React.FC = () => {
             exercise_db_id: exercise.exercise_db_id || null,
             order_index: exerciseIndex,
             completed_sets: completedSets.map((set) => {
-              const inputType = exercise.inputTypeOverride ?? resolveExerciseInputType(exercise.name);
+              const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
               const rawReps = Math.max(0, Math.round(Number(set.reps || 0)));
               const isDistanceType = inputType === 'distance_time' || inputType === 'distance_only';
               // reps_only: zero weight unless user explicitly enabled optional weighting

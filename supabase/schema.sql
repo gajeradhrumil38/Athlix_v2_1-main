@@ -153,6 +153,15 @@ CREATE TABLE public.exercise_library (
   muscle_slugs JSONB DEFAULT '[]'::jsonb
 );
 
+-- Exercise Type Overrides (per-user input-type preference, keyed by normalized exercise name)
+CREATE TABLE public.exercise_type_overrides (
+  user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  exercise_name TEXT NOT NULL,
+  input_type TEXT NOT NULL CHECK (input_type IN ('weight_reps', 'reps_only', 'time_only', 'distance_only')),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  PRIMARY KEY (user_id, exercise_name)
+);
+
 -- Rest Timer Preferences
 CREATE TABLE public.rest_timer_preferences (
   user_id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
@@ -185,6 +194,7 @@ CREATE TABLE public.heart_rate_samples (
 ALTER TABLE public.body_weight_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exercise_library ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exercise_type_overrides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rest_timer_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.heart_rate_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.heart_rate_samples ENABLE ROW LEVEL SECURITY;
@@ -206,6 +216,12 @@ CREATE POLICY "Users can view default and their own custom exercises" ON public.
 CREATE POLICY "Users can insert their own custom exercises" ON public.exercise_library FOR INSERT WITH CHECK (is_custom = true AND auth.uid() = user_id);
 CREATE POLICY "Users can update their own custom exercises" ON public.exercise_library FOR UPDATE USING (is_custom = true AND auth.uid() = user_id);
 CREATE POLICY "Users can delete their own custom exercises" ON public.exercise_library FOR DELETE USING (is_custom = true AND auth.uid() = user_id);
+
+-- Policies for exercise_type_overrides
+CREATE POLICY "Users can view their own exercise type overrides" ON public.exercise_type_overrides FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own exercise type overrides" ON public.exercise_type_overrides FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own exercise type overrides" ON public.exercise_type_overrides FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own exercise type overrides" ON public.exercise_type_overrides FOR DELETE USING (auth.uid() = user_id);
 
 -- Policies for rest_timer_preferences
 CREATE POLICY "Users can view their own rest timer preferences" ON public.rest_timer_preferences FOR SELECT USING (auth.uid() = user_id);

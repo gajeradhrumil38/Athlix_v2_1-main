@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Copy, X } from 'lucide-react';
 import type { ExerciseEntry } from '../../pages/Log';
 import { SetRow } from './SetRow';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 import {
   DistanceUnit,
   WeightUnit,
@@ -11,6 +12,7 @@ import {
   getUnitDisplay,
   isDistanceExerciseType,
   isWeightExerciseType,
+  resolveEffectiveInputType,
   resolveExerciseInputType,
 } from '../../lib/exerciseTypes';
 
@@ -101,13 +103,14 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
   } = props;
 
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
+  const { overrides: typeOverrides } = useExerciseOverrides();
 
   // When user opts into weight tracking for a normally reps-only exercise, treat it as weight_reps
   const exerciseType = useMemo(() => {
-    const base = exercise.inputTypeOverride ?? resolveExerciseInputType(exercise.name);
+    const base = resolveEffectiveInputType(exercise.name, typeOverrides);
     if (optionalWeight && base === 'reps_only') return 'weight_reps' as const;
     return base;
-  }, [exercise.name, exercise.inputTypeOverride, optionalWeight]);
+  }, [exercise.name, typeOverrides, optionalWeight]);
   const inputLabels = useMemo(
     () => getInputLabels(exerciseType, { weightUnit, distanceUnit }),
     [distanceUnit, exerciseType, weightUnit],

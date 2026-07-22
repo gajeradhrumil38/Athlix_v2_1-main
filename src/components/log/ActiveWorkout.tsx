@@ -8,6 +8,7 @@ import { ExerciseContent } from './ExerciseContent';
 import { ExercisePicker } from './ExercisePicker';
 import { DialPicker } from './DialPicker';
 import { useAuth } from '../../contexts/AuthContext';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 import { getLastExerciseSession, saveTemplate, checkTemplateNameExists, renameExerciseEverywhere } from '../../lib/supabaseData';
 import {
   DistanceUnit,
@@ -18,7 +19,7 @@ import {
   getFieldKinds,
   getInputLabels,
   isSetReadyForCompletion,
-  resolveExerciseInputType,
+  resolveEffectiveInputType,
 } from '../../lib/exerciseTypes';
 import { haptics } from '../../lib/haptics';
 import { convertWeight } from '../../lib/units';
@@ -114,6 +115,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
   onPickerAutoOpened,
 }) => {
   const { user } = useAuth();
+  const { overrides: typeOverrides, setOverride: persistTypeOverride } = useExerciseOverrides();
   const [activeIndex, setActiveIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [isPaused, setIsPaused] = useState(true);
@@ -344,7 +346,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       const set = exercise.sets.find((entry) => entry.id === setId);
       if (!set) return;
 
-      const inputType = exercise.inputTypeOverride ?? resolveExerciseInputType(exercise.name);
+      const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
       const binding = getFieldBinding(inputType);
       const kinds = getFieldKinds(inputType);
       const labels = getInputLabels(inputType, { weightUnit, distanceUnit });
@@ -375,7 +377,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       if (!set) return;
 
       const nextDone = !set.done;
-      const inputType = exercise.inputTypeOverride ?? resolveExerciseInputType(exercise.name);
+      const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
 
       if (nextDone && !isSetReadyForCompletion(inputType, { weight: set.weight, reps: set.reps })) {
         haptics.error();
@@ -505,8 +507,15 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
 
       // Build exercise optimistically — use known lastSession data if available, otherwise defaults
       const knownSummary = exerciseOption.lastSession ?? null;
-      const inputType = (exerciseOption.inputTypeOverride as ExerciseInputType | undefined)
-        ?? resolveExerciseInputType(exerciseOption.name);
+      // exerciseOption.inputTypeOverride is only populated when this exercise was just
+      // picked with an explicit type in CreateExerciseSheet, or carries a legacy per-exercise
+      // hint — use it directly (and persist it) rather than waiting on the overrides context
+      // to re-render, since that would race with this synchronous add.
+      const freshType = exerciseOption.inputTypeOverride as ExerciseInputType | undefined;
+      const inputType = freshType ?? resolveEffectiveInputType(exerciseOption.name, typeOverrides);
+      if (freshType && typeOverrides[exerciseOption.name.trim().toLowerCase()] !== freshType) {
+        persistTypeOverride(exerciseOption.name, freshType);
+      }
       const defaults = getDefaultSetValues(inputType);
 
       const makeSets = (summary: typeof knownSummary) => {
@@ -546,7 +555,6 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         name: exerciseOption.name,
         muscleGroup: exerciseOption.muscleGroup,
         exercise_db_id: exerciseOption.exercise_db_id,
-        inputTypeOverride: exerciseOption.inputTypeOverride as ExerciseInputType | undefined,
         sets: makeSets(knownSummary),
         lastSession: knownSummary
           ? {
@@ -621,7 +629,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     const exercise = workout.exercises[activeIndex];
     if (!exercise) return;
 
-    const defaults = getDefaultSetValues(exercise.inputTypeOverride ?? resolveExerciseInputType(exercise.name));
+    const defaults = getDefaultSetValues(resolveEffectiveInputType(exercise.name, typeOverrides));
     setWorkout((prev) => {
       if (!prev) return null;
       return {
@@ -647,30 +655,35 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
   };
 
   const handleCycleInputType = useCallback((index: number, forcedType?: ExerciseInputType) => {
+    const ex = workout.exercises[index];
+    if (!ex) return;
+
+    const currentType = resolveEffectiveInputType(ex.name, typeOverrides);
+    const nextType: ExerciseInputType = forcedType ?? (
+      currentType === 'weight_reps' ? 'reps_only' :
+      currentType === 'reps_only'   ? 'time_only' :
+                                      'weight_reps'
+    );
+
+    persistTypeOverride(ex.name, nextType);
+
     setWorkout((prev) => {
       if (!prev) return null;
       return {
         ...prev,
-        exercises: prev.exercises.map((ex, i) => {
-          if (i !== index) return ex;
-          const currentType = ex.inputTypeOverride ?? resolveExerciseInputType(ex.name);
-          const nextType: ExerciseInputType = forcedType ?? (
-            currentType === 'weight_reps' ? 'reps_only' :
-            currentType === 'reps_only'   ? 'time_only' :
-                                            'weight_reps'
-          );
+        exercises: prev.exercises.map((entry, i) => {
+          if (i !== index) return entry;
           const defaults = getDefaultSetValues(nextType);
           return {
-            ...ex,
-            inputTypeOverride: nextType,
+            ...entry,
             optionalWeight: false,
-            sets: ex.sets.map((s) => ({ ...s, weight: defaults.weight, reps: defaults.reps, done: false })),
+            sets: entry.sets.map((s) => ({ ...s, weight: defaults.weight, reps: defaults.reps, done: false })),
           };
         }),
       };
     });
     haptics.tick();
-  }, [setWorkout]);
+  }, [setWorkout, workout.exercises, typeOverrides, persistTypeOverride]);
 
   const handleRemoveExercise = useCallback((index: number) => {
     setWorkout((prev) => {
@@ -1088,7 +1101,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                       <div className="flex items-center gap-2 shrink-0">
                         {/* 3-way input type selector: TIME | WEIGHT | REPS */}
                         {(() => {
-                          const activeType = currentExercise.inputTypeOverride ?? resolveExerciseInputType(currentExercise.name);
+                          const activeType = resolveEffectiveInputType(currentExercise.name, typeOverrides);
                           const segments: { type: ExerciseInputType; icon: React.ReactNode; label: string }[] = [
                             { type: 'time_only',   icon: <Timer className="w-3 h-3" />,  label: 'Time'   },
                             { type: 'weight_reps', icon: <Weight className="w-3 h-3" />, label: 'Weight' },

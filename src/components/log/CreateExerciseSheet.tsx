@@ -4,8 +4,17 @@ import Body, { ExtendedBodyPart } from 'react-muscle-highlighter';
 import { X, ChevronLeft, ChevronDown, Check, Dumbbell, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 import { addCustomExercise, searchExerciseLibrary } from '../../lib/supabaseData';
+import { resolveExerciseInputType, type ExerciseInputType } from '../../lib/exerciseTypes';
 import { MUSCLE_SLUG_LABELS, MUSCLE_SLUG_REGION_MAP, type MuscleSlug } from '../../lib/exerciseMuscles';
+
+const TRACKING_TYPES: { value: ExerciseInputType; label: string; sub: string }[] = [
+  { value: 'weight_reps', label: 'Weight',   sub: 'Weight + reps' },
+  { value: 'reps_only',   label: 'Reps',     sub: 'No weight dial' },
+  { value: 'time_only',   label: 'Time',     sub: 'Minutes / sec' },
+  { value: 'distance_only', label: 'Distance', sub: 'Km / mi' },
+];
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -61,6 +70,7 @@ interface CreateExerciseSheetProps {
 
 export const CreateExerciseSheet: React.FC<CreateExerciseSheetProps> = ({ onClose, onCreated }) => {
   const { user } = useAuth();
+  const { setOverride } = useExerciseOverrides();
   const prefersReducedMotion = useReducedMotion();
 
   const [name, setName] = useState('');
@@ -70,8 +80,11 @@ export const CreateExerciseSheet: React.FC<CreateExerciseSheetProps> = ({ onClos
   const [showDropdown, setShowDropdown] = useState(false);
   const [slugMap, setSlugMap] = useState<Map<string, SlugType>>(new Map());
   const [view, setView] = useState<'front' | 'back'>('front');
-  const [trackWeight, setTrackWeight] = useState(true);
+  // null = not manually chosen yet — follow the name-based guess as the user types
+  const [manualType, setManualType] = useState<ExerciseInputType | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const selectedType: ExerciseInputType = manualType ?? (name.trim() ? resolveExerciseInputType(name.trim()) : 'weight_reps');
 
   const dupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -200,13 +213,12 @@ export const CreateExerciseSheet: React.FC<CreateExerciseSheetProps> = ({ onClos
       ...secondarySlugs.map((s) => ({ slug: s, type: 'secondary' as const })),
     ];
 
-    const inputType = trackWeight ? undefined : 'reps_only';
-
     setSaving(true);
     try {
-      const result = await addCustomExercise(user.id, trimmedName, group, slugsPayload, inputType);
+      const result = await addCustomExercise(user.id, trimmedName, group, slugsPayload, selectedType);
+      await setOverride(trimmedName, selectedType);
       toast.success('Exercise created!');
-      onCreated({ id: result.id, name: trimmedName, muscleGroup: group, inputTypeOverride: inputType });
+      onCreated({ id: result.id, name: trimmedName, muscleGroup: group, inputTypeOverride: selectedType });
     } catch {
       toast.error('Failed to save exercise');
       setSaving(false);
@@ -305,29 +317,26 @@ export const CreateExerciseSheet: React.FC<CreateExerciseSheetProps> = ({ onClos
             </AnimatePresence>
           </div>
 
-          {/* Weight toggle */}
+          {/* Tracking type */}
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--text-muted)' }}>
               Tracking Type
             </label>
-            <div className="flex gap-1 rounded-xl p-1" style={{ background: 'var(--bg-elevated)' }}>
-              {[
-                { value: true,  label: 'Weighted',  sub: 'Weight + reps' },
-                { value: false, label: 'Reps Only',  sub: 'No weight dial' },
-              ].map((opt) => (
+            <div className="grid grid-cols-4 gap-1 rounded-xl p-1" style={{ background: 'var(--bg-elevated)' }}>
+              {TRACKING_TYPES.map((opt) => (
                 <button
-                  key={String(opt.value)}
+                  key={opt.value}
                   type="button"
-                  onClick={() => setTrackWeight(opt.value)}
-                  className="flex-1 flex flex-col items-center gap-0.5 py-2.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer"
+                  onClick={() => setManualType(opt.value)}
+                  className="flex flex-col items-center gap-0.5 py-2.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
                   style={
-                    trackWeight === opt.value
+                    selectedType === opt.value
                       ? { background: 'var(--accent)', color: '#000' }
                       : { background: 'transparent', color: 'var(--text-secondary)' }
                   }
                 >
                   {opt.label}
-                  <span className="text-[9px] font-medium opacity-70">{opt.sub}</span>
+                  <span className="text-[8.5px] font-medium opacity-70">{opt.sub}</span>
                 </button>
               ))}
             </div>

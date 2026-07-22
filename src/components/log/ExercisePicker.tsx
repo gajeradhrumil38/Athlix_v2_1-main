@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Plus, History, LayoutGrid, ChevronLeft, ClipboardList, Play, Check, Pencil, Trash2, Dumbbell } from 'lucide-react';
+import { Search, X, Plus, History, LayoutGrid, ChevronLeft, ClipboardList, Play, Check, Pencil, Trash2, Dumbbell, SlidersHorizontal } from 'lucide-react';
 import { CreateExerciseSheet } from './CreateExerciseSheet';
 import { getMachineLabel } from '../../lib/machineLabels';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
+import type { ExerciseInputType } from '../../lib/exerciseTypes';
 import {
   getExerciseLibraryByGroup,
   getRecentExerciseOptions,
@@ -108,19 +110,31 @@ const splitVariant = (name: string): [string, string | null] => {
   return [name.slice(0, idx).trim(), name.slice(idx + 1).replace(/\)$/, '').trim()];
 };
 
+const TYPE_MENU_OPTIONS: { value: ExerciseInputType; label: string }[] = [
+  { value: 'weight_reps', label: 'Weight' },
+  { value: 'reps_only', label: 'Reps' },
+  { value: 'time_only', label: 'Time' },
+  { value: 'distance_only', label: 'Distance' },
+];
+
 const ExerciseRow: React.FC<{
   exercise: Exercise;
   isSelected: boolean;
   onToggle: (exercise: Exercise) => void;
   weightUnit?: string;
 }> = ({ exercise, isSelected, onToggle, weightUnit = 'lbs' }) => {
+  const { setOverride } = useExerciseOverrides();
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
   const cssVar = MUSCLE_CSS_VAR[exercise.muscleGroup];
   const [baseName, variant] = splitVariant(exercise.name);
   const machineLabel = getMachineLabel(exercise.name);
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onToggle(exercise)}
-      className="w-full rounded-xl flex items-center gap-3 px-3 py-2.5 text-left active:scale-[0.99] transition-all duration-150"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle(exercise); }}
+      className="relative w-full rounded-xl flex items-center gap-3 px-3 py-2.5 text-left active:scale-[0.99] transition-all duration-150 cursor-pointer"
       style={{
         background: 'var(--bg-surface)',
         border: isSelected ? '1.5px solid rgba(200,255,0,0.6)' : '1px solid var(--border)',
@@ -167,6 +181,16 @@ const ExerciseRow: React.FC<{
           </span>
         </div>
       )}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setShowTypeMenu((v) => !v); }}
+        title="Change tracking type"
+        aria-label="Change tracking type"
+        className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-150 cursor-pointer"
+        style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+      >
+        <SlidersHorizontal className="w-3.5 h-3.5" />
+      </button>
       <div
         className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-150"
         style={
@@ -177,7 +201,31 @@ const ExerciseRow: React.FC<{
       >
         {isSelected ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
       </div>
-    </button>
+
+      {showTypeMenu && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-2 top-full mt-1 z-20 flex gap-1 rounded-xl p-1 shadow-lg"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+        >
+          {TYPE_MENU_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                setOverride(exercise.name, opt.value);
+                setShowTypeMenu(false);
+                toast.success(`${baseName} set to ${opt.label}`);
+              }}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-colors cursor-pointer"
+              style={{ background: 'transparent', color: 'var(--text-secondary)' }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 

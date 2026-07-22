@@ -10,6 +10,7 @@ import { fuzzyFilter } from './fuzzySearch';
 import * as localData from './localData';
 import { hasSupabaseConfig, supabase } from './supabase';
 import { convertWeight, isWeightUnit, type WeightUnit } from './units';
+import type { ExerciseInputType } from './exerciseTypes';
 
 export type LocalUser = localData.LocalUser;
 export type LocalProfile = localData.LocalProfile;
@@ -2231,6 +2232,80 @@ export const extractInputTypeFromSlugs = (slugs: unknown): string | undefined =>
   return meta?.__input_type__;
 };
 
+// ── Exercise type overrides ────────────────────────────────────────────────
+// Per-user, per-exercise-name preference that takes precedence over
+// resolveExerciseInputType()'s name-based guess. DB CHECK constraint only
+// allows the 4 types exposed in the type picker UI.
+
+const normalizeOverrideName = (name: string) => name.trim().toLowerCase();
+
+export const getExerciseTypeOverrides = async (
+  userId: string,
+): Promise<Record<string, ExerciseInputType>> => {
+  if (!hasSupabaseConfig) return localData.getExerciseTypeOverrides(userId);
+
+  const { data, error } = await supabase
+    .from('exercise_type_overrides')
+    .select('exercise_name, input_type')
+    .eq('user_id', userId);
+  if (error) throw normalizeError(error, 'Failed to load exercise type overrides.');
+
+  const map: Record<string, ExerciseInputType> = {};
+  ((data || []) as { exercise_name: string; input_type: ExerciseInputType }[]).forEach((row) => {
+    map[row.exercise_name] = row.input_type;
+  });
+  return map;
+};
+
+export const setExerciseTypeOverride = async (
+  userId: string,
+  exerciseName: string,
+  inputType: ExerciseInputType,
+): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.setExerciseTypeOverride(userId, exerciseName, inputType);
+
+  const normalized = normalizeOverrideName(exerciseName);
+  const { error } = await supabase.from('exercise_type_overrides').upsert(
+    { user_id: userId, exercise_name: normalized, input_type: inputType, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,exercise_name' },
+  );
+  if (error) throw normalizeError(error, 'Failed to save exercise type.');
+};
+
+export const clearExerciseTypeOverride = async (userId: string, exerciseName: string): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.clearExerciseTypeOverride(userId, exerciseName);
+
+  const normalized = normalizeOverrideName(exerciseName);
+  const { error } = await supabase
+    .from('exercise_type_overrides')
+    .delete()
+    .eq('user_id', userId)
+    .eq('exercise_name', normalized);
+  if (error) throw normalizeError(error, 'Failed to clear exercise type.');
+};
+
+const renameExerciseTypeOverride = async (userId: string, oldName: string, newName: string): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.renameExerciseTypeOverride(userId, oldName, newName);
+
+  const normalizedOld = normalizeOverrideName(oldName);
+  const normalizedNew = normalizeOverrideName(newName);
+  if (normalizedOld === normalizedNew) return;
+
+  const { data } = await supabase
+    .from('exercise_type_overrides')
+    .select('input_type')
+    .eq('user_id', userId)
+    .eq('exercise_name', normalizedOld)
+    .maybeSingle();
+  if (!data) return;
+
+  await supabase.from('exercise_type_overrides').delete().eq('user_id', userId).eq('exercise_name', normalizedOld);
+  await supabase.from('exercise_type_overrides').upsert(
+    { user_id: userId, exercise_name: normalizedNew, input_type: data.input_type, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,exercise_name' },
+  );
+};
+
 export const addCustomExercise = async (
   userId: string,
   name: string,
@@ -2339,6 +2414,9 @@ export const renameExerciseEverywhere = async (
     .update({ exercise_name: trimmed })
     .eq('user_id', userId)
     .eq('exercise_name', oldName);
+
+  // 5. Carry over the exercise type override, if any
+  await renameExerciseTypeOverride(userId, oldName, trimmed);
 };
 
 // ── Exercise library in-memory cache (shared across search calls) ─────────────

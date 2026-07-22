@@ -284,14 +284,14 @@ const EXACT_TYPE_MAP: Record<string, ExerciseInputType> = {
   'inverted rows':              'reps_only',
   'neutral grip pull-up':       'reps_only',
   'neutral grip pullup':        'reps_only',
-  'assisted pull-up':           'reps_only',
-  'assisted chin-up':           'reps_only',
+  'assisted pull-up':           'weight_reps',
+  'assisted chin-up':           'weight_reps',
   'wide grip pull-up':          'reps_only',
   'close grip chin-up':         'reps_only',
 
   // ── Triceps bodyweight / assisted ──
   'tricep dips':                'reps_only',
-  'assisted tricep dip':        'reps_only',
+  'assisted tricep dip':        'weight_reps',
   'close grip dip':             'reps_only',
 
   // ── Mobility — timed ──
@@ -528,6 +528,16 @@ export const resolveExerciseInputType = (exerciseName: string): ExerciseInputTyp
 
   // 3. Default: almost every gym exercise is weight × reps
   return 'weight_reps';
+};
+
+// User-set overrides (from exercise_type_overrides) always win over the
+// name-based guess above — see supabaseData.ts/localData.ts getExerciseTypeOverrides().
+export const resolveEffectiveInputType = (
+  exerciseName: string,
+  overrides: Record<string, ExerciseInputType> | undefined | null,
+): ExerciseInputType => {
+  const override = overrides?.[normalizeKey(exerciseName)];
+  return override ?? resolveExerciseInputType(exerciseName);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

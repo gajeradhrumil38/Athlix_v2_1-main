@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { X, Check, Trophy, Clock, Weight, Activity } from 'lucide-react';
 import type { WorkoutState } from '../../pages/Log';
 import { convertWeight, type WeightUnit } from '../../lib/units';
-import { isWeightExerciseType, resolveExerciseInputType } from '../../lib/exerciseTypes';
+import { isWeightExerciseType, resolveEffectiveInputType } from '../../lib/exerciseTypes';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 
 interface FinishSheetProps {
   workout: WorkoutState;
@@ -28,10 +29,11 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
 }) => {
   const [title, setTitle] = useState(workout.title);
   const [notes, setNotes] = useState(workout.notes || '');
+  const { overrides: typeOverrides } = useExerciseOverrides();
 
   const totalSets = (workout.exercises || []).reduce((acc, ex) => acc + (ex.sets || []).filter(s => s.done).length, 0);
   const totalVolume = (workout.exercises || []).reduce((acc, ex) => {
-    const exerciseType = resolveExerciseInputType(ex.name);
+    const exerciseType = resolveEffectiveInputType(ex.name, typeOverrides);
     if (!isWeightExerciseType(exerciseType)) return acc;
     return acc + (ex.sets || []).filter((s) => s.done).reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0);
   }, 0);
