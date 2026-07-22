@@ -1,4 +1,4 @@
-CREATE TABLE public.exercise_goals (
+CREATE TABLE IF NOT EXISTS public.exercise_goals (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
   exercise_name TEXT NOT NULL,
