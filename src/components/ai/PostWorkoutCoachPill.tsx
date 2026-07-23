@@ -132,7 +132,10 @@ export const PostWorkoutCoachPill: React.FC = () => {
         contents: [{ role: 'user', parts: [{ text: userTurn }] }],
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 400,
+          maxOutputTokens: 1024,
+          // thinkingBudget must stay comfortably below maxOutputTokens — otherwise the
+          // model can spend its entire token budget on internal reasoning and emit no
+          // visible text at all, which surfaces here as a silent "Empty response".
           ...(/^gemini-2\.5/.test(model) && { thinkingConfig: { thinkingBudget: 512 } }),
         },
       };
@@ -146,15 +149,18 @@ export const PostWorkoutCoachPill: React.FC = () => {
         res = await fetch(`${GEMINI_BASE}/${FALLBACK_MODEL}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, generationConfig: { temperature: 0.8, maxOutputTokens: 400 } }),
+          body: JSON.stringify({ ...body, generationConfig: { temperature: 0.8, maxOutputTokens: 1024 } }),
         });
       }
-      if (!res.ok) throw new Error(`Gemini request failed (${res.status})`);
+      if (!res.ok) {
+        const errBody = await res.clone().json().catch(() => ({}));
+        throw new Error(`Gemini request failed (${res.status}): ${(errBody as any)?.error?.message || 'unknown error'}`);
+      }
 
       const data = await res.json();
       const parts: Array<{ text?: string; thought?: boolean }> = data?.candidates?.[0]?.content?.parts || [];
       const text = parts.filter((p) => !p.thought).map((p) => p.text).join('').trim();
-      if (!text) throw new Error('Empty response');
+      if (!text) throw new Error(`Empty response — finishReason: ${data?.candidates?.[0]?.finishReason || 'unknown'}`);
 
       clearTimeout(timeoutId);
       if (myRequestId !== requestIdRef.current) return;
@@ -164,7 +170,10 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
       clearDismissTimer();
       dismissTimerRef.current = setTimeout(() => setState((s) => (s === 'teaser' ? 'idle' : s)), TEASER_AUTO_DISMISS_MS);
-    } catch {
+    } catch (err) {
+      // Non-blocking feature — never surface an error toast, but log so a failure
+      // is diagnosable in devtools instead of silently vanishing back to idle.
+      console.warn('Post-workout AI insight failed:', err);
       clearTimeout(timeoutId);
       if (myRequestId === requestIdRef.current) setState('idle');
     }
@@ -206,8 +215,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-full shadow-lg"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+            className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-full"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}
           >
             <motion.span
               animate={{ opacity: [0.4, 1, 0.4] }}
@@ -229,8 +238,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="flex items-center gap-2 max-w-[280px] h-11 pl-3 pr-4 rounded-full shadow-lg text-left cursor-pointer"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+            className="flex items-center gap-2 max-w-[280px] h-11 pl-3 pr-4 rounded-full text-left cursor-pointer"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}
           >
             <span className="flex items-center justify-center w-6 h-6 rounded-full shrink-0" style={{ background: 'var(--accent)' }}>
               <Sparkles className="w-3.5 h-3.5 text-black" />
@@ -249,8 +258,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-full shadow-lg cursor-pointer"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+            className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-full cursor-pointer"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}
           >
             <Sparkles className="w-4 h-4" style={{ color: 'var(--accent)' }} />
             <span className="text-[11px] font-semibold" style={{ color: 'var(--text-primary)' }}>Set up AI Coach for workout insights</span>
@@ -263,8 +272,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
-            className="w-[320px] max-w-[calc(100vw-32px)] rounded-2xl shadow-2xl overflow-hidden"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+            className="w-[320px] max-w-[calc(100vw-32px)] rounded-2xl overflow-hidden"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}
           >
             <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="flex items-center gap-2">
