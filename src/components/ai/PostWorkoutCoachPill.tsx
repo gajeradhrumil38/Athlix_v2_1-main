@@ -189,7 +189,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
   const handOffToChat = (seedText: string) => {
     setState('idle');
     window.dispatchEvent(new CustomEvent('athlix:open-ai', {
-      detail: { seedMessages: [{ role: 'model', text: message }, ...(seedText ? [{ role: 'user', text: seedText }] : [])] },
+      detail: { seedMessages: [{ role: 'model', text: message }], seedText: seedText || undefined },
     }));
   };
 

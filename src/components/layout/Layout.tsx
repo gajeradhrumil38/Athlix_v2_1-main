@@ -262,7 +262,7 @@ export const Layout: React.FC = () => {
 
       {/* ── AI Chat ──────────────────────────────────── */}
       {!isImmersiveRoute && <AiChat />}
-      {!isImmersiveRoute && <PostWorkoutCoachPill />}
+      <PostWorkoutCoachPill />
 
       {/* ── Floating AI Coach button (purple, above nav right) ── */}
       {!isImmersiveRoute && (

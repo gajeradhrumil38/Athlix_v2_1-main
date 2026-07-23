@@ -551,6 +551,7 @@ export const AiChat: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [pendingHandoffText, setPendingHandoffText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
@@ -623,10 +624,13 @@ export const AiChat: React.FC = () => {
   // Allow sidebar / other components to open the chat via a custom event
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ seedMessages?: Message[] }>).detail;
+      const detail = (e as CustomEvent<{ seedMessages?: Message[]; seedText?: string }>).detail;
       openChat();
       if (detail?.seedMessages?.length) {
         setMessages((prev) => (prev.length ? prev : detail.seedMessages!));
+      }
+      if (detail?.seedText) {
+        setPendingHandoffText(detail.seedText);
       }
     };
     window.addEventListener('athlix:open-ai', handler);
@@ -797,6 +801,17 @@ export const AiChat: React.FC = () => {
     },
     [input, loading, apiKey, model, profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, messages],
   );
+
+  // Actually send a hand-off question once the seeded insight message has
+  // landed in `messages` — deferred to its own effect (rather than called
+  // directly in the listener above) so `send()` closes over the just-updated
+  // `messages` state instead of a stale pre-seed value.
+  useEffect(() => {
+    if (!pendingHandoffText) return;
+    const text = pendingHandoffText;
+    setPendingHandoffText(null);
+    send(text);
+  }, [pendingHandoffText, send]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
