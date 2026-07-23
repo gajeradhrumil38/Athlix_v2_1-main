@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Send } from 'lucide-react';
+import { X, Send, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getWorkouts, getPersonalRecords } from '../../lib/supabaseData';
 import type { FoodScan } from '../../features/food/types';
@@ -88,12 +88,6 @@ function buildInsightPrompt(detail: WorkoutFinishedDetail): string {
   );
   return parts.join(' ');
 }
-
-const SparkleIcon: React.FC<{ size: number }> = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M12 2 L14 9 L21 11 L14 13 L12 20 L10 13 L3 11 L10 9 Z" fill="#fff" />
-  </svg>
-);
 
 export const PostWorkoutCoachPill: React.FC = () => {
   const { user, profile } = useAuth();
@@ -308,7 +302,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
             animation: 'pwcp-fabPulse 2.4s ease-in-out infinite',
           }}
         >
-          <SparkleIcon size={26} />
+          <Sparkles className="w-[26px] h-[26px]" style={{ color: '#fff' }} strokeWidth={2} />
         </button>
       )}
 
@@ -370,7 +364,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
                   animation: view === 'analyzing' ? 'pwcp-sparklePulse 1.1s ease-in-out infinite' : 'none',
                 }}
               >
-                <SparkleIcon size={16} />
+                <Sparkles className="w-4 h-4" style={{ color: '#fff' }} strokeWidth={2} />
               </span>
             </span>
             <div
@@ -467,7 +461,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
                     boxShadow: '0 0 0 2px rgba(111,92,245,0.3)',
                   }}
                 >
-                  <SparkleIcon size={16} />
+                  <Sparkles className="w-4 h-4" style={{ color: '#fff' }} strokeWidth={2} />
                 </span>
                 <span style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 15 }}>AI Coach</span>
               </div>
