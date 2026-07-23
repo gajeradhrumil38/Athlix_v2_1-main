@@ -23,8 +23,9 @@ import {
 } from 'date-fns';
 
 import { LineChart, AreaChart, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceDot } from 'recharts';
-import { Target, TrendingUp, Activity, Scale, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CalendarDays, Pencil, Heart, Bluetooth, PlugZap, Unplug, Info, Flame, X, Camera, Utensils, History } from 'lucide-react';
+import { Target, TrendingUp, Activity, Scale, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CalendarDays, Pencil, Heart, Bluetooth, PlugZap, Unplug, Info, Flame, X, Camera, Utensils, History, Trophy } from 'lucide-react';
 import { DopamineTracker } from '../components/progress/DopamineTracker';
+import { GoalsSection } from '../components/progress/GoalsSection';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -207,7 +208,7 @@ export const Progress: React.FC = () => {
   const { user, profile } = useAuth();
   const { startProgress, doneProgress } = useProgress();
   const displayUnit = profile?.unit_preference || 'lbs';
-  const [activeTab, setActiveTab] = useState<'overview' | 'food' | 'dopamine' | 'weight' | 'livehr'>('livehr');
+  const [activeTab, setActiveTab] = useState<'overview' | 'food' | 'dopamine' | 'goals' | 'weight' | 'livehr'>('livehr');
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [todayCalories, setTodayCalories] = useState(0);
@@ -877,6 +878,7 @@ export const Progress: React.FC = () => {
     { id: 'overview',  label: 'Overview',   Icon: Activity  },
     { id: 'food',      label: 'Nutrition',  Icon: Utensils  },
     { id: 'dopamine',  label: 'Dopamine',   Icon: Target    },
+    { id: 'goals',     label: 'Goals',      Icon: Trophy    },
     { id: 'weight',    label: 'Weight',     Icon: Scale     },
   ] as const;
 
@@ -1344,6 +1346,7 @@ export const Progress: React.FC = () => {
               PERSONAL RECORDS
           ════════════════════════════════════════════════ */}
           {activeTab === 'dopamine' && <DopamineTracker />}
+          {activeTab === 'goals' && user && <GoalsSection userId={user.id} weightUnit={displayUnit as 'kg' | 'lbs'} />}
 
           {/* ════════════════════════════════════════════════
               WEIGHT

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AppIcon, IconName } from '../../config/icons';
 import { AiChat } from '../ai/AiChat';
+import { PostWorkoutCoachPill } from '../ai/PostWorkoutCoachPill';
 import { ProgressBar } from './ProgressBar';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -261,6 +262,7 @@ export const Layout: React.FC = () => {
 
       {/* ── AI Chat ──────────────────────────────────── */}
       {!isImmersiveRoute && <AiChat />}
+      <PostWorkoutCoachPill />
 
       {/* ── Floating AI Coach button (purple, above nav right) ── */}
       {!isImmersiveRoute && (

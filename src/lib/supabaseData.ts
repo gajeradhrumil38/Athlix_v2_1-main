@@ -11,6 +11,7 @@ import * as localData from './localData';
 import { hasSupabaseConfig, supabase } from './supabase';
 import { convertWeight, isWeightUnit, type WeightUnit } from './units';
 import type { ExerciseInputType } from './exerciseTypes';
+import { resolveExerciseInputType, isWeightExerciseType } from './exerciseTypes';
 
 export type LocalUser = localData.LocalUser;
 export type LocalProfile = localData.LocalProfile;
@@ -21,6 +22,7 @@ export type LocalTemplate = localData.LocalTemplate;
 export type LocalTemplateExercise = localData.LocalTemplateExercise;
 export type LocalBodyWeightLog = localData.LocalBodyWeightLog;
 export type LocalPersonalRecord = localData.LocalPersonalRecord;
+export type LocalExerciseGoal = localData.LocalExerciseGoal;
 export type LocalExerciseSessionSummary = localData.LocalExerciseSessionSummary;
 export type LocalExerciseLibraryItem = localData.LocalExerciseLibraryItem;
 export type LocalHeartRateSession = localData.LocalHeartRateSession;
@@ -1569,6 +1571,58 @@ export const getWorkouts = async (
   return attachExercises(workouts, (exerciseRows || []) as LocalExercise[]);
 };
 
+export interface WorkoutComparison {
+  previousDate: string;
+  previousTitle: string;
+  volumeDelta: number;
+  setsDelta: number;
+  durationDeltaMinutes: number;
+}
+
+// Pure — takes the already-finished workout's own totals plus a list of prior
+// workouts (fetched once, before save) and finds the best match to compare against.
+// Matches by title first (case-insensitive), falling back to >50% muscle-group overlap.
+export const findLastSimilarWorkout = (
+  finished: { title: string; muscleGroups: string[]; totalVolume: number; totalSets: number; durationMinutes: number },
+  priorWorkouts: (LocalWorkout & { exercises?: LocalExercise[] })[],
+): WorkoutComparison | null => {
+  const sorted = [...priorWorkouts].sort((a, b) => {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    return b.created_at.localeCompare(a.created_at);
+  });
+
+  const finishedTitle = finished.title.trim().toLowerCase();
+  const finishedGroups = new Set(finished.muscleGroups.map((g) => g.toLowerCase()));
+
+  const titleMatch = sorted.find((w) => w.title.trim().toLowerCase() === finishedTitle);
+
+  const overlapMatch = !titleMatch
+    ? sorted.find((w) => {
+        const groups = new Set((w.muscle_groups || []).map((g) => g.toLowerCase()));
+        if (groups.size === 0 || finishedGroups.size === 0) return false;
+        const shared = [...groups].filter((g) => finishedGroups.has(g)).length;
+        const union = new Set([...groups, ...finishedGroups]).size;
+        return shared / union > 0.5;
+      })
+    : undefined;
+
+  const match = titleMatch || overlapMatch;
+  if (!match) return null;
+
+  const prevVolume = (match.exercises || [])
+    .filter((ex) => isWeightExerciseType(resolveExerciseInputType(ex.name)))
+    .reduce((sum, ex) => sum + ex.weight * ex.reps * ex.sets, 0);
+  const prevSets = (match.exercises || []).reduce((sum, ex) => sum + ex.sets, 0);
+
+  return {
+    previousDate: match.date,
+    previousTitle: match.title,
+    volumeDelta: finished.totalVolume - prevVolume,
+    setsDelta: finished.totalSets - prevSets,
+    durationDeltaMinutes: finished.durationMinutes - match.duration_minutes,
+  };
+};
+
 export const saveWorkout = async (
   userId: string,
   input: {
@@ -2304,6 +2358,68 @@ const renameExerciseTypeOverride = async (userId: string, oldName: string, newNa
     { user_id: userId, exercise_name: normalizedNew, input_type: data.input_type, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,exercise_name' },
   );
+};
+
+// ── Exercise goals ──────────────────────────────────────────────────────────
+
+export const getGoals = async (userId: string): Promise<LocalExerciseGoal[]> => {
+  if (!hasSupabaseConfig) return localData.getGoals(userId);
+
+  const { data, error } = await supabase
+    .from('exercise_goals')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw normalizeError(error, 'Failed to load goals.');
+  return (data || []) as LocalExerciseGoal[];
+};
+
+export const addGoal = async (
+  userId: string,
+  input: { exerciseName: string; targetWeight: number; targetReps: number; unit: 'kg' | 'lbs' },
+): Promise<LocalExerciseGoal> => {
+  if (!hasSupabaseConfig) return localData.addGoal(userId, input);
+
+  const { data, error } = await supabase
+    .from('exercise_goals')
+    .insert({
+      user_id: userId,
+      exercise_name: input.exerciseName.trim(),
+      target_weight: input.targetWeight,
+      target_reps: input.targetReps,
+      unit: input.unit,
+      status: 'active',
+    })
+    .select()
+    .single();
+  if (error) throw normalizeError(error, 'Failed to save goal.');
+  return data as LocalExerciseGoal;
+};
+
+export const updateGoal = async (
+  userId: string,
+  goalId: string,
+  updates: Partial<Pick<LocalExerciseGoal, 'target_weight' | 'target_reps' | 'unit' | 'status' | 'achieved_at'>>,
+): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.updateGoal(userId, goalId, updates);
+
+  const { error } = await supabase
+    .from('exercise_goals')
+    .update(updates)
+    .eq('id', goalId)
+    .eq('user_id', userId);
+  if (error) throw normalizeError(error, 'Failed to update goal.');
+};
+
+export const deleteGoal = async (userId: string, goalId: string): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.deleteGoal(userId, goalId);
+
+  const { error } = await supabase
+    .from('exercise_goals')
+    .delete()
+    .eq('id', goalId)
+    .eq('user_id', userId);
+  if (error) throw normalizeError(error, 'Failed to delete goal.');
 };
 
 export const addCustomExercise = async (

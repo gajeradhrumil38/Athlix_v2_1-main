@@ -4,8 +4,19 @@ import { AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useExerciseOverrides } from '../contexts/ExerciseOverridesContext';
-import { saveWorkout, getWorkouts, type LocalExercise } from '../lib/supabaseData';
-import { resolveEffectiveInputType } from '../lib/exerciseTypes';
+import {
+  saveWorkout,
+  getWorkouts,
+  getPersonalRecords,
+  getGoals,
+  updateGoal,
+  findLastSimilarWorkout,
+  type LocalExercise,
+  type LocalPersonalRecord,
+  type LocalExerciseGoal,
+} from '../lib/supabaseData';
+import { resolveEffectiveInputType, isWeightExerciseType } from '../lib/exerciseTypes';
+import { convertWeight } from '../lib/units';
 import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
 import { ActiveWorkout } from '../components/log/ActiveWorkout';
@@ -157,6 +168,10 @@ export const Log: React.FC = () => {
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [openPickerOnStart, setOpenPickerOnStart] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
+  const [finishPersonalRecords, setFinishPersonalRecords] = useState<LocalPersonalRecord[]>([]);
+  const [finishPersonalRecordsLoaded, setFinishPersonalRecordsLoaded] = useState(false);
+  const [finishGoals, setFinishGoals] = useState<LocalExerciseGoal[]>([]);
+  const [finishPriorWorkouts, setFinishPriorWorkouts] = useState<Awaited<ReturnType<typeof getWorkouts>>>([]);
   const [saving, setSaving] = useState(false);
   const saveInFlightRef = useRef(false);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
@@ -396,6 +411,14 @@ export const Log: React.FC = () => {
 
   const handleFinish = () => {
     setShowFinish(true);
+    if (user) {
+      setFinishPersonalRecordsLoaded(false);
+      getPersonalRecords(user.id)
+        .then((records) => { setFinishPersonalRecords(records); setFinishPersonalRecordsLoaded(true); })
+        .catch(() => { setFinishPersonalRecords([]); setFinishPersonalRecordsLoaded(true); });
+      getGoals(user.id).then((g) => setFinishGoals(g.filter((goal) => goal.status === 'active'))).catch(() => setFinishGoals([]));
+      getWorkouts(user.id, { limit: 20, includeExercises: true }).then(setFinishPriorWorkouts).catch(() => setFinishPriorWorkouts([]));
+    }
   };
 
   const handleBackToPrevious = useCallback(() => {
@@ -459,6 +482,84 @@ export const Log: React.FC = () => {
             }),
           })),
         });
+
+      // Best-effort insight for the AI coach pill — runs in its own try/catch so a
+      // failure here (e.g. a flaky updateGoal call) can never surface as a false
+      // "save failed" error, and isn't awaited so it never delays the UI below.
+      (async () => {
+        try {
+          const finishedStats = {
+            durationMinutes: Math.max(1, Math.round(finalElapsedSeconds / 60)),
+            totalVolume: completedExercises.reduce((sum, { exercise, completedSets }) => {
+              const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
+              if (!isWeightExerciseType(inputType)) return sum;
+              return sum + completedSets.reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0);
+            }, 0),
+            totalSets: completedExercises.reduce((sum, { completedSets }) => sum + completedSets.length, 0),
+            unit: weightUnit,
+            exerciseNames: completedExercises.map(({ exercise }) => exercise.name),
+          };
+
+          let realPrCount = 0;
+          if (finishPersonalRecordsLoaded) {
+            const prByName = new Map(finishPersonalRecords.map((pr) => [pr.exercise_name.toLowerCase(), pr]));
+            for (const { exercise, completedSets } of completedExercises) {
+              const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
+              if (!isWeightExerciseType(inputType)) continue;
+              const bestWeight = Math.max(0, ...completedSets.map((s) => Number(s.weight || 0)));
+              if (bestWeight <= 0) continue;
+              const existing = prByName.get(exercise.name.toLowerCase());
+              if (!existing || bestWeight > existing.best_weight) realPrCount++;
+            }
+          }
+
+          const goalUpdates: Array<{
+            exerciseName: string;
+            achieved: boolean;
+            targetWeight: number;
+            targetReps: number;
+            unit: string;
+            currentBestWeight: number;
+            currentBestReps: number;
+          }> = [];
+          for (const goal of finishGoals) {
+            const match = completedExercises.find(
+              ({ exercise }) => exercise.name.toLowerCase() === goal.exercise_name.toLowerCase(),
+            );
+            if (!match) continue;
+            const bestSet = match.completedSets.reduce(
+              (best, s) => (Number(s.weight || 0) > best.weight ? { weight: Number(s.weight || 0), reps: Number(s.reps || 0) } : best),
+              { weight: 0, reps: 0 },
+            );
+            const bestWeightInGoalUnit = convertWeight(bestSet.weight, weightUnit, goal.unit, 0.01);
+            const justAchieved = bestWeightInGoalUnit >= goal.target_weight && bestSet.reps >= goal.target_reps;
+            if (justAchieved) {
+              await updateGoal(user.id, goal.id, { status: 'achieved', achieved_at: new Date().toISOString() });
+            }
+            goalUpdates.push({
+              exerciseName: goal.exercise_name,
+              achieved: justAchieved,
+              targetWeight: goal.target_weight,
+              targetReps: goal.target_reps,
+              unit: goal.unit,
+              currentBestWeight: bestWeightInGoalUnit,
+              currentBestReps: bestSet.reps,
+            });
+          }
+
+          const muscleGroups = [...new Set(completedExercises.map(({ exercise }) => exercise.muscleGroup).filter(Boolean))];
+          const comparison = findLastSimilarWorkout(
+            { title, muscleGroups, totalVolume: finishedStats.totalVolume, totalSets: finishedStats.totalSets, durationMinutes: finishedStats.durationMinutes },
+            finishPriorWorkouts,
+          );
+
+          window.dispatchEvent(new CustomEvent('athlix:workout-finished', {
+            detail: { stats: finishedStats, realPrCount, goalUpdates, comparison },
+          }));
+        } catch (err) {
+          console.warn('Failed to compute post-workout insight:', err);
+        }
+      })();
 
       clearDraft();
       setShowFinish(false);
@@ -551,6 +652,8 @@ export const Log: React.FC = () => {
             weightUnit={weightUnit}
             bodyWeight={profile?.body_weight ?? null}
             bodyWeightUnit={(profile?.body_weight_unit || 'lbs') as 'kg' | 'lbs'}
+            personalRecords={finishPersonalRecords}
+            personalRecordsLoaded={finishPersonalRecordsLoaded}
             onConfirm={handleSave}
             onAddMore={() => { if (!saving) setShowFinish(false); }}
             onCancel={() => { if (!saving) setShowFinish(false); }}

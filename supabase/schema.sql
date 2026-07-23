@@ -162,6 +162,19 @@ CREATE TABLE public.exercise_type_overrides (
   PRIMARY KEY (user_id, exercise_name)
 );
 
+-- Exercise Goals (per-user strength target for a specific exercise)
+CREATE TABLE public.exercise_goals (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  exercise_name TEXT NOT NULL,
+  target_weight NUMERIC NOT NULL CHECK (target_weight > 0),
+  target_reps INTEGER NOT NULL CHECK (target_reps > 0),
+  unit TEXT NOT NULL CHECK (unit IN ('kg','lbs')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','achieved')),
+  achieved_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Rest Timer Preferences
 CREATE TABLE public.rest_timer_preferences (
   user_id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
@@ -195,6 +208,7 @@ ALTER TABLE public.body_weight_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exercise_library ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exercise_type_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exercise_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rest_timer_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.heart_rate_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.heart_rate_samples ENABLE ROW LEVEL SECURITY;
@@ -222,6 +236,12 @@ CREATE POLICY "Users can view their own exercise type overrides" ON public.exerc
 CREATE POLICY "Users can insert their own exercise type overrides" ON public.exercise_type_overrides FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own exercise type overrides" ON public.exercise_type_overrides FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own exercise type overrides" ON public.exercise_type_overrides FOR DELETE USING (auth.uid() = user_id);
+
+-- Policies for exercise_goals
+CREATE POLICY "Users can view their own exercise goals" ON public.exercise_goals FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own exercise goals" ON public.exercise_goals FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own exercise goals" ON public.exercise_goals FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own exercise goals" ON public.exercise_goals FOR DELETE USING (auth.uid() = user_id);
 
 -- Policies for rest_timer_preferences
 CREATE POLICY "Users can view their own rest timer preferences" ON public.rest_timer_preferences FOR SELECT USING (auth.uid() = user_id);
@@ -501,6 +521,9 @@ CREATE INDEX IF NOT EXISTS heart_rate_samples_user_ts_idx
 
 CREATE INDEX IF NOT EXISTS heart_rate_samples_session_ts_idx
   ON public.heart_rate_samples (session_id, ts);
+
+CREATE INDEX IF NOT EXISTS exercise_goals_user_status_idx
+  ON public.exercise_goals (user_id, status);
 
 -- Backend RPC helpers
 CREATE OR REPLACE FUNCTION public.save_workout_with_sets(

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { X, Check, Trophy, Clock, Weight, Activity } from 'lucide-react';
 import type { WorkoutState } from '../../pages/Log';
 import { convertWeight, type WeightUnit } from '../../lib/units';
+import type { LocalPersonalRecord } from '../../lib/supabaseData';
 import { isWeightExerciseType, resolveEffectiveInputType } from '../../lib/exerciseTypes';
 import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 
@@ -11,6 +12,8 @@ interface FinishSheetProps {
   weightUnit?: 'kg' | 'lbs';
   bodyWeight?: number | null;
   bodyWeightUnit?: WeightUnit;
+  personalRecords?: LocalPersonalRecord[];
+  personalRecordsLoaded?: boolean;
   onConfirm: (title: string, notes: string) => void;
   onCancel: () => void;
   onAddMore?: () => void;
@@ -22,6 +25,8 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
   weightUnit = 'lbs',
   bodyWeight,
   bodyWeightUnit = 'lbs',
+  personalRecords = [],
+  personalRecordsLoaded = true,
   onConfirm,
   onCancel,
   onAddMore,
@@ -37,14 +42,22 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
     if (!isWeightExerciseType(exerciseType)) return acc;
     return acc + (ex.sets || []).filter((s) => s.done).reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0);
   }, 0);
-  const prCount = useMemo(
-    () =>
-      (workout.exercises || []).reduce(
-        (count, ex) => count + (ex.sets || []).filter((s) => s.done && Boolean(s.isPR)).length,
-        0,
-      ),
-    [workout.exercises],
-  );
+  const prCount = useMemo(() => {
+    if (!personalRecordsLoaded) return 0;
+    const prByName = new Map(personalRecords.map((pr) => [pr.exercise_name.toLowerCase(), pr]));
+    let count = 0;
+    for (const ex of workout.exercises || []) {
+      const exerciseType = resolveEffectiveInputType(ex.name, typeOverrides);
+      if (!isWeightExerciseType(exerciseType)) continue;
+      const doneSets = (ex.sets || []).filter((s) => s.done);
+      if (!doneSets.length) continue;
+      const bestWeight = Math.max(...doneSets.map((s) => Number(s.weight || 0)));
+      if (bestWeight <= 0) continue;
+      const existing = prByName.get(ex.name.toLowerCase());
+      if (!existing || bestWeight > existing.best_weight) count++;
+    }
+    return count;
+  }, [workout.exercises, personalRecords, personalRecordsLoaded, typeOverrides]);
   const bodyWeightForMath = useMemo(() => {
     if (!bodyWeight || !Number.isFinite(bodyWeight) || bodyWeight <= 0) return null;
     return convertWeight(bodyWeight, bodyWeightUnit, weightUnit, 0.1);
