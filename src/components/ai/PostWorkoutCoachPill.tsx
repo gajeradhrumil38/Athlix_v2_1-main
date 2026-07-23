@@ -440,12 +440,10 @@ export const PostWorkoutCoachPill: React.FC = () => {
             transition={{ duration: 0.24, ease: 'easeOut' }}
             className="fixed z-[110]"
             style={{
-              left: 14,
-              right: 14,
+              right: 16,
+              width: 'min(420px, calc(100vw - 32px))',
               bottom: `calc(${DOCK_BOTTOM} - 4px)`,
               maxHeight: 480,
-              maxWidth: 420,
-              margin: '0 auto',
               background: '#161a20',
               border: '1px solid rgba(120,140,255,0.3)',
               borderRadius: 20,
