@@ -347,7 +347,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
               boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
             }}
           >
-            <span style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
+            <span style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
               {barChasing && (
                 <div
                   style={{
@@ -362,14 +362,14 @@ export const PostWorkoutCoachPill: React.FC = () => {
               )}
               <span
                 style={{
-                  ...aiBadgeStyle(32, 10),
+                  ...aiBadgeStyle(26, 8),
                   position: 'absolute',
-                  inset: 4,
+                  inset: 3,
                   boxShadow: '0 0 0 2px #161a20',
                   animation: view === 'analyzing' ? 'pwcp-sparklePulse 1.1s ease-in-out infinite' : 'none',
                 }}
               >
-                <Sparkles className="w-4 h-4" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
+                <Sparkles className="w-3.5 h-3.5" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
               </span>
             </span>
             <div
@@ -377,15 +377,15 @@ export const PostWorkoutCoachPill: React.FC = () => {
                 flex: 1,
                 minWidth: 0,
                 display: '-webkit-box',
-                WebkitLineClamp: 2,
+                WebkitLineClamp: 3,
                 WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'normal',
                 wordBreak: 'break-word',
                 color: '#f0f0f0',
-                fontSize: 14,
-                lineHeight: 1.4,
+                fontSize: 13,
+                lineHeight: 1.35,
                 fontWeight: 500,
               }}
             >
