@@ -282,7 +282,8 @@ ${progressionReport(workouts, unit)}
 ${prSection || '  No records yet'}
 
 RESPONSE FORMAT (non-negotiable):
-• Open with the direct answer in ≤2 sentences — no preamble, no "Based on your data", no "You should"
+• Lines 1–3 (always, every reply): state (a) whether they've improved vs their historical data on the relevant lift/metric — cite the old number → new number from STRENGTH TRENDS/OLDER SESSIONS, or say plainly if there's not enough old data yet, and (b) what to focus on today or their next session. Never invent an old number — if none exists, say so instead of guessing.
+• After those 3 lines, answer the rest of the question in ≤2 more sentences — no preamble, no "Based on your data", no "You should"
 • Use **bold** for exercise names and key numbers only
 • Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}"
 • No closing summaries, no motivational sign-offs
