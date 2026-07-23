@@ -15,7 +15,7 @@ import {
   type LocalPersonalRecord,
   type LocalExerciseGoal,
 } from '../lib/supabaseData';
-import { resolveEffectiveInputType } from '../lib/exerciseTypes';
+import { resolveEffectiveInputType, isWeightExerciseType } from '../lib/exerciseTypes';
 import { convertWeight } from '../lib/units';
 import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
@@ -483,73 +483,83 @@ export const Log: React.FC = () => {
           })),
         });
 
-      // ── Post-save insight payload for the AI coach pill ──────────────────
-      const finishedStats = {
-        durationMinutes: Math.max(1, Math.round(finalElapsedSeconds / 60)),
-        totalVolume: completedExercises.reduce((sum, { exercise, completedSets }) => {
-          const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
-          if (inputType !== 'weight_reps') return sum;
-          return sum + completedSets.reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0);
-        }, 0),
-        totalSets: completedExercises.reduce((sum, { completedSets }) => sum + completedSets.length, 0),
-        unit: weightUnit,
-        exerciseNames: completedExercises.map(({ exercise }) => exercise.name),
-      };
+      // Best-effort insight for the AI coach pill — runs in its own try/catch so a
+      // failure here (e.g. a flaky updateGoal call) can never surface as a false
+      // "save failed" error, and isn't awaited so it never delays the UI below.
+      (async () => {
+        try {
+          const finishedStats = {
+            durationMinutes: Math.max(1, Math.round(finalElapsedSeconds / 60)),
+            totalVolume: completedExercises.reduce((sum, { exercise, completedSets }) => {
+              const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
+              if (!isWeightExerciseType(inputType)) return sum;
+              return sum + completedSets.reduce((v, s) => v + Number(s.weight || 0) * Number(s.reps || 0), 0);
+            }, 0),
+            totalSets: completedExercises.reduce((sum, { completedSets }) => sum + completedSets.length, 0),
+            unit: weightUnit,
+            exerciseNames: completedExercises.map(({ exercise }) => exercise.name),
+          };
 
-      const prByName = new Map(finishPersonalRecords.map((pr) => [pr.exercise_name.toLowerCase(), pr]));
-      let realPrCount = 0;
-      for (const { exercise, completedSets } of completedExercises) {
-        const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
-        if (inputType !== 'weight_reps') continue;
-        const bestWeight = Math.max(0, ...completedSets.map((s) => Number(s.weight || 0)));
-        if (bestWeight <= 0) continue;
-        const existing = prByName.get(exercise.name.toLowerCase());
-        if (!existing || bestWeight > existing.best_weight) realPrCount++;
-      }
+          let realPrCount = 0;
+          if (finishPersonalRecordsLoaded) {
+            const prByName = new Map(finishPersonalRecords.map((pr) => [pr.exercise_name.toLowerCase(), pr]));
+            for (const { exercise, completedSets } of completedExercises) {
+              const inputType = resolveEffectiveInputType(exercise.name, typeOverrides);
+              if (!isWeightExerciseType(inputType)) continue;
+              const bestWeight = Math.max(0, ...completedSets.map((s) => Number(s.weight || 0)));
+              if (bestWeight <= 0) continue;
+              const existing = prByName.get(exercise.name.toLowerCase());
+              if (!existing || bestWeight > existing.best_weight) realPrCount++;
+            }
+          }
 
-      const goalUpdates: Array<{
-        exerciseName: string;
-        achieved: boolean;
-        targetWeight: number;
-        targetReps: number;
-        unit: string;
-        currentBestWeight: number;
-        currentBestReps: number;
-      }> = [];
-      for (const goal of finishGoals) {
-        const match = completedExercises.find(
-          ({ exercise }) => exercise.name.toLowerCase() === goal.exercise_name.toLowerCase(),
-        );
-        if (!match) continue;
-        const bestSet = match.completedSets.reduce(
-          (best, s) => (Number(s.weight || 0) > best.weight ? { weight: Number(s.weight || 0), reps: Number(s.reps || 0) } : best),
-          { weight: 0, reps: 0 },
-        );
-        const bestWeightInGoalUnit = convertWeight(bestSet.weight, weightUnit, goal.unit);
-        const justAchieved = bestWeightInGoalUnit >= goal.target_weight && bestSet.reps >= goal.target_reps;
-        if (justAchieved) {
-          await updateGoal(user.id, goal.id, { status: 'achieved', achieved_at: new Date().toISOString() });
+          const goalUpdates: Array<{
+            exerciseName: string;
+            achieved: boolean;
+            targetWeight: number;
+            targetReps: number;
+            unit: string;
+            currentBestWeight: number;
+            currentBestReps: number;
+          }> = [];
+          for (const goal of finishGoals) {
+            const match = completedExercises.find(
+              ({ exercise }) => exercise.name.toLowerCase() === goal.exercise_name.toLowerCase(),
+            );
+            if (!match) continue;
+            const bestSet = match.completedSets.reduce(
+              (best, s) => (Number(s.weight || 0) > best.weight ? { weight: Number(s.weight || 0), reps: Number(s.reps || 0) } : best),
+              { weight: 0, reps: 0 },
+            );
+            const bestWeightInGoalUnit = convertWeight(bestSet.weight, weightUnit, goal.unit, 0.01);
+            const justAchieved = bestWeightInGoalUnit >= goal.target_weight && bestSet.reps >= goal.target_reps;
+            if (justAchieved) {
+              await updateGoal(user.id, goal.id, { status: 'achieved', achieved_at: new Date().toISOString() });
+            }
+            goalUpdates.push({
+              exerciseName: goal.exercise_name,
+              achieved: justAchieved,
+              targetWeight: goal.target_weight,
+              targetReps: goal.target_reps,
+              unit: goal.unit,
+              currentBestWeight: bestWeightInGoalUnit,
+              currentBestReps: bestSet.reps,
+            });
+          }
+
+          const muscleGroups = [...new Set(completedExercises.map(({ exercise }) => exercise.muscleGroup).filter(Boolean))];
+          const comparison = findLastSimilarWorkout(
+            { title, muscleGroups, totalVolume: finishedStats.totalVolume, totalSets: finishedStats.totalSets, durationMinutes: finishedStats.durationMinutes },
+            finishPriorWorkouts,
+          );
+
+          window.dispatchEvent(new CustomEvent('athlix:workout-finished', {
+            detail: { stats: finishedStats, realPrCount, goalUpdates, comparison },
+          }));
+        } catch (err) {
+          console.warn('Failed to compute post-workout insight:', err);
         }
-        goalUpdates.push({
-          exerciseName: goal.exercise_name,
-          achieved: justAchieved,
-          targetWeight: goal.target_weight,
-          targetReps: goal.target_reps,
-          unit: goal.unit,
-          currentBestWeight: bestWeightInGoalUnit,
-          currentBestReps: bestSet.reps,
-        });
-      }
-
-      const muscleGroups = [...new Set(completedExercises.map(({ exercise }) => exercise.muscleGroup).filter(Boolean))];
-      const comparison = findLastSimilarWorkout(
-        { title, muscleGroups, totalVolume: finishedStats.totalVolume, totalSets: finishedStats.totalSets, durationMinutes: finishedStats.durationMinutes },
-        finishPriorWorkouts,
-      );
-
-      window.dispatchEvent(new CustomEvent('athlix:workout-finished', {
-        detail: { stats: finishedStats, realPrCount, goalUpdates, comparison },
-      }));
+      })();
 
       clearDraft();
       setShowFinish(false);
