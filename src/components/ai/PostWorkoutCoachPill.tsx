@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sparkles, X, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
+import { X, Send } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getWorkouts, getPersonalRecords } from '../../lib/supabaseData';
 import type { FoodScan } from '../../features/food/types';
@@ -15,23 +16,23 @@ const GEMINI_MODEL_STORAGE = 'athlix:gemini_model';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FALLBACK_MODEL = 'gemini-1.5-flash';
-const TEASER_AUTO_DISMISS_MS = 20_000;
 const ANALYZING_TIMEOUT_MS = 10_000;
 const COOLDOWN_MS = 60_000;
+const COLLAPSED_AUTO_DISMISS_MS = 30_000;
+const TYPE_CHAR_MS = 24;
 
-// Solid, high-contrast panel treatment matching FinishSheet's actual bottom-sheet
-// surface (--lg-sheet-bg is ~90% opaque) rather than the much-too-transparent
-// --bg-elevated (~35% opaque) — this pill floats over arbitrary page content and
-// needs to read clearly regardless of what's behind it.
-const PANEL_STYLE: React.CSSProperties = {
-  background: 'var(--lg-sheet-bg)',
-  backdropFilter: 'blur(24px) saturate(1.8)',
-  WebkitBackdropFilter: 'blur(24px) saturate(1.8)',
-  border: '1px solid rgba(255,255,255,0.12)',
-  boxShadow: '0 20px 60px rgba(0,0,0,0.55)',
-};
+// Vertical anchor shared by the FAB / bar / drawer so switching between them
+// never jumps — matches this app's existing bottom-nav clearance convention.
+const DOCK_BOTTOM = 'calc(env(safe-area-inset-bottom) + 88px)';
 
-const SPRING = { type: 'spring' as const, damping: 22, stiffness: 320 };
+const KEYFRAMES = `
+@keyframes pwcp-fabPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(90,110,255,0.35); } 50% { box-shadow: 0 0 0 8px rgba(90,110,255,0); } }
+@keyframes pwcp-sparklePulse { 0%,100% { opacity:0.85; transform: scale(1); } 50% { opacity:1; transform: scale(1.08); } }
+@keyframes pwcp-borderChase { to { transform: rotate(360deg); } }
+@keyframes pwcp-cursorBlink { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
+`;
+
+type View = 'closed' | 'analyzing' | 'typing' | 'collapsed' | 'expanded' | 'no-key';
 
 interface FinishedStats {
   durationMinutes: number;
@@ -57,8 +58,6 @@ interface WorkoutFinishedDetail {
   goalUpdates: GoalUpdate[];
   comparison: WorkoutComparison | null;
 }
-
-type PillState = 'idle' | 'analyzing' | 'teaser' | 'drawer' | 'no-key';
 
 function buildInsightPrompt(detail: WorkoutFinishedDetail): string {
   const { stats, realPrCount, goalUpdates, comparison } = detail;
@@ -90,38 +89,34 @@ function buildInsightPrompt(detail: WorkoutFinishedDetail): string {
   return parts.join(' ');
 }
 
-/* ── Minimal **bold** → <strong> renderer (mirrors AiChat's own markdown handling,
-   since the system prompt otherwise instructs the model to bold key numbers) ── */
-// Truncated preview text can't cleanly render partial **bold** markers (a slice
-// might cut one open), so just strip the asterisks rather than risk stray "**".
-function stripMarkdown(raw: string): string {
-  return raw.replace(/\*\*/g, '');
-}
-
-function renderBold(raw: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  let rest = raw;
-  let key = 0;
-  while (rest.length) {
-    const m = rest.match(/\*\*(.+?)\*\*/);
-    if (!m || m.index === undefined) {
-      nodes.push(rest);
-      break;
-    }
-    if (m.index > 0) nodes.push(rest.slice(0, m.index));
-    nodes.push(<strong key={key++}>{m[1]}</strong>);
-    rest = rest.slice(m.index + m[0].length);
-  }
-  return nodes;
-}
+const SparkleIcon: React.FC<{ size: number }> = ({ size }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <path d="M12 2 L14 9 L21 11 L14 13 L12 20 L10 13 L3 11 L10 9 Z" fill="#fff" />
+  </svg>
+);
 
 export const PostWorkoutCoachPill: React.FC = () => {
   const { user, profile } = useAuth();
-  const [state, setState] = useState<PillState>('idle');
+  const location = useLocation();
+  const isImmersiveRoute = location.pathname === '/log' || location.pathname.startsWith('/run');
+
+  const [view, setView] = useState<View>('closed');
   const [message, setMessage] = useState('');
-  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
-  const [drawerInput, setDrawerInput] = useState('');
+  const [typedText, setTypedText] = useState('');
+  const [typingDone, setTypingDone] = useState(false);
+
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const requestIdRef = useRef(0);
+  const lastFiredAtRef = useRef(0);
+
+  useEffect(() => {
+    if (document.getElementById('pwcp-keyframes')) return;
+    const el = document.createElement('style');
+    el.id = 'pwcp-keyframes';
+    el.textContent = KEYFRAMES;
+    document.head.appendChild(el);
+  }, []);
 
   const clearDismissTimer = useCallback(() => {
     if (dismissTimerRef.current) {
@@ -130,8 +125,26 @@ export const PostWorkoutCoachPill: React.FC = () => {
     }
   }, []);
 
-  const requestIdRef = useRef(0);
-  const lastFiredAtRef = useRef(0);
+  const startTyping = useCallback((full: string) => {
+    setTypedText('');
+    setTypingDone(false);
+    setView('typing');
+    if (typeTimerRef.current) clearInterval(typeTimerRef.current);
+    let i = 0;
+    typeTimerRef.current = setInterval(() => {
+      i++;
+      setTypedText(full.slice(0, i));
+      if (i >= full.length) {
+        if (typeTimerRef.current) clearInterval(typeTimerRef.current);
+        setTypingDone(true);
+        setTimeout(() => {
+          setView('collapsed');
+          clearDismissTimer();
+          dismissTimerRef.current = setTimeout(() => setView((v) => (v === 'collapsed' ? 'closed' : v)), COLLAPSED_AUTO_DISMISS_MS);
+        }, 550);
+      }
+    }, TYPE_CHAR_MS);
+  }, [clearDismissTimer]);
 
   const runInsight = useCallback(async (detail: WorkoutFinishedDetail) => {
     if (!user?.id) return;
@@ -142,18 +155,17 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
     const myRequestId = ++requestIdRef.current;
 
-    setState('analyzing');
-    setFeedback(null);
+    setView('analyzing');
 
     const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
     if (!apiKey) {
-      if (myRequestId === requestIdRef.current) setState('no-key');
+      if (myRequestId === requestIdRef.current) setView('no-key');
       return;
     }
 
     const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
     const timeoutId = setTimeout(() => {
-      if (myRequestId === requestIdRef.current) setState((s) => (s === 'analyzing' ? 'idle' : s));
+      if (myRequestId === requestIdRef.current) setView((v) => (v === 'analyzing' ? 'closed' : v));
     }, ANALYZING_TIMEOUT_MS);
 
     try {
@@ -175,9 +187,6 @@ export const PostWorkoutCoachPill: React.FC = () => {
         generationConfig: {
           temperature: 0.8,
           maxOutputTokens: 1024,
-          // thinkingBudget must stay comfortably below maxOutputTokens — otherwise the
-          // model can spend its entire token budget on internal reasoning and emit no
-          // visible text at all, which surfaces here as a silent "Empty response".
           ...(/^gemini-2\.5/.test(model) && { thinkingConfig: { thinkingBudget: 512 } }),
         },
       };
@@ -201,25 +210,20 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
       const data = await res.json();
       const parts: Array<{ text?: string; thought?: boolean }> = data?.candidates?.[0]?.content?.parts || [];
-      const text = parts.filter((p) => !p.thought).map((p) => p.text).join('').trim();
+      const text = parts.filter((p) => !p.thought).map((p) => p.text).join('').trim().replace(/\*\*/g, '');
       if (!text) throw new Error(`Empty response — finishReason: ${data?.candidates?.[0]?.finishReason || 'unknown'}`);
 
       clearTimeout(timeoutId);
       if (myRequestId !== requestIdRef.current) return;
 
       setMessage(text);
-      setState('teaser');
-
-      clearDismissTimer();
-      dismissTimerRef.current = setTimeout(() => setState((s) => (s === 'teaser' ? 'idle' : s)), TEASER_AUTO_DISMISS_MS);
+      startTyping(text);
     } catch (err) {
-      // Non-blocking feature — never surface an error toast, but log so a failure
-      // is diagnosable in devtools instead of silently vanishing back to idle.
       console.warn('Post-workout AI insight failed:', err);
       clearTimeout(timeoutId);
-      if (myRequestId === requestIdRef.current) setState('idle');
+      if (myRequestId === requestIdRef.current) setView('closed');
     }
-  }, [user?.id, profile, clearDismissTimer]);
+  }, [user?.id, profile, startTyping]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -230,148 +234,274 @@ export const PostWorkoutCoachPill: React.FC = () => {
     return () => window.removeEventListener('athlix:workout-finished', handler);
   }, [runInsight]);
 
-  useEffect(() => () => clearDismissTimer(), [clearDismissTimer]);
-
-  const openDrawer = () => {
+  useEffect(() => () => {
     clearDismissTimer();
-    setState('drawer');
+    if (typeTimerRef.current) clearInterval(typeTimerRef.current);
+  }, [clearDismissTimer]);
+
+  const openFab = () => {
+    // Tapping the idle FAB: resume the last insight if there is one this
+    // session, otherwise fall back to opening the full AI Coach directly —
+    // matches what the plain "Open AI Coach" button it replaces used to do.
+    if (message) {
+      setView('collapsed');
+      clearDismissTimer();
+      dismissTimerRef.current = setTimeout(() => setView((v) => (v === 'collapsed' ? 'closed' : v)), COLLAPSED_AUTO_DISMISS_MS);
+    } else {
+      window.dispatchEvent(new CustomEvent('athlix:open-ai'));
+    }
   };
 
+  const barClick = () => {
+    if (view === 'collapsed') {
+      clearDismissTimer();
+      setView('expanded');
+    } else if (view === 'no-key') {
+      window.dispatchEvent(new CustomEvent('athlix:open-ai'));
+    }
+  };
+
+  const closeToClosed = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    clearDismissTimer();
+    setView('closed');
+  };
+
+  const [drawerInput, setDrawerInput] = useState('');
   const handOffToChat = (seedText: string) => {
-    setState('idle');
+    setView('closed');
     window.dispatchEvent(new CustomEvent('athlix:open-ai', {
       detail: { seedMessages: [{ role: 'model', text: message }], seedText: seedText || undefined },
     }));
   };
 
-  if (state === 'idle') return null;
   if (typeof document === 'undefined') return null;
+  if (view === 'closed' && isImmersiveRoute) return null;
 
   const firstName = (profile?.full_name || 'there').split(' ')[0];
+  const displayText = view === 'analyzing' ? 'Analyzing…' : view === 'typing' ? typedText : message;
+  const showBar = view === 'analyzing' || view === 'typing' || view === 'collapsed' || view === 'no-key';
+  const barChasing = view === 'analyzing' || view === 'typing';
+  const barNarrow = view === 'analyzing';
 
-  // Rendered via a portal straight to <body> so this floating pill is positioned
-  // relative to the true viewport, immune to any ancestor's overflow/height/
-  // transform quirks in the app shell (Layout.tsx's root wrapper uses
-  // overflow-hidden with a JS-computed height, which can otherwise clip or
-  // mis-place position:fixed descendants).
   return createPortal(
-    <div className="fixed z-[110]" style={{ right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 148px)' }}>
-      <AnimatePresence mode="wait">
-        {state === 'analyzing' && (
+    <>
+      {/* Idle FAB — mobile only, matches the AI-entry-point button it replaces (desktop keeps the sidebar link) */}
+      {view === 'closed' && !isImmersiveRoute && (
+        <button
+          type="button"
+          onClick={openFab}
+          aria-label="AI Coach"
+          className="md:hidden fixed z-[110]"
+          style={{
+            right: 20,
+            bottom: DOCK_BOTTOM,
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            border: 'none',
+            cursor: 'pointer',
+            background: 'linear-gradient(135deg,#7c6cf5 0%,#3f6df0 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'pwcp-fabPulse 2.4s ease-in-out infinite',
+          }}
+        >
+          <SparkleIcon size={26} />
+        </button>
+      )}
+
+      {/* Analyzing → typing → collapsed: one persistent bar that morphs continuously */}
+      <AnimatePresence>
+        {showBar && (
           <motion.div
-            key="analyzing"
+            key="bar"
+            onClick={barClick}
             initial={{ opacity: 0, scale: 0.85, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              right: barNarrow ? 20 : 25,
+              width: barNarrow ? 170 : 340,
+            }}
             exit={{ opacity: 0, scale: 0.85, y: 12 }}
-            transition={SPRING}
-            className="flex items-center gap-2 h-12 pl-3 pr-4 rounded-full"
-            style={PANEL_STYLE}
+            transition={{ right: { duration: 0.5, ease: [0.22, 0.8, 0.25, 1] }, width: { duration: 0.5, ease: [0.22, 0.8, 0.25, 1] }, default: { type: 'spring', damping: 22, stiffness: 320 } }}
+            className="fixed z-[110]"
+            style={{
+              boxSizing: 'border-box',
+              bottom: DOCK_BOTTOM,
+              maxWidth: 'calc(100vw - 32px)',
+              background: '#161a20',
+              border: '1px solid rgba(111,92,245,0.3)',
+              borderRadius: 20,
+              padding: 12,
+              display: 'flex',
+              alignItems: barNarrow ? 'center' : 'flex-start',
+              gap: 10,
+              cursor: view === 'collapsed' || view === 'no-key' ? 'pointer' : 'default',
+              boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+            }}
           >
-            <motion.span
-              animate={{ opacity: [0.4, 1, 0.4], scale: [0.9, 1, 0.9] }}
-              transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}
-              className="flex items-center justify-center w-6 h-6 rounded-full"
-              style={{ background: 'var(--accent)' }}
+            <span style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
+              {barChasing && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: 999,
+                    pointerEvents: 'none',
+                    background: 'conic-gradient(from 0deg, transparent 0deg, #7c6cf5 90deg, #3f6df0 180deg, transparent 280deg, transparent 360deg)',
+                    animation: 'pwcp-borderChase 1.6s linear infinite',
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  position: 'absolute',
+                  inset: 4,
+                  borderRadius: 999,
+                  background: 'linear-gradient(135deg,#7c6cf5 0%,#3f6df0 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 0 2px #161a20',
+                  animation: view === 'analyzing' ? 'pwcp-sparklePulse 1.1s ease-in-out infinite' : 'none',
+                }}
+              >
+                <SparkleIcon size={16} />
+              </span>
+            </span>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                color: '#f0f0f0',
+                fontSize: 14,
+                lineHeight: 1.4,
+                fontWeight: 500,
+              }}
             >
-              <Sparkles className="w-3.5 h-3.5 text-black" />
-            </motion.span>
-            <span className="text-[13px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Analyzing…</span>
+              {view === 'no-key' ? 'Set up AI Coach for workout insights' : displayText}
+              {view === 'typing' && !typingDone && (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 2,
+                    height: 14,
+                    background: '#5b7cf0',
+                    marginLeft: 2,
+                    verticalAlign: 'middle',
+                    animation: 'pwcp-cursorBlink 0.8s step-end infinite',
+                  }}
+                />
+              )}
+            </div>
+            {view !== 'analyzing' && (
+              <button
+                type="button"
+                onClick={closeToClosed}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#8a8a8a',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  padding: 4,
+                  flexShrink: 0,
+                  opacity: view === 'collapsed' || view === 'no-key' ? 1 : 0,
+                  pointerEvents: view === 'collapsed' || view === 'no-key' ? 'auto' : 'none',
+                  transition: 'opacity 0.3s ease',
+                }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </motion.div>
         )}
+      </AnimatePresence>
 
-        {state === 'teaser' && (
-          <motion.button
-            key="teaser"
-            type="button"
-            onClick={openDrawer}
-            initial={{ opacity: 0, y: 16, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.92 }}
-            transition={SPRING}
-            whileTap={{ scale: 0.96 }}
-            className="flex items-center gap-2 max-w-[300px] h-12 pl-3 pr-4 rounded-full text-left cursor-pointer"
-            style={PANEL_STYLE}
-          >
-            <span className="flex items-center justify-center w-7 h-7 rounded-full shrink-0" style={{ background: 'var(--accent)' }}>
-              <Sparkles className="w-4 h-4 text-black" />
-            </span>
-            <span className="text-[13px] font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-              {firstName} · {stripMarkdown(message).slice(0, 60)}…
-            </span>
-          </motion.button>
-        )}
-
-        {state === 'no-key' && (
-          <motion.button
-            key="no-key"
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('athlix:open-ai'))}
-            initial={{ opacity: 0, y: 16, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.92 }}
-            transition={SPRING}
-            whileTap={{ scale: 0.96 }}
-            className="flex items-center gap-2 h-12 pl-3 pr-4 rounded-full cursor-pointer"
-            style={PANEL_STYLE}
-          >
-            <Sparkles className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-            <span className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>Set up AI Coach for workout insights</span>
-          </motion.button>
-        )}
-
-        {state === 'drawer' && (
+      {/* Expanded drawer — grows from the same docked position */}
+      <AnimatePresence>
+        {view === 'expanded' && (
           <motion.div
             key="drawer"
-            initial={{ opacity: 0, y: 24, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.94 }}
-            transition={SPRING}
-            className="w-[340px] max-w-[calc(100vw-32px)] rounded-2xl overflow-hidden"
-            style={PANEL_STYLE}
+            initial={{ opacity: 0, scale: 0.4, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.4, y: 12 }}
+            transition={{ duration: 0.24, ease: 'easeOut' }}
+            className="fixed z-[110]"
+            style={{
+              left: 14,
+              right: 14,
+              bottom: `calc(${DOCK_BOTTOM} - 4px)`,
+              maxHeight: 480,
+              maxWidth: 420,
+              margin: '0 auto',
+              background: '#161a20',
+              border: '1px solid rgba(120,140,255,0.3)',
+              borderRadius: 20,
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
           >
-            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-                <span className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>AI Coach</span>
+            <div
+              onClick={closeToClosed}
+              className="cursor-pointer"
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid #2a2f3a' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span
+                  style={{
+                    width: 34, height: 34, borderRadius: 10,
+                    background: 'linear-gradient(135deg,#7c6cf5 0%,#3f6df0 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 0 0 2px rgba(111,92,245,0.3)',
+                  }}
+                >
+                  <SparkleIcon size={16} />
+                </span>
+                <span style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 15 }}>AI Coach</span>
               </div>
-              <button type="button" onClick={() => setState('idle')} className="cursor-pointer" style={{ color: 'var(--text-muted)' }}>
+              <button type="button" onClick={closeToClosed} className="cursor-pointer" style={{ background: 'none', border: 'none', color: '#8a8a8a', padding: 4 }}>
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="px-4 py-3 text-[15px] leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-              {renderBold(message)}
+            <div style={{ padding: 14, overflowY: 'auto', color: '#e4e4e4', fontSize: 14.5, lineHeight: 1.55 }}>
+              {message}
             </div>
-            <div className="flex items-center gap-2 px-4 pb-2">
-              <button type="button" onClick={() => setFeedback('up')} className="cursor-pointer" style={{ color: feedback === 'up' ? 'var(--accent)' : 'var(--text-muted)' }}>
-                <ThumbsUp className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => setFeedback('down')} className="cursor-pointer" style={{ color: feedback === 'down' ? '#f87171' : 'var(--text-muted)' }}>
-                <ThumbsDown className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="flex items-center gap-2 p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+            <div style={{ display: 'flex', gap: 8, padding: '10px 12px 12px', borderTop: '1px solid #2a2f3a' }}>
               <input
                 type="text"
                 value={drawerInput}
                 onChange={(e) => setDrawerInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && drawerInput.trim()) handOffToChat(drawerInput.trim()); }}
                 placeholder="Ask AI anything…"
-                className="flex-1 h-10 rounded-lg px-3 text-[13px] focus:outline-none"
-                style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                style={{ flex: 1, background: '#1e1e1e', border: '1px solid #2a2a2a', borderRadius: 10, padding: '10px 12px', color: '#f0f0f0', fontSize: 13, outline: 'none' }}
               />
               <button
                 type="button"
                 onClick={() => handOffToChat(drawerInput.trim())}
-                className="flex items-center justify-center w-10 h-10 rounded-lg shrink-0 cursor-pointer"
-                style={{ background: 'var(--accent)', color: '#000' }}
+                className="cursor-pointer"
+                style={{ width: 38, height: 38, borderRadius: 10, background: '#C8FF00', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-4 h-4" style={{ color: '#0a0a0a' }} />
               </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>,
+    </>,
     document.body,
   );
 };

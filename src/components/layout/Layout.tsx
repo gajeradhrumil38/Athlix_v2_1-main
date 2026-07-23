@@ -262,34 +262,9 @@ export const Layout: React.FC = () => {
 
       {/* ── AI Chat ──────────────────────────────────── */}
       {!isImmersiveRoute && <AiChat />}
+      {/* PostWorkoutCoachPill now owns the floating AI-entry-point FAB too
+          (idle state), replacing the standalone button that used to live here. */}
       <PostWorkoutCoachPill />
-
-      {/* ── Floating AI Coach button (purple, above nav right) ── */}
-      {!isImmersiveRoute && (
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent('athlix:open-ai'))}
-          aria-label="Open AI Coach"
-          className="md:hidden fixed z-[99]"
-          style={{
-            right: 14,
-            bottom: 'calc(82px + env(safe-area-inset-bottom))',
-            width: 46,
-            height: 46,
-            borderRadius: 14,
-            background: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)',
-            boxShadow: '0 4px 18px rgba(124,58,237,0.55), 0 0 0 1px rgba(255,255,255,0.12)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-          </svg>
-        </button>
-      )}
 
       {/* ── Mobile bottom nav ─────────────────────────── */}
       {!isImmersiveRoute && (
