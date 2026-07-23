@@ -32,6 +32,28 @@ const KEYFRAMES = `
 @keyframes pwcp-cursorBlink { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
 `;
 
+// Same "Athlix AI" badge treatment used everywhere else this app shows the AI
+// Coach (AiChat.tsx's header: dark fill + a static purple->blue->lime gradient
+// border, via the layered-background-image border trick, rather than a solid
+// gradient fill) — kept self-contained here instead of depending on AiChat's
+// injected .ai-aurora-static class, since this pill can render on routes where
+// AiChat itself isn't mounted.
+const aiBadgeStyle = (size: number, radius: number): React.CSSProperties => ({
+  width: size,
+  height: size,
+  borderRadius: radius,
+  border: '1.5px solid transparent',
+  backgroundImage: 'linear-gradient(#161a20, #161a20), linear-gradient(135deg,#7c3aed,#2563eb,#C8FF00)',
+  backgroundOrigin: 'border-box',
+  backgroundClip: 'padding-box, border-box',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+});
+
+const AI_ACCENT = 'var(--accent, #C8FF00)';
+
 type View = 'closed' | 'analyzing' | 'typing' | 'collapsed' | 'expanded' | 'no-key';
 
 interface FinishedStats {
@@ -288,21 +310,14 @@ export const PostWorkoutCoachPill: React.FC = () => {
           aria-label="AI Coach"
           className="md:hidden fixed z-[110]"
           style={{
+            ...aiBadgeStyle(56, 16),
             right: 20,
             bottom: DOCK_BOTTOM,
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            border: 'none',
             cursor: 'pointer',
-            background: 'linear-gradient(135deg,#7c6cf5 0%,#3f6df0 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             animation: 'pwcp-fabPulse 2.4s ease-in-out infinite',
           }}
         >
-          <Sparkles className="w-[26px] h-[26px]" style={{ color: '#fff' }} strokeWidth={2} />
+          <Sparkles className="w-7 h-7" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
         </button>
       )}
 
@@ -353,18 +368,14 @@ export const PostWorkoutCoachPill: React.FC = () => {
               )}
               <span
                 style={{
+                  ...aiBadgeStyle(32, 10),
                   position: 'absolute',
                   inset: 4,
-                  borderRadius: 999,
-                  background: 'linear-gradient(135deg,#7c6cf5 0%,#3f6df0 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                   boxShadow: '0 0 0 2px #161a20',
                   animation: view === 'analyzing' ? 'pwcp-sparklePulse 1.1s ease-in-out infinite' : 'none',
                 }}
               >
-                <Sparkles className="w-4 h-4" style={{ color: '#fff' }} strokeWidth={2} />
+                <Sparkles className="w-4 h-4" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
               </span>
             </span>
             <div
@@ -453,15 +464,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid #2a2f3a' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span
-                  style={{
-                    width: 34, height: 34, borderRadius: 10,
-                    background: 'linear-gradient(135deg,#7c6cf5 0%,#3f6df0 100%)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 0 0 2px rgba(111,92,245,0.3)',
-                  }}
-                >
-                  <Sparkles className="w-4 h-4" style={{ color: '#fff' }} strokeWidth={2} />
+                <span style={aiBadgeStyle(34, 10)}>
+                  <Sparkles className="w-[18px] h-[18px]" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
                 </span>
                 <span style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 15 }}>AI Coach</span>
               </div>
