@@ -137,7 +137,7 @@ const FUNCTION_DECLARATIONS = [
   },
   {
     name: 'show_exercise_form',
-    description: "Show the user a fillable exercise log form. Use when: (1) user names an exercise but does NOT give sets and reps, (2) the exercise intent is clear but details are missing. Pass exercise_name if you know which exercise. Do NOT use for weight or dopamine logging.",
+    description: "Show the user a fillable exercise log form. Use ONLY when: (1) user names a SPECIFIC exercise but does NOT give sets and reps, (2) the exercise intent is clear but details are missing. Pass exercise_name if you know which exercise. Do NOT use for weight or dopamine logging. Do NOT use for 'what should I train' / 'what should I do today' / general training-plan questions — those get a text answer built from WEEKLY VOLUME, MONTHLY VOLUME, and MUSCLE RECOVERY STATUS instead; only call this once the user names the exercise they want to log.",
     parameters: {
       type: 'object',
       properties: {

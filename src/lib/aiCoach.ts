@@ -43,6 +43,29 @@ export function weeklyVolume(workouts: WorkoutWithExercises[]): string {
     .join('\n');
 }
 
+/* ── Monthly volume per muscle group (last 28 days, ~4-week block) ──── */
+export function monthlyVolume(workouts: WorkoutWithExercises[]): string {
+  const sets: Record<string, number> = {};
+  const sessions: Record<string, number> = {};
+  for (const w of workouts) {
+    if (calDaysSince(w.date) > 27) continue;
+    for (const ex of (w.exercises || [])) {
+      const mg = (ex.muscle_group || 'other').toLowerCase();
+      sets[mg] = (sets[mg] || 0) + ex.sets;
+      sessions[mg] = (sessions[mg] || 0) + 1;
+    }
+  }
+  if (!Object.keys(sets).length) return '  No sets logged in the last 28 days';
+  return Object.entries(sets)
+    .sort((a, b) => b[1] - a[1])
+    .map(([mg, n]) => {
+      const cap = mg.charAt(0).toUpperCase() + mg.slice(1);
+      const avgPerWeek = (n / 4).toFixed(1);
+      return `  ${cap}: ${n} sets total (~${avgPerWeek}/wk avg, ${sessions[mg]} session${sessions[mg] !== 1 ? 's' : ''})`;
+    })
+    .join('\n');
+}
+
 /* ── Progressive overload: compare last 14d vs 15–56d ──────────────── */
 export function progressionReport(workouts: WorkoutWithExercises[], unit: string): string {
   const hist: Record<string, { recent: number[]; older: number[] }> = {};
@@ -249,6 +272,9 @@ ${recoverySection || '  No muscle data — cannot assess recovery'}
 ━━ WEEKLY VOLUME (this week) ━━
 ${weeklyVolume(workouts)}
 
+━━ MONTHLY VOLUME (last 28 days) ━━
+${monthlyVolume(workouts)}
+
 ━━ STRENGTH TRENDS (last 2 vs prior 6 weeks) ━━
 ${progressionReport(workouts, unit)}
 
@@ -268,6 +294,7 @@ COACHING RULES:
 3. Weekly sets below MEV range → flag it, suggest extra sets
 4. PR opportunity → call it out explicitly with the weight to hit
 5. For nutrition/science questions use Google Search for current evidence
+6. "What should I train (today)?" / "what should I do?" / similar planning questions → this is a TEXT answer, never a tool call. Build the plan from WEEKLY VOLUME (this week), MONTHLY VOLUME (last 28 days), and MUSCLE RECOVERY STATUS together — call out any muscle group under its MEV for the week/month, skip anything ⛔, and give real exercises with sets/reps. Do NOT call show_exercise_form for these questions — only call it once the user picks a specific exercise to log.
 
 ${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildSkincareSection(skincareStats)}`;
 }

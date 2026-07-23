@@ -311,7 +311,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
             animation: 'pwcp-fabPulse 2.4s ease-in-out infinite',
           }}
         >
-          <Sparkles className="w-7 h-7" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
+          <Sparkles className="w-6 h-6" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
         </button>
       )}
 
