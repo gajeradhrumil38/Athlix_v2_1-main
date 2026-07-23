@@ -622,10 +622,16 @@ export const AiChat: React.FC = () => {
 
   // Allow sidebar / other components to open the chat via a custom event
   useEffect(() => {
-    const handler = () => openChat();
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ seedMessages?: Message[] }>).detail;
+      openChat();
+      if (detail?.seedMessages?.length) {
+        setMessages((prev) => (prev.length ? prev : detail.seedMessages!));
+      }
+    };
     window.addEventListener('athlix:open-ai', handler);
     return () => window.removeEventListener('athlix:open-ai', handler);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cycle through loading phase labels while waiting for Gemini
   useEffect(() => {
