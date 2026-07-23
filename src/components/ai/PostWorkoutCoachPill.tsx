@@ -353,7 +353,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
                   style={{
                     position: 'absolute',
                     inset: 0,
-                    borderRadius: 999,
+                    borderRadius: 10,
                     pointerEvents: 'none',
                     background: 'conic-gradient(from 0deg, transparent 0deg, #7c6cf5 90deg, #3f6df0 180deg, transparent 280deg, transparent 360deg)',
                     animation: 'pwcp-borderChase 1.6s linear infinite',
