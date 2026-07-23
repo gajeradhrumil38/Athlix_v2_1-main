@@ -16,6 +16,7 @@ const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const TEASER_AUTO_DISMISS_MS = 20_000;
 const ANALYZING_TIMEOUT_MS = 10_000;
+const COOLDOWN_MS = 60_000;
 
 interface FinishedStats {
   durationMinutes: number;
@@ -87,19 +88,31 @@ export const PostWorkoutCoachPill: React.FC = () => {
     }
   }, []);
 
+  const requestIdRef = useRef(0);
+  const lastFiredAtRef = useRef(0);
+
   const runInsight = useCallback(async (detail: WorkoutFinishedDetail) => {
     if (!user?.id) return;
+
+    const now = Date.now();
+    if (now - lastFiredAtRef.current < COOLDOWN_MS) return;
+    lastFiredAtRef.current = now;
+
+    const myRequestId = ++requestIdRef.current;
+
     setState('analyzing');
     setFeedback(null);
 
     const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
     if (!apiKey) {
-      setState('no-key');
+      if (myRequestId === requestIdRef.current) setState('no-key');
       return;
     }
 
     const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
-    const timeoutId = setTimeout(() => setState((s) => (s === 'analyzing' ? 'idle' : s)), ANALYZING_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => {
+      if (myRequestId === requestIdRef.current) setState((s) => (s === 'analyzing' ? 'idle' : s));
+    }, ANALYZING_TIMEOUT_MS);
 
     try {
       const [workoutsRes, prsRes, whoopRes] = await Promise.allSettled([
@@ -144,6 +157,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
       if (!text) throw new Error('Empty response');
 
       clearTimeout(timeoutId);
+      if (myRequestId !== requestIdRef.current) return;
+
       setMessage(text);
       setState('teaser');
 
@@ -151,7 +166,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       dismissTimerRef.current = setTimeout(() => setState((s) => (s === 'teaser' ? 'idle' : s)), TEASER_AUTO_DISMISS_MS);
     } catch {
       clearTimeout(timeoutId);
-      setState('idle');
+      if (myRequestId === requestIdRef.current) setState('idle');
     }
   }, [user?.id, profile, clearDismissTimer]);
 
