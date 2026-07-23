@@ -111,6 +111,19 @@ function buildInsightPrompt(detail: WorkoutFinishedDetail): string {
   return parts.join(' ');
 }
 
+// Deterministic, no-API-call summary — used whenever Gemini fails or times
+// out, so the pill always resolves to a real reply instead of silently
+// closing after "Analyzing…".
+function buildFallbackInsight(detail: WorkoutFinishedDetail, firstName: string): string {
+  const { stats, realPrCount, comparison } = detail;
+  const opener = realPrCount > 0
+    ? `Nice work ${firstName} — ${realPrCount} new PR${realPrCount !== 1 ? 's' : ''} this session.`
+    : comparison
+      ? `Solid session ${firstName} — volume ${comparison.volumeDelta >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(comparison.volumeDelta))}${stats.unit} vs your last similar workout.`
+      : `Good session ${firstName} — ${stats.totalSets} sets across ${stats.exerciseNames.length} exercise${stats.exerciseNames.length !== 1 ? 's' : ''} logged.`;
+  return `${opener} ${stats.durationMinutes} min, ${stats.totalVolume}${stats.unit} total volume.`;
+}
+
 export const PostWorkoutCoachPill: React.FC = () => {
   const { user, profile } = useAuth();
   const location = useLocation();
@@ -180,9 +193,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
     }
 
     const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
-    const timeoutId = setTimeout(() => {
-      if (myRequestId === requestIdRef.current) setView((v) => (v === 'analyzing' ? 'closed' : v));
-    }, ANALYZING_TIMEOUT_MS);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
 
     try {
       const [workoutsRes, prsRes, whoopRes] = await Promise.allSettled([
@@ -197,13 +209,16 @@ export const PostWorkoutCoachPill: React.FC = () => {
       const systemPrompt = buildSystemPrompt(profile, workouts, prs, [] as FoodScan[], getRuns(), whoopData as any, parseSkincareStats(), 'insight');
       const userTurn = buildInsightPrompt(detail);
 
+      // Thinking disabled: this is a short 2-3 sentence summary, not a
+      // reasoning task, and thinking tokens count against the same
+      // maxOutputTokens budget — skipping it keeps this fast and reliable.
       const body = {
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: 'user', parts: [{ text: userTurn }] }],
         generationConfig: {
           temperature: 0.8,
           maxOutputTokens: 1024,
-          ...(/^gemini-2\.5/.test(model) && { thinkingConfig: { thinkingBudget: 512 } }),
+          ...(/^gemini-2\.5/.test(model) && { thinkingConfig: { thinkingBudget: 0 } }),
         },
       };
 
@@ -211,12 +226,14 @@ export const PostWorkoutCoachPill: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       if (!res.ok) {
         res = await fetch(`${GEMINI_BASE}/${FALLBACK_MODEL}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...body, generationConfig: { temperature: 0.8, maxOutputTokens: 1024 } }),
+          signal: controller.signal,
         });
       }
       if (!res.ok) {
@@ -235,9 +252,13 @@ export const PostWorkoutCoachPill: React.FC = () => {
       setMessage(text);
       startTyping(text);
     } catch (err) {
-      console.warn('Post-workout AI insight failed:', err);
+      console.warn('Post-workout AI insight failed, using fallback summary:', err);
       clearTimeout(timeoutId);
-      if (myRequestId === requestIdRef.current) setView('closed');
+      if (myRequestId !== requestIdRef.current) return;
+      const firstName = (profile?.full_name || 'there').split(' ')[0];
+      const fallback = buildFallbackInsight(detail, firstName);
+      setMessage(fallback);
+      startTyping(fallback);
     }
   }, [user?.id, profile, startTyping]);
 
