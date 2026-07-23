@@ -194,7 +194,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       const prs = prsRes.status === 'fulfilled' ? prsRes.value : [];
       const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
 
-      const systemPrompt = buildSystemPrompt(profile, workouts, prs, [] as FoodScan[], getRuns(), whoopData as any, parseSkincareStats());
+      const systemPrompt = buildSystemPrompt(profile, workouts, prs, [] as FoodScan[], getRuns(), whoopData as any, parseSkincareStats(), 'insight');
       const userTurn = buildInsightPrompt(detail);
 
       const body = {

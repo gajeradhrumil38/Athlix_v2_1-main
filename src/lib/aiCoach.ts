@@ -210,6 +210,8 @@ export function buildSystemPrompt(
   recentRuns: SavedRun[],
   whoopData: WhoopAllData | null,
   skincareStats: { weekPercent: number; streak: number } | null,
+  // 'insight' drops the structured RESPONSE FORMAT block, which otherwise conflicts with the pill's own plain-sentence prompt.
+  variant: 'chat' | 'insight' = 'chat',
 ): string {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
   const name = profile?.full_name || 'Athlete';
@@ -256,6 +258,22 @@ export function buildSystemPrompt(
     .map((p) => `  ${p.exercise_name}: ${p.best_weight}${unit} × ${p.best_reps} reps (set ${p.achieved_date})`)
     .join('\n');
 
+  const responseFormatSection = variant === 'chat' ? `
+RESPONSE FORMAT (non-negotiable):
+• Lines 1–3 (always, every reply): state (a) whether they've improved vs their historical data on the relevant lift/metric — cite the old number → new number from STRENGTH TRENDS/OLDER SESSIONS, or say plainly if there's not enough old data yet, and (b) what to focus on today or their next session. Never invent an old number — if none exists, say so instead of guessing.
+• After those 3 lines, answer the rest of the question in ≤2 more sentences — no preamble, no "Based on your data", no "You should"
+• Use **bold** for exercise names and key numbers only
+• Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}"
+• No closing summaries, no motivational sign-offs
+• Total response: aim for ≤180 words. If a list is needed, use bullet lines.
+` : `
+FORMAT: follow the plain-language, sentence-count instructions given in the user message exactly — no bold, no bullet lists, no headers.
+`;
+
+  const toolCallingRule = variant === 'chat'
+    ? '\n6. "What should I train (today)?" / "what should I do?" / similar planning questions → this is a TEXT answer, never a tool call. Build the plan from WEEKLY VOLUME (this week), MONTHLY VOLUME (last 28 days), and MUSCLE RECOVERY STATUS together — call out any muscle group under its MEV for the week/month, skip anything ⛔, and give real exercises with sets/reps. Do NOT call show_exercise_form for these questions — only call it once the user picks a specific exercise to log.'
+    : '';
+
   return `You are an expert strength & conditioning coach embedded in the Athlix fitness app. Your role: give ${name} evidence-based, data-driven advice using ONLY their logged data below. Never fabricate numbers.
 
 TODAY: ${today}
@@ -281,21 +299,13 @@ ${progressionReport(workouts, unit)}
 ━━ PERSONAL RECORDS ━━
 ${prSection || '  No records yet'}
 
-RESPONSE FORMAT (non-negotiable):
-• Lines 1–3 (always, every reply): state (a) whether they've improved vs their historical data on the relevant lift/metric — cite the old number → new number from STRENGTH TRENDS/OLDER SESSIONS, or say plainly if there's not enough old data yet, and (b) what to focus on today or their next session. Never invent an old number — if none exists, say so instead of guessing.
-• After those 3 lines, answer the rest of the question in ≤2 more sentences — no preamble, no "Based on your data", no "You should"
-• Use **bold** for exercise names and key numbers only
-• Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}"
-• No closing summaries, no motivational sign-offs
-• Total response: aim for ≤180 words. If a list is needed, use bullet lines.
-
+${responseFormatSection}
 COACHING RULES:
 1. ⛔ muscle groups must NOT appear in today's plan — check RECOVERY STATUS
 2. Plateau on an exercise → suggest rep scheme change or drop set, not just "keep going"
 3. Weekly sets below MEV range → flag it, suggest extra sets
 4. PR opportunity → call it out explicitly with the weight to hit
-5. For nutrition/science questions use Google Search for current evidence
-6. "What should I train (today)?" / "what should I do?" / similar planning questions → this is a TEXT answer, never a tool call. Build the plan from WEEKLY VOLUME (this week), MONTHLY VOLUME (last 28 days), and MUSCLE RECOVERY STATUS together — call out any muscle group under its MEV for the week/month, skip anything ⛔, and give real exercises with sets/reps. Do NOT call show_exercise_form for these questions — only call it once the user picks a specific exercise to log.
+5. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
 ${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildSkincareSection(skincareStats)}`;
 }
