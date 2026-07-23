@@ -198,7 +198,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
   const firstName = (profile?.full_name || 'there').split(' ')[0];
 
   return (
-    <div className="fixed z-[110]" style={{ right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 88px)' }}>
+    <div className="fixed z-[110]" style={{ right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 148px)' }}>
       <AnimatePresence mode="wait">
         {state === 'analyzing' && (
           <motion.div
