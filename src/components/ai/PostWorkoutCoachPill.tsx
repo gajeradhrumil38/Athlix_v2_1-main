@@ -256,16 +256,10 @@ export const PostWorkoutCoachPill: React.FC = () => {
   }, [clearDismissTimer]);
 
   const openFab = () => {
-    // Tapping the idle FAB: resume the last insight if there is one this
-    // session, otherwise fall back to opening the full AI Coach directly —
-    // matches what the plain "Open AI Coach" button it replaces used to do.
-    if (message) {
-      setView('collapsed');
-      clearDismissTimer();
-      dismissTimerRef.current = setTimeout(() => setView((v) => (v === 'collapsed' ? 'closed' : v)), COLLAPSED_AUTO_DISMISS_MS);
-    } else {
-      window.dispatchEvent(new CustomEvent('athlix:open-ai'));
-    }
+    // Tapping the idle FAB always opens the real AI Coach conversation —
+    // it should never re-surface the one-off post-workout insight bar
+    // instead of the actual ongoing chat.
+    window.dispatchEvent(new CustomEvent('athlix:open-ai'));
   };
 
   const barClick = () => {

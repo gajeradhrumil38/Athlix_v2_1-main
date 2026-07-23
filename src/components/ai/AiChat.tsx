@@ -57,6 +57,7 @@ async function getLastExerciseSets(userId: string, exerciseName: string): Promis
 const GEMINI_KEY_STORAGE = 'athlix:gemini_api_key';
 const GEMINI_MODEL_STORAGE = 'athlix:gemini_model';
 const USAGE_STORAGE = 'athlix:api_usage';
+const CHAT_HISTORY_STORAGE = 'athlix:ai_chat_history';
 const DEFAULT_MODEL = 'gemini-2.5-flash'; // free tier: 5 RPM, 250K tokens/min
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Max conversation turns sent to API (keeps token usage low while preserving short-term memory)
@@ -567,6 +568,34 @@ export const AiChat: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
   const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
+
+  /* ── Persist chat history across mount/unmount (e.g. visiting /log) so
+     reopening the coach resumes the real conversation instead of a blank
+     one — AiChat unmounts on every immersive route change. ───────────── */
+  const hydratedForUser = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.id || hydratedForUser.current === user.id) return;
+    hydratedForUser.current = user.id;
+    try {
+      const raw = sessionStorage.getItem(`${CHAT_HISTORY_STORAGE}:${user.id}`);
+      if (raw) setMessages(JSON.parse(raw));
+    } catch {
+      // corrupt/unavailable storage — start with an empty conversation
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      if (messages.length) {
+        sessionStorage.setItem(`${CHAT_HISTORY_STORAGE}:${user.id}`, JSON.stringify(messages));
+      } else {
+        sessionStorage.removeItem(`${CHAT_HISTORY_STORAGE}:${user.id}`);
+      }
+    } catch {
+      // storage full/unavailable — conversation still works in-memory
+    }
+  }, [messages, user?.id]);
 
   /* ── Load all data sources once chat opens ───────────────────────── */
   useEffect(() => {
