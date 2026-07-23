@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ClipboardList, ArrowRight, CalendarPlus, Pencil, Trash2, Play, ChevronRight, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 import type { ExerciseEntry } from '../../pages/Log';
 import { buildExercisesFromWorkout, getTemplates, deleteTemplate, getWorkouts } from '../../lib/supabaseData';
 import { parseDateAtStartOfDay } from '../../lib/dates';
 import { muscleColor } from '../../lib/muscleColors';
+import { resolveEffectiveInputType } from '../../lib/exerciseTypes';
 import toast from 'react-hot-toast';
 
 const fmtRelativeDate = (workout: any): string => {
@@ -33,10 +35,19 @@ export const QuickStartSheet: React.FC<QuickStartSheetProps> = ({
   onEditTemplate,
 }) => {
   const { user } = useAuth();
+  const { overrides: typeOverrides } = useExerciseOverrides();
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const seedPlannedTargets = (exerciseName: string, weight: number, reps: number) => {
+    const inputType = resolveEffectiveInputType(exerciseName, typeOverrides);
+    if (inputType !== 'weight_reps') {
+      return { planned_weight: null, planned_reps: null };
+    }
+    return { planned_weight: weight, planned_reps: reps };
+  };
 
   const fetchData = async () => {
     if (!user) { setLoading(false); return; }
@@ -75,8 +86,7 @@ export const QuickStartSheet: React.FC<QuickStartSheetProps> = ({
         weight: set.weight,
         reps: set.reps,
         done: false,
-        planned_weight: set.weight,
-        planned_reps: set.reps,
+        ...seedPlannedTargets(ex.name, set.weight, set.reps),
       })),
     }));
     onStartTemplate(exercises, workout.title);
@@ -93,8 +103,7 @@ export const QuickStartSheet: React.FC<QuickStartSheetProps> = ({
         weight: ex.default_weight || 0,
         reps: ex.default_reps || 0,
         done: false,
-        planned_weight: ex.default_weight || null,
-        planned_reps: ex.default_reps || null,
+        ...seedPlannedTargets(ex.name, ex.default_weight || 0, ex.default_reps || 0),
       })),
     }));
     onStartTemplate(exercises, template.title);

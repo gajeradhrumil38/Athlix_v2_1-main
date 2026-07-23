@@ -4,8 +4,10 @@ import { X, Plus, Trash2, Check, Copy, BookmarkCheck, Bookmark, ChevronDown } fr
 import { ExercisePicker } from './ExercisePicker';
 import { DialPicker } from './DialPicker';
 import { useAuth } from '../../contexts/AuthContext';
+import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 import { saveTemplate, checkTemplateNameExists, getLastExerciseSession } from '../../lib/supabaseData';
 import type { ExerciseEntry } from '../../pages/Log';
+import { resolveEffectiveInputType } from '../../lib/exerciseTypes';
 import toast from 'react-hot-toast';
 
 interface PlannedSet {
@@ -255,6 +257,7 @@ const PlanExerciseCard: React.FC<{
 /* ── Main sheet ── */
 export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStartPlan, initialTemplate }) => {
   const { user } = useAuth();
+  const { overrides: typeOverrides } = useExerciseOverrides();
   const [title, setTitle] = useState(initialTemplate?.title ?? '');
   const [exercises, setExercises] = useState<PlannedExercise[]>(initialTemplate?.exercises ?? []);
   const [showPicker, setShowPicker] = useState(!initialTemplate);
@@ -290,6 +293,14 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
     return 'My Plan';
   };
   const defaultTitle = inferPlanName(exercises);
+
+  const seedPlannedTargets = (exerciseName: string, weight: number, reps: number) => {
+    const inputType = resolveEffectiveInputType(exerciseName, typeOverrides);
+    if (inputType !== 'weight_reps') {
+      return { planned_weight: null, planned_reps: null };
+    }
+    return { planned_weight: weight, planned_reps: reps };
+  };
 
   // Mark unsaved when content changes — but skip on first mount and when explicitly bypassed
   useEffect(() => {
@@ -498,8 +509,7 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
         weight: s.weight || null,
         reps: s.reps || null,
         done: false,
-        planned_weight: s.weight || null,
-        planned_reps: s.reps || null,
+        ...seedPlannedTargets(ex.name, s.weight || 0, s.reps || 0),
       })) as ExerciseEntry['sets'],
     }));
 

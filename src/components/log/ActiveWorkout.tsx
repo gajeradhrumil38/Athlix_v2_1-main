@@ -531,6 +531,11 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
           return Math.max(0, Math.min(9999, v));
         };
         const clampR = (r: number) => Math.max(0, Math.min(999, Number(r) || 0));
+        const plannedTargets = inputType === 'weight_reps'
+          ? { planned_weight: clampW(seedWeight), planned_reps: clampR(seedReps) }
+          : inputType === 'reps_only'
+            ? { planned_weight: null, planned_reps: clampR(seedReps) }
+            : { planned_weight: null, planned_reps: null };
         return perSetData && perSetData.length > 0
           ? perSetData.map((s: { weight: number; reps: number }) => ({
               id: createSetId(),
@@ -545,7 +550,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
               weight: clampW(seedWeight),
               reps: clampR(seedReps),
               done: false,
-              ...(summary ? { planned_weight: seedWeight, planned_reps: seedReps } : {}),
+              ...(summary ? plannedTargets : {}),
             }));
       };
 
@@ -674,10 +679,19 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         exercises: prev.exercises.map((entry, i) => {
           if (i !== index) return entry;
           const defaults = getDefaultSetValues(nextType);
+            const plannedWeight = nextType === 'weight_reps' ? defaults.weight : null;
+            const plannedReps = nextType === 'weight_reps' || nextType === 'reps_only' ? defaults.reps : null;
           return {
             ...entry,
             optionalWeight: false,
-            sets: entry.sets.map((s) => ({ ...s, weight: defaults.weight, reps: defaults.reps, done: false })),
+              sets: entry.sets.map((s) => ({
+                ...s,
+                weight: defaults.weight,
+                reps: defaults.reps,
+                done: false,
+                planned_weight: plannedWeight,
+                planned_reps: plannedReps,
+              })),
           };
         }),
       };
