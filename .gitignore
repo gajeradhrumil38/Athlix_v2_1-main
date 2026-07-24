@@ -16,3 +16,6 @@ coverage/
 
 # Supabase CLI cache
 supabase/.temp/
+
+# Brainstorming visual companion scratch files
+.superpowers/
