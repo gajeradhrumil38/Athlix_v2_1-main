@@ -698,16 +698,18 @@ export const AiChat: React.FC = () => {
         const FALLBACK_MODEL = 'gemini-1.5-flash';
         const RETRY_DELAYS = [1200, 2500]; // ms between attempts
 
-        // Streaming request through the proxy, with the same retry/fallback
-        // policy the old direct-to-Gemini fetchWithRetry used.
-        const streamWithRetry = async (contents: object[]): Promise<Response> => {
+        // Shared retry/fallback-model policy: given a way to make one
+        // attempt, retries transient overloads with backoff and falls back
+        // to a lighter model, or throws a special-cased error for quota/
+        // invalid-key/no-key. Used by BOTH the initial request and the
+        // tool-result follow-up request, so neither leg loses resilience —
+        // by the time the follow-up runs, executeTool() has already
+        // mutated data (logged a set, etc.), so a bare unretried failure
+        // there would show an error even though the action succeeded.
+        const fetchWithRetry = async (makeRequest: (targetModel: string) => Promise<Response>): Promise<Response> => {
           for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
             const targetModel = attempt < RETRY_DELAYS.length ? model : FALLBACK_MODEL;
-            const res = await fetch('/api/ai-coach/generate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(buildBody(contents, targetModel, true)),
-            });
+            const res = await makeRequest(targetModel);
             if (res.ok) return res;
 
             const errBody = await res.clone().json().catch(() => ({}));
@@ -731,18 +733,21 @@ export const AiChat: React.FC = () => {
           throw new Error('All retry attempts failed.');
         };
 
+        const streamWithRetry = (contents: object[]): Promise<Response> =>
+          fetchWithRetry((targetModel) => fetch('/api/ai-coach/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildBody(contents, targetModel, true)),
+          }));
+
         // Non-streaming request through the proxy — used only for the short
         // tool-result follow-up turn, which doesn't need live token rendering.
-        const generateOnce = async (contents: object[], targetModel: string): Promise<any> => {
-          const res = await fetch('/api/ai-coach/generate', {
+        const generateOnce = async (contents: object[]): Promise<any> => {
+          const res = await fetchWithRetry((targetModel) => fetch('/api/ai-coach/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildBody(contents, targetModel, false)),
-          });
-          if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
-          }
+          }));
           return res.json();
         };
 
@@ -825,7 +830,7 @@ export const AiChat: React.FC = () => {
             { role: 'model', parts: [{ functionCall }] },
             { role: 'user', parts: [{ functionResponse: { name: toolName, response: toolResult } }] },
           ];
-          const data2 = await generateOnce(followUpContents, model);
+          const data2 = await generateOnce(followUpContents);
           trackTokenUsage(data2?.usageMetadata?.totalTokenCount ?? 0);
 
           const finalParts: Array<{ text?: string; thought?: boolean }> = data2?.candidates?.[0]?.content?.parts || [];

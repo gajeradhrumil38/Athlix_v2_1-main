@@ -32,7 +32,29 @@ export async function POST(req: NextRequest) {
   const targetModel = (typeof model === 'string' && model) || DEFAULT_MODEL;
 
   if (!trimmed) {
-    return NextResponse.json({ success: false, error: { message: 'API key is required.' } }, { status: 400 });
+    // No new key submitted — allow a model-only change for a user who
+    // already has a key saved (e.g. switching model in Settings), since
+    // the raw key is never sent back to the client to re-submit here.
+    const { data: existing } = await supabase
+      .from('ai_coach_keys')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!existing) {
+      return NextResponse.json({ success: false, error: { message: 'API key is required.' } }, { status: 400 });
+    }
+
+    const { error: updateError } = await supabase
+      .from('ai_coach_keys')
+      .update({ model: targetModel, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+
+    if (updateError) {
+      return NextResponse.json({ success: false, error: { message: 'Could not update model. Try again.' } }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
   }
 
   // Validate the key against Gemini before persisting it — same one-token

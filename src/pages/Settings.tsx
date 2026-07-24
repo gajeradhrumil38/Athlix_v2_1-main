@@ -818,7 +818,23 @@ export const Settings: React.FC = () => {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setGeminiModel(m.id)}
+                  onClick={async () => {
+                    setGeminiModel(m.id);
+                    // A key was never re-sent to the client, so switching
+                    // models for an already-configured key needs its own
+                    // save path (no key to type/submit here).
+                    if (!hasGeminiKey) return;
+                    setGeminiSaving(true);
+                    setGeminiError('');
+                    const result = await saveAiCoachKey('', m.id);
+                    setGeminiSaving(false);
+                    if (!result.success) {
+                      setGeminiError(result.error || 'Could not update model.');
+                      return;
+                    }
+                    setGeminiSaved(true);
+                    setTimeout(() => setGeminiSaved(false), 2000);
+                  }}
                   className="flex flex-col items-start px-3 py-2 rounded-xl border transition-all text-left"
                   style={{
                     background: geminiModel === m.id ? 'rgba(124,58,237,0.12)' : 'var(--bg-elevated)',
