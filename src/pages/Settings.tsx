@@ -10,6 +10,7 @@ import { HapticPicker } from '../components/shared/HapticPicker';
 import { Link, useNavigate } from 'react-router-dom';
 import { convertWeight, type WeightUnit } from '../lib/units';
 import { whoopService } from '../features/whoop/services/whoopService';
+import { useAiCoachKey } from '../hooks/useAiCoachKey';
 
 /* ── WHOOP connect sub-section ─────────────────────────────── */
 const WhoopConnect: React.FC<{ userId: string }> = ({ userId }) => {
@@ -288,14 +289,17 @@ export const Settings: React.FC = () => {
   const [defaultView, setDefaultView] = useState<'Day' | 'Week'>(
     () => (localStorage.getItem('defaultView') as 'Day' | 'Week') || 'Week'
   );
-  const [geminiKey, setGeminiKey] = useState(
-    () => localStorage.getItem('athlix:gemini_api_key') || ''
-  );
-  const [geminiModel, setGeminiModel] = useState(
-    () => localStorage.getItem('athlix:gemini_model') || 'gemini-2.5-flash'
-  );
+  const { hasKey: hasGeminiKey, model: savedGeminiModel, loading: geminiKeyLoading, save: saveAiCoachKey, remove: removeAiCoachKey } = useAiCoachKey();
+  const [geminiKeyInput, setGeminiKeyInput] = useState('');
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [geminiSaving, setGeminiSaving] = useState(false);
+  const [geminiError, setGeminiError] = useState('');
   const [geminiSaved, setGeminiSaved] = useState(false);
+
+  useEffect(() => {
+    if (!geminiKeyLoading) setGeminiModel(savedGeminiModel);
+  }, [geminiKeyLoading, savedGeminiModel]);
   const [aiUsage, setAiUsage] = useState(() => {
     const raw = localStorage.getItem('athlix:api_usage');
     return raw ? JSON.parse(raw) : null;
@@ -409,16 +413,25 @@ export const Settings: React.FC = () => {
     setMetricsChanged(true);
   };
 
-  const saveGeminiKey = () => {
-    const trimmed = geminiKey.trim();
-    if (trimmed) {
-      localStorage.setItem('athlix:gemini_api_key', trimmed);
-    } else {
-      localStorage.removeItem('athlix:gemini_api_key');
+  const saveGeminiKey = async () => {
+    const trimmed = geminiKeyInput.trim();
+    if (!trimmed) return;
+    setGeminiSaving(true);
+    setGeminiError('');
+    const result = await saveAiCoachKey(trimmed, geminiModel);
+    setGeminiSaving(false);
+    if (!result.success) {
+      setGeminiError(result.error || 'Could not save key.');
+      return;
     }
-    localStorage.setItem('athlix:gemini_model', geminiModel);
+    setGeminiKeyInput('');
     setGeminiSaved(true);
     setTimeout(() => setGeminiSaved(false), 2000);
+  };
+
+  const removeGeminiKey = async () => {
+    await removeAiCoachKey();
+    setGeminiKeyInput('');
   };
 
   /* ── Delete account ──────────────────────────── */
@@ -822,10 +835,10 @@ export const Settings: React.FC = () => {
           <div className="relative">
             <input
               type={showGeminiKey ? 'text' : 'password'}
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
+              value={geminiKeyInput}
+              onChange={(e) => { setGeminiKeyInput(e.target.value); setGeminiError(''); }}
               onKeyDown={(e) => e.key === 'Enter' && saveGeminiKey()}
-              placeholder="AIza…"
+              placeholder={hasGeminiKey ? 'Key configured — paste a new one to replace it' : 'AIza…'}
               className="w-full h-10 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl px-3.5 pr-10 text-[13px] text-[var(--text-primary)] outline-none focus:border-purple-500/50 transition-colors placeholder:text-[var(--text-muted)]"
             />
             <button
@@ -836,21 +849,25 @@ export const Settings: React.FC = () => {
               {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+          {geminiError && <p className="text-[12px] text-red-400">{geminiError}</p>}
           <button
             onClick={saveGeminiKey}
-            className="w-full h-10 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 text-white transition-opacity"
+            disabled={geminiSaving || !geminiKeyInput.trim()}
+            className="w-full h-10 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 text-white transition-opacity disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)', opacity: geminiSaved ? 0.7 : 1 }}
           >
-            {geminiSaved ? (
+            {geminiSaving ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Validating…</>
+            ) : geminiSaved ? (
               <><CheckCircle className="w-4 h-4" /> Saved!</>
             ) : (
               <><Save className="w-3.5 h-3.5" /> Save API Key</>
             )}
           </button>
-          {geminiKey && (
+          {hasGeminiKey && (
             <button
               type="button"
-              onClick={() => { setGeminiKey(''); localStorage.removeItem('athlix:gemini_api_key'); }}
+              onClick={removeGeminiKey}
               className="w-full text-[12px] text-[var(--text-muted)] hover:text-[var(--red)] transition-colors"
             >
               Remove key
