@@ -1200,13 +1200,14 @@ export const getExerciseRowsWithWorkoutDates = async (userId: string) => {
         ? {
             ...exercise,
             workouts: { date: workout.date },
+            workout_muscle_groups: (workout as any).muscle_groups ?? null,
             workout_id: workout.id,
           }
         : null;
     })
     .filter(Boolean)
     .sort((a, b) => a!.workouts.date.localeCompare(b!.workouts.date)) as Array<
-    LocalExercise & { workouts: { date: string } }
+    LocalExercise & { workouts: { date: string }; workout_muscle_groups: string[] | null }
   >;
 };
 

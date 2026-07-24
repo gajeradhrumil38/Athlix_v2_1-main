@@ -2171,19 +2171,19 @@ export const getExerciseRowsWithWorkoutDates = async (userId: string) => {
 
   const { data: workouts, error: workoutsError } = await supabase
     .from('workouts')
-    .select('id,date')
+    .select('id,date,muscle_groups')
     .eq('user_id', userId);
 
   if (workoutsError) throw normalizeError(workoutsError, 'Failed to load workouts.');
   if (!workouts?.length) return [];
 
-  const workoutMap = new Map<string, string>();
+  const workoutMap = new Map<string, { date: string; muscleGroups: string[] | null }>();
   workouts.forEach((workout: any) => {
-    workoutMap.set(workout.id, workout.date);
+    workoutMap.set(workout.id, { date: workout.date, muscleGroups: workout.muscle_groups ?? null });
   });
 
   const workoutIds = workouts.map((workout: any) => workout.id);
-  const exercises: Array<LocalExercise & { workouts: { date: string } }> = [];
+  const exercises: Array<LocalExercise & { workouts: { date: string }; workout_muscle_groups: string[] | null }> = [];
 
   for (const batch of chunk(workoutIds, 400)) {
     const { data: exerciseBatch, error: exercisesError } = await supabase
@@ -2194,11 +2194,12 @@ export const getExerciseRowsWithWorkoutDates = async (userId: string) => {
     if (exercisesError) throw normalizeError(exercisesError, 'Failed to load exercises.');
 
     (exerciseBatch || []).forEach((exercise: any) => {
-      const workoutDate = workoutMap.get(exercise.workout_id);
-      if (!workoutDate) return;
+      const info = workoutMap.get(exercise.workout_id);
+      if (!info) return;
       exercises.push({
         ...exercise,
-        workouts: { date: workoutDate },
+        workouts: { date: info.date },
+        workout_muscle_groups: info.muscleGroups,
       });
     });
   }
