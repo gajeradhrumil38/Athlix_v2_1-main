@@ -10,11 +10,8 @@ import { getRuns } from '../../features/running/utils/storage';
 import { whoopService } from '../../features/whoop/services/whoopService';
 import { buildSystemPrompt, parseSkincareStats, type WorkoutWithExercises } from '../../lib/aiCoach';
 import type { WorkoutComparison } from '../../lib/supabaseData';
+import { useAiCoachKey } from '../../hooks/useAiCoachKey';
 
-const GEMINI_KEY_STORAGE = 'athlix:gemini_api_key';
-const GEMINI_MODEL_STORAGE = 'athlix:gemini_model';
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
 const COOLDOWN_MS = 60_000;
@@ -128,6 +125,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
   const { user, profile } = useAuth();
   const location = useLocation();
   const isImmersiveRoute = location.pathname === '/log' || location.pathname.startsWith('/run');
+  const { hasKey, model } = useAiCoachKey();
 
   const [view, setView] = useState<View>('closed');
   const [message, setMessage] = useState('');
@@ -186,13 +184,11 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
     setView('analyzing');
 
-    const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
-    if (!apiKey) {
+    if (!hasKey) {
       if (myRequestId === requestIdRef.current) setView('no-key');
       return;
     }
 
-    const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
 
@@ -212,27 +208,29 @@ export const PostWorkoutCoachPill: React.FC = () => {
       // Thinking disabled: this is a short 2-3 sentence summary, not a
       // reasoning task, and thinking tokens count against the same
       // maxOutputTokens budget — skipping it keeps this fast and reliable.
-      const body = {
+      const buildBody = (targetModel: string) => ({
+        model: targetModel,
+        stream: false,
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: 'user', parts: [{ text: userTurn }] }],
         generationConfig: {
           temperature: 0.8,
           maxOutputTokens: 1024,
-          ...(/^gemini-2\.5/.test(model) && { thinkingConfig: { thinkingBudget: 0 } }),
+          ...(/^gemini-2\.5/.test(targetModel) && { thinkingConfig: { thinkingBudget: 0 } }),
         },
-      };
+      });
 
-      let res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`, {
+      let res = await fetch('/api/ai-coach/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildBody(model)),
         signal: controller.signal,
       });
       if (!res.ok) {
-        res = await fetch(`${GEMINI_BASE}/${FALLBACK_MODEL}:generateContent?key=${apiKey}`, {
+        res = await fetch('/api/ai-coach/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, generationConfig: { temperature: 0.8, maxOutputTokens: 1024 } }),
+          body: JSON.stringify(buildBody(FALLBACK_MODEL)),
           signal: controller.signal,
         });
       }
@@ -260,7 +258,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       setMessage(fallback);
       startTyping(fallback);
     }
-  }, [user?.id, profile, startTyping]);
+  }, [user?.id, profile, startTyping, hasKey, model]);
 
   useEffect(() => {
     const handler = (e: Event) => {

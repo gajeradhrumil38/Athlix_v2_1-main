@@ -30,6 +30,7 @@ import {
   calDaysSince,
   parseSkincareStats,
 } from '../../lib/aiCoach';
+import { useAiCoachKey, DEFAULT_MODEL } from '../../hooks/useAiCoachKey';
 
 /* ── Per-set data type ────────────────────────────────────────────── */
 interface SetEntry { reps: number; weight: number; }
@@ -54,12 +55,8 @@ async function getLastExerciseSets(userId: string, exerciseName: string): Promis
   return null;
 }
 
-const GEMINI_KEY_STORAGE = 'athlix:gemini_api_key';
-const GEMINI_MODEL_STORAGE = 'athlix:gemini_model';
 const USAGE_STORAGE = 'athlix:api_usage';
 const CHAT_HISTORY_STORAGE = 'athlix:ai_chat_history';
-const DEFAULT_MODEL = 'gemini-2.5-flash'; // free tier: 5 RPM, 250K tokens/min
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Max conversation turns sent to API (keeps token usage low while preserving short-term memory)
 const MAX_HISTORY = 12;
 
@@ -375,7 +372,7 @@ async function executeTool(
 /* ── API Key first-launch setup modal ───────────────────────────── */
 const GEMINI_DOCS_URL = 'https://aistudio.google.com/app/apikey';
 
-const ApiKeySetupModal: React.FC<{ onDone: () => void }> = ({ onDone }) => {
+const ApiKeySetupModal: React.FC<{ onDone: () => void; onSave: (apiKey: string, model: string) => Promise<{ success: boolean; error?: string }> }> = ({ onDone, onSave }) => {
   const [key, setKey] = useState('');
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState('');
@@ -392,29 +389,14 @@ const ApiKeySetupModal: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     if (!trimmed) { setError('Paste your API key first.'); return; }
     setValidating(true);
     setError('');
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${trimmed}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg: string = (body as any)?.error?.message || `Error ${res.status}`;
-        setError(msg.includes('API_KEY') || res.status === 400 ? 'Invalid key — check and try again.' : msg);
-        return;
-      }
-      localStorage.setItem(GEMINI_KEY_STORAGE, trimmed);
-      setStep(3);
-      setTimeout(onDone, 1200);
-    } catch {
-      setError('Could not reach Gemini. Check your connection.');
-    } finally {
-      setValidating(false);
+    const result = await onSave(trimmed, DEFAULT_MODEL);
+    setValidating(false);
+    if (!result.success) {
+      setError(result.error || 'Invalid key — check and try again.');
+      return;
     }
+    setStep(3);
+    setTimeout(onDone, 1200);
   };
 
   return (
@@ -536,8 +518,9 @@ const ApiKeySetupModal: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         </button>
         {showWhy && (
           <p className="mt-2 text-[12px] text-white/40 leading-relaxed">
-            Your key is stored only on this device — never sent to Athlix servers. All AI requests go
-            directly from your browser to Google's Gemini API. You can revoke it anytime at aistudio.google.com.
+            Your key is stored securely on our server, tied to your account — it never sits in your
+            browser after this step. You can remove it anytime in Settings, or revoke it directly at
+            aistudio.google.com.
           </p>
         )}
       </div>
@@ -566,8 +549,8 @@ export const AiChat: React.FC = () => {
   const [showKeySetup, setShowKeySetup] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
-  const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
+  const { hasKey, model, save: saveAiCoachKey } = useAiCoachKey();
+  const [streamingText, setStreamingText] = useState('');
 
   /* ── Persist chat history across mount/unmount (e.g. visiting /log) so
      reopening the coach resumes the real conversation instead of a blank
@@ -636,8 +619,7 @@ export const AiChat: React.FC = () => {
   const close = () => setOpen(false);
 
   const openChat = () => {
-    const key = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
-    if (!key) { setShowKeySetup(true); setOpen(true); }
+    if (!hasKey) { setShowKeySetup(true); setOpen(true); }
     else { setShowKeySetup(false); setOpen(true); }
   };
 
@@ -673,31 +655,30 @@ export const AiChat: React.FC = () => {
     return () => clearInterval(id);
   }, [loading]);
 
-  /* ── Send message to Gemini ───────────────────────────────────────── */
+  /* ── Send message to Gemini via the server proxy, streaming the reply ── */
   const send = useCallback(
     async (overrideText?: string) => {
       const text = (overrideText ?? input).trim();
-      if (!text || loading || !apiKey) return;
+      if (!text || loading || !hasKey) return;
 
       const userMsg: Message = { role: 'user', text };
       const history = [...messages, userMsg];
       setMessages(history);
       setInput('');
       setLoading(true);
+      setStreamingText('');
 
       try {
         const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats);
-
-        // Only send the last MAX_HISTORY messages to keep prompt tokens low
         const trimmedHistory = history.slice(-MAX_HISTORY);
-
         const geminiContents = trimmedHistory.map((m) => ({
           role: m.role,
           parts: [{ text: m.text }],
         }));
 
-        // Build the Gemini request body (no google_search — can't mix with function_declarations)
-        const buildBody = (contents: object[], targetModel: string) => ({
+        const buildBody = (contents: object[], targetModel: string, stream: boolean) => ({
+          model: targetModel,
+          stream,
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
           tools: [{ function_declarations: FUNCTION_DECLARATIONS }],
@@ -708,61 +689,122 @@ export const AiChat: React.FC = () => {
           },
         });
 
-        // Returns true when the error is a transient server-side overload
         const isOverloaded = (status: number, msg: string) =>
           status === 503 || status === 429 && msg.includes('quota') === false ||
           msg.toLowerCase().includes('high demand') ||
           msg.toLowerCase().includes('overloaded') ||
           msg.toLowerCase().includes('try again');
 
-        // Retry with backoff, then fall back to gemini-1.5-flash if primary is overloaded
         const FALLBACK_MODEL = 'gemini-1.5-flash';
         const RETRY_DELAYS = [1200, 2500]; // ms between attempts
 
-        const fetchWithRetry = async (contents: object[]): Promise<Response> => {
+        // Shared retry/fallback-model policy: given a way to make one
+        // attempt, retries transient overloads with backoff and falls back
+        // to a lighter model, or throws a special-cased error for quota/
+        // invalid-key/no-key. Used by BOTH the initial request and the
+        // tool-result follow-up request, so neither leg loses resilience —
+        // by the time the follow-up runs, executeTool() has already
+        // mutated data (logged a set, etc.), so a bare unretried failure
+        // there would show an error even though the action succeeded.
+        const fetchWithRetry = async (makeRequest: (targetModel: string) => Promise<Response>): Promise<Response> => {
           for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
             const targetModel = attempt < RETRY_DELAYS.length ? model : FALLBACK_MODEL;
-            const res = await fetch(`${GEMINI_BASE}/${targetModel}:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(buildBody(contents, targetModel)),
-            });
+            const res = await makeRequest(targetModel);
             if (res.ok) return res;
 
             const errBody = await res.clone().json().catch(() => ({}));
             const errMsg: string = errBody?.error?.message || `Request failed (${res.status})`;
 
-            // Non-retryable errors — throw immediately
+            if (res.status === 400 && errBody?.error?.code === 'NO_KEY') {
+              throw new Error('INVALID_KEY: No Gemini API key configured. Set one up in Settings.');
+            }
             if (res.status === 429 && errMsg.includes('quota')) {
               throw new Error('QUOTA: Your API key\'s project has billing enabled, which sets the free tier limit to 0.\n\nFix: Go to aistudio.google.com/app/apikey → "Create API key in new project" (no billing) → paste the new key in Settings.');
             }
             if (res.status === 400 && errMsg.includes('API_KEY')) {
               throw new Error('INVALID_KEY: Your API key is invalid. Check it in Settings.');
             }
-
-            // Retryable overload errors
             if (isOverloaded(res.status, errMsg) && attempt < RETRY_DELAYS.length) {
               await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
               continue;
             }
-
-            // Last attempt failed — throw
             throw new Error(errMsg);
           }
           throw new Error('All retry attempts failed.');
         };
 
-        const res = await fetchWithRetry(geminiContents);
-        const data = await res.json();
-        trackTokenUsage(data?.usageMetadata?.totalTokenCount ?? 0);
+        const streamWithRetry = (contents: object[]): Promise<Response> =>
+          fetchWithRetry((targetModel) => fetch('/api/ai-coach/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildBody(contents, targetModel, true)),
+          }));
 
-        const rawParts: Array<{ text?: string; thought?: boolean; functionCall?: { name: string; args: Record<string, unknown> } }> =
-          data?.candidates?.[0]?.content?.parts || [];
+        // Non-streaming request through the proxy — used only for the short
+        // tool-result follow-up turn, which doesn't need live token rendering.
+        const generateOnce = async (contents: object[]): Promise<any> => {
+          const res = await fetchWithRetry((targetModel) => fetch('/api/ai-coach/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildBody(contents, targetModel, false)),
+          }));
+          return res.json();
+        };
+
+        // Read Gemini's SSE stream, concatenating text deltas live and
+        // capturing a function-call part if the model calls a tool instead
+        // of replying with text (tool calls arrive as one complete part,
+        // not incrementally, so there's nothing to stream for that case).
+        const consumeStream = async (
+          res: Response,
+          onTextDelta: (accumulated: string) => void,
+        ): Promise<{ text: string; thought: string; functionCall?: { name: string; args: Record<string, unknown> }; usageTokens: number }> => {
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let accumulated = '';
+          let accumulatedThought = '';
+          let functionCall: { name: string; args: Record<string, unknown> } | undefined;
+          let usageTokens = 0;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const jsonStr = trimmed.slice(5).trim();
+              if (!jsonStr) continue;
+              let chunk: any;
+              try { chunk = JSON.parse(jsonStr); } catch { continue; }
+
+              if (chunk?.usageMetadata?.totalTokenCount) usageTokens = chunk.usageMetadata.totalTokenCount;
+
+              const parts: Array<{ text?: string; thought?: boolean; functionCall?: { name: string; args: Record<string, unknown> } }> =
+                chunk?.candidates?.[0]?.content?.parts || [];
+              for (const p of parts) {
+                if (p.functionCall) functionCall = p.functionCall;
+                if (p.text && p.thought) accumulatedThought += p.text;
+                if (p.text && !p.thought) {
+                  accumulated += p.text;
+                  onTextDelta(accumulated);
+                }
+              }
+            }
+          }
+          return { text: accumulated, thought: accumulatedThought, functionCall, usageTokens };
+        };
+
+        const res = await streamWithRetry(geminiContents);
+        const { text: streamedText, thought, functionCall, usageTokens } = await consumeStream(res, setStreamingText);
+        trackTokenUsage(usageTokens);
 
         // ── Function call branch ─────────────────────────────────────────
-        const fnCallPart = rawParts.find((p) => p.functionCall);
-        if (fnCallPart?.functionCall && user?.id) {
-          const { name: toolName, args: toolArgs } = fnCallPart.functionCall;
+        if (functionCall && user?.id) {
+          const { name: toolName, args: toolArgs } = functionCall;
           let toolResult: ToolResult;
           try {
             toolResult = await executeTool(user.id, toolName, toolArgs, navigate);
@@ -770,8 +812,8 @@ export const AiChat: React.FC = () => {
             toolResult = { success: false, message: e.message || 'Action failed' };
           }
 
-          // show_exercise_form: render inline form immediately, skip Gemini follow-up entirely
           if (toolResult.showForm) {
+            setStreamingText('');
             setMessages((prev) => [...prev, {
               role: 'model',
               text: toolResult.formInitialName
@@ -783,33 +825,25 @@ export const AiChat: React.FC = () => {
             return;
           }
 
-          // Send function result back to Gemini for a natural-language reply
           const followUpContents = [
             ...geminiContents,
-            { role: 'model', parts: [{ functionCall: fnCallPart.functionCall }] },
+            { role: 'model', parts: [{ functionCall }] },
             { role: 'user', parts: [{ functionResponse: { name: toolName, response: toolResult } }] },
           ];
-          const res2 = await fetchWithRetry(followUpContents);
-          const data2 = await res2.json();
+          const data2 = await generateOnce(followUpContents);
           trackTokenUsage(data2?.usageMetadata?.totalTokenCount ?? 0);
 
-          const finalParts: Array<{ text?: string; thought?: boolean }> =
-            data2?.candidates?.[0]?.content?.parts || [];
-
+          const finalParts: Array<{ text?: string; thought?: boolean }> = data2?.candidates?.[0]?.content?.parts || [];
           const aiText2 = finalParts.filter((p) => !p.thought).map((p) => p.text).join('').trim() || 'Done!';
 
-          setMessages((prev) => [...prev, {
-            role: 'model',
-            text: aiText2,
-            action: toolResult,
-          }]);
+          setStreamingText('');
+          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult }]);
           return;
         }
 
         // ── Normal text response branch ──────────────────────────────────
-        const thought = rawParts.filter((p) => p.thought).map((p) => p.text).join('').trim();
-        const aiText = rawParts.filter((p) => !p.thought).map((p) => p.text).join('').trim() || '(no response)';
-        setMessages((prev) => [...prev, { role: 'model', text: aiText, thought: thought || undefined }]);
+        setStreamingText('');
+        setMessages((prev) => [...prev, { role: 'model', text: streamedText.trim() || '(no response)', thought: thought || undefined }]);
       } catch (err: any) {
         const raw: string = err?.message || 'Something went wrong.';
         const display = raw.startsWith('QUOTA:')
@@ -817,18 +851,13 @@ export const AiChat: React.FC = () => {
           : raw.startsWith('INVALID_KEY:')
             ? raw.replace('INVALID_KEY:', '🔑 Invalid key —')
             : `⚠️ ${raw}`;
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'model',
-            text: display,
-          },
-        ]);
+        setStreamingText('');
+        setMessages((prev) => [...prev, { role: 'model', text: display }]);
       } finally {
         setLoading(false);
       }
     },
-    [input, loading, apiKey, model, profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, messages],
+    [input, loading, hasKey, model, profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, messages, user?.id, navigate],
   );
 
   // Actually send a hand-off question once the seeded insight message has
@@ -935,15 +964,16 @@ export const AiChat: React.FC = () => {
             {/* Drag pill */}
             <div className="lg-handle" />
             {showKeySetup ? (
-              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} />
+              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} onSave={saveAiCoachKey} />
             ) : (
               <ChatContent
-                apiKey={apiKey}
+                hasKey={!!hasKey}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
+                streamingText={streamingText}
                 copiedIdx={copiedIdx}
                 inputRef={inputRef}
                 bottomRef={bottomRef}
@@ -980,15 +1010,16 @@ export const AiChat: React.FC = () => {
             }}
           >
             {showKeySetup ? (
-              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} />
+              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} onSave={saveAiCoachKey} />
             ) : (
               <ChatContent
-                apiKey={apiKey}
+                hasKey={!!hasKey}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
+                streamingText={streamingText}
                 copiedIdx={copiedIdx}
                 inputRef={inputRef}
                 bottomRef={bottomRef}
@@ -1263,12 +1294,13 @@ const ExerciseQuickForm: React.FC<{
 
 /* ── Inner chat content (shared between mobile sheet + desktop modal) ─ */
 interface ChatContentProps {
-  apiKey: string;
+  hasKey: boolean;
   messages: Message[];
   suggestions: string[];
   input: string;
   loading: boolean;
   loadingPhase: number;
+  streamingText: string;
   copiedIdx: number | null;
   inputRef: React.RefObject<HTMLInputElement>;
   bottomRef: React.RefObject<HTMLDivElement>;
@@ -1285,7 +1317,7 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  apiKey, messages, suggestions, input, loading, loadingPhase, copiedIdx,
+  hasKey, messages, suggestions, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onClear, onCopy,
@@ -1338,7 +1370,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
     </div>
 
     {/* No API key state */}
-    {!apiKey ? (
+    {!hasKey ? (
       <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
         <div
           className="ai-aurora-static flex items-center justify-center"
@@ -1552,8 +1584,8 @@ const ChatContent: React.FC<ChatContentProps> = ({
             </div>
           ))}
 
-          {/* Loading indicator */}
-          {loading && (
+          {/* Loading indicator, or live-streaming reply once tokens start arriving */}
+          {loading && !streamingText && (
             <div className="flex gap-2 justify-start">
               <div
                 className="ai-aurora-static flex items-center justify-center shrink-0"
@@ -1583,6 +1615,30 @@ const ChatContent: React.FC<ChatContentProps> = ({
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+          {loading && streamingText && (
+            <div className="flex gap-2 justify-start">
+              <div
+                className="ai-aurora-static flex items-center justify-center shrink-0"
+                style={{ width: 26, height: 26, borderRadius: 8, border: '1.5px solid transparent', marginTop: 2 }}
+              >
+                <Sparkles className="w-[11px] h-[11px]" style={{ color: 'var(--accent)' }} />
+              </div>
+              <div
+                className="text-[13px] leading-[1.55] word-break"
+                style={{
+                  padding: '10px 13px',
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  borderRadius: '14px 14px 14px 4px',
+                  border: '1px solid var(--border)',
+                  wordBreak: 'break-word',
+                  maxWidth: '78%',
+                }}
+              >
+                {renderText(streamingText)}
               </div>
             </div>
           )}

@@ -23,6 +23,26 @@ export type Database = {
         };
         Relationships: [];
       };
+      ai_coach_keys: {
+        Row: {
+          user_id: string;
+          gemini_api_key: string;
+          model: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          gemini_api_key: string;
+          model?: string;
+          updated_at?: string;
+        };
+        Update: {
+          gemini_api_key?: string;
+          model?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

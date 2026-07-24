@@ -295,14 +295,9 @@ function extractJsonFromText(text: string): unknown {
  *  - { foods: [], labelData }     when a nutrition label is photographed
  *
  * Nutrition lookup path for dish items: USDA → Open Food Facts → FatSecret (fallback).
- * Reads Gemini API key from localStorage('athlix:gemini_api_key').
+ * Calls Gemini through the server-side /api/ai-coach/generate proxy.
  */
 export async function recognizeFoodWithGemini(imageFile: File): Promise<GeminiScanResult> {
-  const apiKey = localStorage.getItem('athlix:gemini_api_key');
-  if (!apiKey) throw new Error('Gemini API key not set. Open Settings → AI Coach to add your free key.');
-
-  const model = localStorage.getItem('athlix:gemini_model') || 'gemini-1.5-flash';
-
   // Preprocess: EXIF-correct, enhance, always JPEG — critical for gallery uploads
   const { data: base64Data, mimeType } = await prepareForGemini(imageFile);
 
@@ -333,25 +328,26 @@ export async function recognizeFoodWithGemini(imageFile: File): Promise<GeminiSc
     '- If truly no food is visible (empty plate, non-food scene): {"scanType":"dish","items":[]}\n' +
     '- DO NOT return empty items if there is food — make your best identification even under imperfect conditions';
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: mimeType, data: base64Data } },
-          { text: prompt },
-        ] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-      }),
-    },
-  );
+  const resp = await fetch('/api/ai-coach/generate', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gemini-1.5-flash',
+      stream: false,
+      contents: [{ parts: [
+        { inline_data: { mime_type: mimeType, data: base64Data } },
+        { text: prompt },
+      ] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+    }),
+  });
 
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => resp.statusText);
-    let msg = errText;
-    try { msg = (JSON.parse(errText) as { error?: { message?: string } })?.error?.message ?? errText; } catch { /* keep raw */ }
+    const errBody = await resp.json().catch(() => ({}));
+    if (errBody?.error?.code === 'NO_KEY') {
+      throw new Error('Gemini API key not set. Open Settings → AI Coach to add your free key.');
+    }
+    const msg = errBody?.error?.message || resp.statusText;
     throw new Error(`Gemini error: ${msg}`);
   }
 
@@ -490,10 +486,6 @@ export async function analyzePackagedIngredients(
   packagedFoods: import('../types').DetectedFood[],
 ): Promise<PackagedIngredientWarning[]> {
   if (packagedFoods.length === 0) return [];
-  const apiKey = localStorage.getItem('athlix:gemini_api_key');
-  if (!apiKey) return [];
-
-  const model = localStorage.getItem('athlix:gemini_model') || 'gemini-1.5-flash';
   const foodList = packagedFoods
     .map((f, i) => `${i + 1}. ${f.name}${f.brand ? ` (${f.brand})` : ''}`)
     .join('\n');
@@ -507,17 +499,16 @@ export async function analyzePackagedIngredients(
     'Keep each ingredients value short — only the concerning ones, not the full list.';
 
   try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-        }),
-      },
-    );
+    const resp = await fetch('/api/ai-coach/generate', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemini-1.5-flash',
+        stream: false,
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+      }),
+    });
     if (!resp.ok) return [];
 
     const json    = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
