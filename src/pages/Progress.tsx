@@ -782,39 +782,40 @@ export const Progress: React.FC = () => {
   const currentMonthEnd = endOfMonth(volumeMonth);
   const previousMonthStart = startOfMonth(subMonths(volumeMonth, 1));
   const previousMonthEnd = endOfMonth(subMonths(volumeMonth, 1));
-  const currentWeekWorkouts = workouts.filter((w) => {
-    const d = parseDateAtStartOfDay(w.date);
+  // Exercises already carry their own workout date (and, with the fix in
+  // Task 1, their parent workout's muscle_groups fallback) — filtering
+  // exercises directly instead of cross-referencing the 30-day-capped
+  // `workouts` array means Monthly Volume works for ANY past month.
+  const currentMonthExercises = exercises.filter((ex) => {
+    const d = parseDateAtStartOfDay(ex.workouts?.date);
     return Boolean(d && d >= currentMonthStart && d <= currentMonthEnd);
   });
-  const previousWeekWorkouts = workouts.filter((w) => {
-    const d = parseDateAtStartOfDay(w.date);
+  const previousMonthExercises = exercises.filter((ex) => {
+    const d = parseDateAtStartOfDay(ex.workouts?.date);
     return Boolean(d && d >= previousMonthStart && d <= previousMonthEnd);
   });
 
-  const calculateMuscleVolume = (workoutList: any[]) => {
+  const calculateMuscleVolume = (exerciseList: any[]) => {
     const volumeMap: Record<string, number> = {};
-    workoutList.forEach(w => {
-      const wExercises = exercises.filter(ex => ex.workout_id === w.id);
-      wExercises.forEach(ex => {
-        const vol = ex.sets * ex.reps * ex.weight;
-        if (ex.muscle_group) volumeMap[ex.muscle_group] = (volumeMap[ex.muscle_group] || 0) + vol;
-        else if (Array.isArray(w.muscle_groups) && w.muscle_groups.length > 0) {
-          const volPerMuscle = vol / w.muscle_groups.length;
-          w.muscle_groups.forEach((m: string) => { volumeMap[m] = (volumeMap[m] || 0) + volPerMuscle; });
-        }
-      });
+    exerciseList.forEach((ex) => {
+      const vol = ex.sets * ex.reps * ex.weight;
+      if (ex.muscle_group) volumeMap[ex.muscle_group] = (volumeMap[ex.muscle_group] || 0) + vol;
+      else if (Array.isArray(ex.workout_muscle_groups) && ex.workout_muscle_groups.length > 0) {
+        const volPerMuscle = vol / ex.workout_muscle_groups.length;
+        ex.workout_muscle_groups.forEach((m: string) => { volumeMap[m] = (volumeMap[m] || 0) + volPerMuscle; });
+      }
     });
     return volumeMap;
   };
 
-  const currentWeekVolume = calculateMuscleVolume(currentWeekWorkouts);
-  const previousWeekVolume = calculateMuscleVolume(previousWeekWorkouts);
-  const allMuscles = Array.from(new Set([...Object.keys(currentWeekVolume), ...Object.keys(previousWeekVolume)]));
-  const totalVolume = Object.values(currentWeekVolume).reduce((a, b) => a + b, 0);
+  const currentMonthVolume = calculateMuscleVolume(currentMonthExercises);
+  const previousMonthVolume = calculateMuscleVolume(previousMonthExercises);
+  const allMuscles = Array.from(new Set([...Object.keys(currentMonthVolume), ...Object.keys(previousMonthVolume)]));
+  const totalVolume = Object.values(currentMonthVolume).reduce((a, b) => a + b, 0);
   let balanceScore = 100;
   if (totalVolume > 0 && allMuscles.length > 0) {
     const idealVolumePerMuscle = totalVolume / allMuscles.length;
-    const deviations = allMuscles.map(m => Math.abs((currentWeekVolume[m] || 0) - idealVolumePerMuscle));
+    const deviations = allMuscles.map(m => Math.abs((currentMonthVolume[m] || 0) - idealVolumePerMuscle));
     const avgDeviation = deviations.reduce((a, b) => a + b, 0) / allMuscles.length;
     balanceScore = Math.max(0, 100 - (avgDeviation / idealVolumePerMuscle) * 100);
   }
@@ -839,21 +840,19 @@ export const Progress: React.FC = () => {
   }, [exercises, volumeMonth]);
 
   const setVolumeData = useMemo(() => {
-    const computeSets = (wList: any[]) => {
+    const computeSets = (exList: any[]) => {
       const map: Record<string, number> = {};
-      wList.forEach((w) => {
-        exercises.filter((ex) => ex.workout_id === w.id).forEach((ex) => {
-          const mg = ex.muscle_group;
-          if (mg) map[mg] = (map[mg] || 0) + (ex.sets || 0);
-        });
+      exList.forEach((ex) => {
+        const mg = ex.muscle_group;
+        if (mg) map[mg] = (map[mg] || 0) + (ex.sets || 0);
       });
       return map;
     };
-    const cur = computeSets(currentWeekWorkouts);
-    const prev = computeSets(previousWeekWorkouts);
+    const cur = computeSets(currentMonthExercises);
+    const prev = computeSets(previousMonthExercises);
     const muscles = Array.from(new Set([...Object.keys(cur), ...Object.keys(prev)]));
     return muscles.map((m) => ({ muscle: m, current: cur[m] || 0, previous: prev[m] || 0 })).sort((a, b) => b.current - a.current);
-  }, [exercises, currentWeekWorkouts, previousWeekWorkouts]);
+  }, [currentMonthExercises, previousMonthExercises]);
 
   if (loading && exercises.length === 0) {
     return (
@@ -1097,7 +1096,7 @@ export const Progress: React.FC = () => {
                       const pct = item.current / maxSets;
                       const sparkData: number[] = setsByMuscleWeek[item.muscle] || new Array(6).fill(0);
                       const delta = item.current - item.previous;
-                      const muscleVol = currentWeekVolume[item.muscle] || 0;
+                      const muscleVol = currentMonthVolume[item.muscle] || 0;
 
                       // Muscle color via CSS var
                       const MUSCLE_HEX_MAP: Record<string, string> = {
