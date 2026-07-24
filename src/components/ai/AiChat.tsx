@@ -30,6 +30,7 @@ import {
   calDaysSince,
   parseSkincareStats,
 } from '../../lib/aiCoach';
+import { useAiCoachKey, DEFAULT_MODEL } from '../../hooks/useAiCoachKey';
 
 /* ── Per-set data type ────────────────────────────────────────────── */
 interface SetEntry { reps: number; weight: number; }
@@ -54,12 +55,8 @@ async function getLastExerciseSets(userId: string, exerciseName: string): Promis
   return null;
 }
 
-const GEMINI_KEY_STORAGE = 'athlix:gemini_api_key';
-const GEMINI_MODEL_STORAGE = 'athlix:gemini_model';
 const USAGE_STORAGE = 'athlix:api_usage';
 const CHAT_HISTORY_STORAGE = 'athlix:ai_chat_history';
-const DEFAULT_MODEL = 'gemini-2.5-flash'; // free tier: 5 RPM, 250K tokens/min
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Max conversation turns sent to API (keeps token usage low while preserving short-term memory)
 const MAX_HISTORY = 12;
 
@@ -375,7 +372,7 @@ async function executeTool(
 /* ── API Key first-launch setup modal ───────────────────────────── */
 const GEMINI_DOCS_URL = 'https://aistudio.google.com/app/apikey';
 
-const ApiKeySetupModal: React.FC<{ onDone: () => void }> = ({ onDone }) => {
+const ApiKeySetupModal: React.FC<{ onDone: () => void; onSave: (apiKey: string, model: string) => Promise<{ success: boolean; error?: string }> }> = ({ onDone, onSave }) => {
   const [key, setKey] = useState('');
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState('');
@@ -392,29 +389,14 @@ const ApiKeySetupModal: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     if (!trimmed) { setError('Paste your API key first.'); return; }
     setValidating(true);
     setError('');
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${trimmed}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg: string = (body as any)?.error?.message || `Error ${res.status}`;
-        setError(msg.includes('API_KEY') || res.status === 400 ? 'Invalid key — check and try again.' : msg);
-        return;
-      }
-      localStorage.setItem(GEMINI_KEY_STORAGE, trimmed);
-      setStep(3);
-      setTimeout(onDone, 1200);
-    } catch {
-      setError('Could not reach Gemini. Check your connection.');
-    } finally {
-      setValidating(false);
+    const result = await onSave(trimmed, DEFAULT_MODEL);
+    setValidating(false);
+    if (!result.success) {
+      setError(result.error || 'Invalid key — check and try again.');
+      return;
     }
+    setStep(3);
+    setTimeout(onDone, 1200);
   };
 
   return (
@@ -536,8 +518,9 @@ const ApiKeySetupModal: React.FC<{ onDone: () => void }> = ({ onDone }) => {
         </button>
         {showWhy && (
           <p className="mt-2 text-[12px] text-white/40 leading-relaxed">
-            Your key is stored only on this device — never sent to Athlix servers. All AI requests go
-            directly from your browser to Google's Gemini API. You can revoke it anytime at aistudio.google.com.
+            Your key is stored securely on our server, tied to your account — it never sits in your
+            browser after this step. You can remove it anytime in Settings, or revoke it directly at
+            aistudio.google.com.
           </p>
         )}
       </div>
@@ -566,8 +549,7 @@ export const AiChat: React.FC = () => {
   const [showKeySetup, setShowKeySetup] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
-  const model = localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_MODEL;
+  const { hasKey, model, save: saveAiCoachKey } = useAiCoachKey();
 
   /* ── Persist chat history across mount/unmount (e.g. visiting /log) so
      reopening the coach resumes the real conversation instead of a blank
@@ -636,8 +618,7 @@ export const AiChat: React.FC = () => {
   const close = () => setOpen(false);
 
   const openChat = () => {
-    const key = localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() || '';
-    if (!key) { setShowKeySetup(true); setOpen(true); }
+    if (!hasKey) { setShowKeySetup(true); setOpen(true); }
     else { setShowKeySetup(false); setOpen(true); }
   };
 
@@ -677,7 +658,7 @@ export const AiChat: React.FC = () => {
   const send = useCallback(
     async (overrideText?: string) => {
       const text = (overrideText ?? input).trim();
-      if (!text || loading || !apiKey) return;
+      if (!text || loading || !hasKey) return;
 
       const userMsg: Message = { role: 'user', text };
       const history = [...messages, userMsg];
@@ -935,10 +916,10 @@ export const AiChat: React.FC = () => {
             {/* Drag pill */}
             <div className="lg-handle" />
             {showKeySetup ? (
-              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} />
+              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} onSave={saveAiCoachKey} />
             ) : (
               <ChatContent
-                apiKey={apiKey}
+                hasKey={!!hasKey}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 input={input}
@@ -980,10 +961,10 @@ export const AiChat: React.FC = () => {
             }}
           >
             {showKeySetup ? (
-              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} />
+              <ApiKeySetupModal onDone={() => setShowKeySetup(false)} onSave={saveAiCoachKey} />
             ) : (
               <ChatContent
-                apiKey={apiKey}
+                hasKey={!!hasKey}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 input={input}
@@ -1263,7 +1244,7 @@ const ExerciseQuickForm: React.FC<{
 
 /* ── Inner chat content (shared between mobile sheet + desktop modal) ─ */
 interface ChatContentProps {
-  apiKey: string;
+  hasKey: boolean;
   messages: Message[];
   suggestions: string[];
   input: string;
@@ -1285,7 +1266,7 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  apiKey, messages, suggestions, input, loading, loadingPhase, copiedIdx,
+  hasKey, messages, suggestions, input, loading, loadingPhase, copiedIdx,
   inputRef, bottomRef,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onClear, onCopy,
@@ -1338,7 +1319,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
     </div>
 
     {/* No API key state */}
-    {!apiKey ? (
+    {!hasKey ? (
       <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
         <div
           className="ai-aurora-static flex items-center justify-center"
