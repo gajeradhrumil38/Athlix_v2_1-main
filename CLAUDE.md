@@ -174,7 +174,7 @@ supabase/
 ### AI Coach (`AiChat`)
 - `components/ai/AiChat.tsx` — floating chat drawer. `components/ai/PostWorkoutCoachPill.tsx` — post-workout insight pill (shares the same backend).
 - System prompt built from user's workout history in `lib/aiCoach.ts` (`buildSystemPrompt`, `'chat'` vs `'insight'` variant).
-- Gemini calls go through a server-side proxy, not directly from the browser: `app/api/ai-coach/generate/route.ts` (streams via SSE for the chat, non-streaming for the pill) and `app/api/ai-coach/keys/route.ts` (validate/save/read/delete). The user's key is stored server-side in the `ai_coach_keys` table (RLS owner-CRUD), never in `localStorage` or a URL query param. Client-side state (`hasKey`/`model`) comes from `src/hooks/useAiCoachKey.ts`, shared by `AiChat`, `PostWorkoutCoachPill`, `Settings`, and the food scanner's Gemini calls (`features/food/services/foodRecognition.service.ts`).
+- Gemini calls go through a server-side proxy, not directly from the browser: `app/api/ai-coach/generate/route.ts` (streams via SSE for the chat, non-streaming for the pill and for the food scanner's Gemini calls) and `app/api/ai-coach/keys/route.ts` (validate/save/read/delete). The user's key is stored server-side in the `ai_coach_keys` table (RLS owner-CRUD), never in `localStorage` or a URL query param. Client-side `hasKey`/`model` state comes from `src/hooks/useAiCoachKey.ts`, used by `AiChat`, `PostWorkoutCoachPill`, and `Settings` — the food scanner (`features/food/services/foodRecognition.service.ts`) calls the proxy directly without the hook (no key-presence gating there, it just relies on the proxy's own `NO_KEY` error).
 - Opens via `window.dispatchEvent(new CustomEvent('athlix:open-ai'))`.
 
 ### Dashboard (`/`)
