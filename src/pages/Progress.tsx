@@ -26,6 +26,7 @@ import { LineChart, AreaChart, ComposedChart, Line, Area, XAxis, YAxis, Cartesia
 import { Target, TrendingUp, Activity, Scale, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CalendarDays, Pencil, Heart, Bluetooth, PlugZap, Unplug, Info, Flame, X, Camera, Utensils, History, Trophy } from 'lucide-react';
 import { DopamineTracker } from '../components/progress/DopamineTracker';
 import { GoalsSection } from '../components/progress/GoalsSection';
+import { ExerciseHistorySearch } from '../components/progress/ExerciseHistorySearch';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -1030,6 +1031,9 @@ export const Progress: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Exercise History search */}
+              {user && <ExerciseHistorySearch userId={user.id} exercises={exercises} weightUnit={displayUnit as WeightUnit} />}
 
               {/* Volume rows card */}
               <div className="rounded-2xl border border-white/8 bg-[linear-gradient(160deg,#16191F_0%,#111419_100%)] p-5">
