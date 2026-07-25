@@ -98,6 +98,7 @@ export interface LocalPersonalRecord {
   achieved_date: string;
   created_at: string;
   exercise_db_id?: string | null;
+  unit: 'kg' | 'lbs';
 }
 
 export interface LocalExerciseSessionSummary {
@@ -795,13 +796,14 @@ export const updateProfile = async (userId: string, updates: Partial<LocalProfil
 
     db.personalRecords = db.personalRecords.map((record) => {
       if (record.user_id !== userId) return record;
+      // Read this row's OWN current unit instead of always assuming the
+      // profile's previous preference — makes the conversion idempotent,
+      // matching the cloud path's fix for the same non-idempotency bug.
+      const rowUnit = record.unit || existingProfile.unit_preference;
       return {
         ...record,
-        best_weight: convertWeight(
-          Number(record.best_weight || 0),
-          existingProfile.unit_preference,
-          targetUnit,
-        ),
+        best_weight: convertWeight(Number(record.best_weight || 0), rowUnit, targetUnit),
+        unit: targetUnit,
       };
     });
 
@@ -941,6 +943,7 @@ export const saveWorkout = async (
   let orderIndex = 0;
   validExercises.forEach((exercise) => {
     exercise.completed_sets.forEach((set) => {
+      const resolvedUnit = set.unit || 'lbs';
       db.exercises.push({
         id: createId(),
         workout_id: workoutId,
@@ -949,10 +952,12 @@ export const saveWorkout = async (
         sets: 1,
         reps: set.reps,
         weight: set.weight || 0,
-        unit: set.unit || 'lbs',
+        unit: resolvedUnit,
         order_index: orderIndex++,
         exercise_db_id: exercise.exercise_db_id || null,
       });
+
+      if (!isWeightUnit(resolvedUnit)) return; // distance-based sets don't feed personal_records
 
       const existingPr = db.personalRecords.find(
         (record) => record.user_id === userId && record.exercise_name === exercise.name,
@@ -973,6 +978,7 @@ export const saveWorkout = async (
           achieved_date: input.date,
           created_at: existingPr?.created_at || createdAt,
           exercise_db_id: exercise.exercise_db_id || null,
+          unit: resolvedUnit,
         };
 
         if (existingPr) {

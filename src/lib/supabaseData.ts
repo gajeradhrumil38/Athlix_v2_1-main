@@ -962,8 +962,15 @@ const convertAllUserDataUnits = async (
   if (recordsError) throw normalizeError(recordsError, 'Failed to load PRs for conversion.');
 
   for (const record of records || []) {
+    // Read this row's OWN current unit (falling back to sourceUnit only for
+    // legacy rows written before the unit column existed) instead of always
+    // assuming sourceUnit — this is what makes the conversion idempotent:
+    // a row already converted to targetUnit converts to itself as a no-op
+    // instead of being multiplied again by a repeat/duplicate call.
+    const rowUnit = (record.unit || sourceUnit) as WeightUnit;
     await updateRows('personal_records', { id: record.id }, {
-      best_weight: convertWeight(Number(record.best_weight || 0), sourceUnit, targetUnit),
+      best_weight: convertWeight(Number(record.best_weight || 0), rowUnit, targetUnit),
+      unit: targetUnit,
     });
   }
 
@@ -1701,10 +1708,11 @@ export const saveWorkout = async (
 
   let orderIndex = 0;
   const rowsToInsert: RawRecord[] = [];
-  const bestFromNewWorkout = new Map<string, { weight: number; reps: number; exercise_db_id?: string | null }>();
+  const bestFromNewWorkout = new Map<string, { weight: number; reps: number; unit: WeightUnit; exercise_db_id?: string | null }>();
 
   validExercises.forEach((exercise) => {
     exercise.completed_sets.forEach((set) => {
+      const resolvedUnit = set.unit || 'lbs';
       rowsToInsert.push({
         id: createId(),
         workout_id: fallbackWorkoutId,
@@ -1713,13 +1721,15 @@ export const saveWorkout = async (
         sets: 1,
         reps: set.reps,
         weight: set.weight || 0,
-        unit: set.unit || 'lbs',
+        unit: resolvedUnit,
         order_index: orderIndex++,
         exercise_db_id: exercise.exercise_db_id || null,
       });
 
+      if (!isWeightUnit(resolvedUnit)) return; // distance-based sets don't feed personal_records
+
       const existing = bestFromNewWorkout.get(exercise.name);
-      const candidate = { weight: set.weight || 0, reps: set.reps, exercise_db_id: exercise.exercise_db_id || null };
+      const candidate = { weight: set.weight || 0, reps: set.reps, unit: resolvedUnit, exercise_db_id: exercise.exercise_db_id || null };
       if (!existing) {
         bestFromNewWorkout.set(exercise.name, candidate);
         return;
@@ -1769,6 +1779,7 @@ export const saveWorkout = async (
       achieved_date: input.date,
       created_at: existing?.created_at || createdAt,
       exercise_db_id: candidate.exercise_db_id || existing?.exercise_db_id || null,
+      unit: candidate.unit,
     });
   });
 

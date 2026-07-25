@@ -139,7 +139,8 @@ CREATE TABLE public.personal_records (
   best_reps INTEGER NOT NULL,
   achieved_date DATE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  exercise_db_id TEXT
+  exercise_db_id TEXT,
+  unit TEXT NOT NULL DEFAULT 'lbs' CHECK (unit IN ('kg', 'lbs'))
 );
 
 -- Exercise Library
@@ -641,32 +642,40 @@ BEGIN
         v_exercise_db_id
       );
 
-      INSERT INTO public.personal_records (
-        user_id,
-        exercise_name,
-        best_weight,
-        best_reps,
-        achieved_date,
-        exercise_db_id
-      )
-      VALUES (
-        v_user_id,
-        v_exercise_name,
-        v_weight,
-        v_reps,
-        p_workout_date,
-        v_exercise_db_id
-      )
-      ON CONFLICT (user_id, exercise_name) DO UPDATE
-      SET best_weight = EXCLUDED.best_weight,
-          best_reps = EXCLUDED.best_reps,
-          achieved_date = EXCLUDED.achieved_date,
-          exercise_db_id = COALESCE(EXCLUDED.exercise_db_id, public.personal_records.exercise_db_id)
-      WHERE EXCLUDED.best_weight > public.personal_records.best_weight
-         OR (
-           EXCLUDED.best_weight = public.personal_records.best_weight
-           AND EXCLUDED.best_reps > public.personal_records.best_reps
-         );
+      -- Only weight-based sets (kg/lbs) feed personal_records — the table's
+      -- unit column is constrained to kg/lbs, and a distance-based "best"
+      -- (km/mi) isn't a meaningful strength PR anyway.
+      IF v_unit IN ('kg', 'lbs') THEN
+        INSERT INTO public.personal_records (
+          user_id,
+          exercise_name,
+          best_weight,
+          best_reps,
+          achieved_date,
+          exercise_db_id,
+          unit
+        )
+        VALUES (
+          v_user_id,
+          v_exercise_name,
+          v_weight,
+          v_reps,
+          p_workout_date,
+          v_exercise_db_id,
+          v_unit
+        )
+        ON CONFLICT (user_id, exercise_name) DO UPDATE
+        SET best_weight = EXCLUDED.best_weight,
+            best_reps = EXCLUDED.best_reps,
+            achieved_date = EXCLUDED.achieved_date,
+            exercise_db_id = COALESCE(EXCLUDED.exercise_db_id, public.personal_records.exercise_db_id),
+            unit = EXCLUDED.unit
+        WHERE EXCLUDED.best_weight > public.personal_records.best_weight
+           OR (
+             EXCLUDED.best_weight = public.personal_records.best_weight
+             AND EXCLUDED.best_reps > public.personal_records.best_reps
+           );
+      END IF;
 
       v_order_index := v_order_index + 1;
     END LOOP;
