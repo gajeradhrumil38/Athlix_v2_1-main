@@ -19,3 +19,7 @@ supabase/.temp/
 
 # Brainstorming visual companion scratch files
 .superpowers/
+
+# Python bytecode cache (ui-ux-pro-max skill scripts)
+__pycache__/
+*.pyc

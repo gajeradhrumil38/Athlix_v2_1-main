@@ -26,7 +26,7 @@ import { LineChart, AreaChart, ComposedChart, Line, Area, XAxis, YAxis, Cartesia
 import { Target, TrendingUp, Activity, Scale, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CalendarDays, Pencil, Heart, Bluetooth, PlugZap, Unplug, Info, Flame, X, Camera, Utensils, History, Trophy } from 'lucide-react';
 import { DopamineTracker } from '../components/progress/DopamineTracker';
 import { GoalsSection } from '../components/progress/GoalsSection';
-import { ExerciseHistorySearch } from '../components/progress/ExerciseHistorySearch';
+import { ExerciseRadialChart } from '../components/progress/ExerciseRadialChart';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -219,7 +219,6 @@ export const Progress: React.FC = () => {
   const [weightLogs, setWeightLogs] = useState<any[]>([]);
   const [workouts, setWorkouts] = useState<any[]>([]);
   const [exercises, setExercises] = useState<any[]>([]);
-  const [volumeMonth, setVolumeMonth] = useState(() => startOfMonth(new Date()));
 
   const [newWeight, setNewWeight] = useState('');
   const [weightDate, setWeightDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
@@ -779,82 +778,6 @@ export const Progress: React.FC = () => {
     if (day.count > 0) { tempStreak++; if (tempStreak > maxStreak) maxStreak = tempStreak; } else tempStreak = 0;
   });
 
-  const currentMonthStart = volumeMonth;
-  const currentMonthEnd = endOfMonth(volumeMonth);
-  const previousMonthStart = startOfMonth(subMonths(volumeMonth, 1));
-  const previousMonthEnd = endOfMonth(subMonths(volumeMonth, 1));
-  // Exercises already carry their own workout date (and, with the fix in
-  // Task 1, their parent workout's muscle_groups fallback) — filtering
-  // exercises directly instead of cross-referencing the 30-day-capped
-  // `workouts` array means Monthly Volume works for ANY past month.
-  const currentMonthExercises = exercises.filter((ex) => {
-    const d = parseDateAtStartOfDay(ex.workouts?.date);
-    return Boolean(d && d >= currentMonthStart && d <= currentMonthEnd);
-  });
-  const previousMonthExercises = exercises.filter((ex) => {
-    const d = parseDateAtStartOfDay(ex.workouts?.date);
-    return Boolean(d && d >= previousMonthStart && d <= previousMonthEnd);
-  });
-
-  const calculateMuscleVolume = (exerciseList: any[]) => {
-    const volumeMap: Record<string, number> = {};
-    exerciseList.forEach((ex) => {
-      const vol = ex.sets * ex.reps * ex.weight;
-      if (ex.muscle_group) volumeMap[ex.muscle_group] = (volumeMap[ex.muscle_group] || 0) + vol;
-      else if (Array.isArray(ex.workout_muscle_groups) && ex.workout_muscle_groups.length > 0) {
-        const volPerMuscle = vol / ex.workout_muscle_groups.length;
-        ex.workout_muscle_groups.forEach((m: string) => { volumeMap[m] = (volumeMap[m] || 0) + volPerMuscle; });
-      }
-    });
-    return volumeMap;
-  };
-
-  const currentMonthVolume = calculateMuscleVolume(currentMonthExercises);
-  const previousMonthVolume = calculateMuscleVolume(previousMonthExercises);
-  const allMuscles = Array.from(new Set([...Object.keys(currentMonthVolume), ...Object.keys(previousMonthVolume)]));
-  const totalVolume = Object.values(currentMonthVolume).reduce((a, b) => a + b, 0);
-  let balanceScore = 100;
-  if (totalVolume > 0 && allMuscles.length > 0) {
-    const idealVolumePerMuscle = totalVolume / allMuscles.length;
-    const deviations = allMuscles.map(m => Math.abs((currentMonthVolume[m] || 0) - idealVolumePerMuscle));
-    const avgDeviation = deviations.reduce((a, b) => a + b, 0) / allMuscles.length;
-    balanceScore = Math.max(0, 100 - (avgDeviation / idealVolumePerMuscle) * 100);
-  }
-
-  const setsByMuscleWeek = useMemo(() => {
-    const result: Record<string, number[]> = {};
-    const months = Array.from({ length: 6 }, (_, i) => {
-      const m = subMonths(volumeMonth, 5 - i);
-      return { start: startOfMonth(m), end: endOfMonth(m) };
-    });
-    exercises.forEach((ex) => {
-      const date = parseDateAtStartOfDay(ex.workouts?.date);
-      if (!date) return;
-      const mg = ex.muscle_group;
-      if (!mg) return;
-      const mi = months.findIndex((m) => date >= m.start && date <= m.end);
-      if (mi === -1) return;
-      if (!result[mg]) result[mg] = new Array(6).fill(0);
-      result[mg][mi] += ex.sets || 0;
-    });
-    return result;
-  }, [exercises, volumeMonth]);
-
-  const setVolumeData = useMemo(() => {
-    const computeSets = (exList: any[]) => {
-      const map: Record<string, number> = {};
-      exList.forEach((ex) => {
-        const mg = ex.muscle_group;
-        if (mg) map[mg] = (map[mg] || 0) + (ex.sets || 0);
-      });
-      return map;
-    };
-    const cur = computeSets(currentMonthExercises);
-    const prev = computeSets(previousMonthExercises);
-    const muscles = Array.from(new Set([...Object.keys(cur), ...Object.keys(prev)]));
-    return muscles.map((m) => ({ muscle: m, current: cur[m] || 0, previous: prev[m] || 0 })).sort((a, b) => b.current - a.current);
-  }, [currentMonthExercises, previousMonthExercises]);
-
   if (loading && exercises.length === 0) {
     return (
       <div className="p-4 space-y-3">
@@ -1032,152 +955,8 @@ export const Progress: React.FC = () => {
                 </div>
               </div>
 
-              {/* Exercise History search */}
-              {user && <ExerciseHistorySearch userId={user.id} exercises={exercises} weightUnit={displayUnit as WeightUnit} />}
-
-              {/* Volume rows card */}
-              <div className="rounded-2xl border border-white/8 bg-[linear-gradient(160deg,#16191F_0%,#111419_100%)] p-5">
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)] mb-1">Monthly Volume</p>
-                    {setVolumeData.length > 0 && (
-                      <p className="text-[26px] font-black text-white tabular-nums leading-none">
-                        {setVolumeData.reduce((a, d) => a + d.current, 0)}
-                        <span className="text-[13px] font-medium text-[var(--text-muted)] ml-1.5">sets</span>
-                        {totalVolume > 0 && (
-                          <span className="text-[13px] font-medium text-[var(--text-muted)] ml-2">
-                            · {Math.round(totalVolume).toLocaleString()} {displayUnit}
-                          </span>
-                        )}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    {/* Month picker */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setVolumeMonth(m => startOfMonth(subMonths(m, 1)))}
-                        className="w-6 h-6 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 transition-colors"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-[12px] font-semibold text-[var(--text-secondary)] tabular-nums min-w-[68px] text-center">
-                        {format(volumeMonth, 'MMM yyyy')}
-                      </span>
-                      <button
-                        onClick={() => setVolumeMonth(m => startOfMonth(addMonths(m, 1)))}
-                        disabled={volumeMonth >= startOfMonth(new Date())}
-                        className="w-6 h-6 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {balanceScore > 0 && (
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                        balanceScore > 75
-                          ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
-                          : balanceScore > 45
-                          ? 'bg-[var(--yellow)]/10 text-[var(--yellow)]'
-                          : 'bg-[var(--red)]/10 text-[var(--red)]'
-                      }`}>
-                        {balanceScore > 75 ? 'Balanced' : balanceScore > 45 ? 'Uneven' : 'Skewed'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {setVolumeData.length === 0 ? (
-                  <div className="py-10 text-center">
-                    <Activity className="w-8 h-8 mx-auto mb-3 text-[var(--text-muted)] opacity-30" />
-                    <p className="text-[13px] text-[var(--text-muted)]">No workouts logged in {format(volumeMonth, 'MMMM')}.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-0">
-                    {setVolumeData.map((item) => {
-                      const isActive = item.current > 0;
-                      const maxSets = Math.max(...setVolumeData.filter(d => d.current > 0).map(d => d.current), 1);
-                      const pct = item.current / maxSets;
-                      const sparkData: number[] = setsByMuscleWeek[item.muscle] || new Array(6).fill(0);
-                      const delta = item.current - item.previous;
-                      const muscleVol = currentMonthVolume[item.muscle] || 0;
-
-                      // Muscle color via CSS var
-                      const MUSCLE_HEX_MAP: Record<string, string> = {
-                        Chest: palette.chest, Back: palette.back, Legs: palette.legs,
-                        Shoulders: palette.shoulders, Core: palette.core, Biceps: palette.biceps,
-                        Triceps: palette.triceps, Arms: palette.biceps, Cardio: palette.cardio,
-                        Glutes: '#F4B96A', Forearms: '#98D4E8', Mobility: '#85C9B0', Yoga: '#7CB9C8',
-                      };
-                      const color = MUSCLE_HEX_MAP[item.muscle] ?? palette.accent;
-
-                      // Sparkline
-                      const sw = 72, sh = 24;
-                      const sMax = Math.max(...sparkData, 1);
-                      const sx = (i: number) => (i / Math.max(sparkData.length - 1, 1)) * sw;
-                      const sy = (v: number) => sh - (v / sMax) * (sh - 3) - 1;
-                      const sparkPath = sparkData.map((v, i) => `${i ? 'L' : 'M'}${sx(i).toFixed(1)} ${sy(v).toFixed(1)}`).join(' ');
-                      const areaPath = `${sparkPath} L ${sw} ${sh} L 0 ${sh} Z`;
-
-                      // Trend indicator
-                      const trendIcon = delta > 2 ? '↑' : delta < -2 ? '↓' : '→';
-                      const trendColor = delta > 2 ? palette.green : delta < -2 ? palette.red : 'var(--text-muted)';
-
-                      return (
-                        <div
-                          key={item.muscle}
-                          className="py-3 border-b border-white/5 last:border-0"
-                          style={{ opacity: isActive ? 1 : 0.38 }}
-                        >
-                          {/* Row top: name + load + trend */}
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                              <span className="text-[13px] font-semibold text-white truncate">{item.muscle}</span>
-                              {muscleVol > 0 && (
-                                <span className="text-[11px] tabular-nums" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                                  {Math.round(muscleVol).toLocaleString()} {displayUnit}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              {/* Sparkline */}
-                              <svg viewBox={`0 0 ${sw} ${sh}`} width={sw} height={sh} style={{ display: 'block' }}>
-                                <defs>
-                                  <linearGradient id={`sg-${item.muscle}`} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={color} stopOpacity={isActive ? 0.25 : 0.08} />
-                                    <stop offset="100%" stopColor={color} stopOpacity="0" />
-                                  </linearGradient>
-                                </defs>
-                                <path d={areaPath} fill={`url(#sg-${item.muscle})`} />
-                                <path d={sparkPath} fill="none" stroke={isActive ? color : 'rgba(255,255,255,0.18)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                {isActive && (
-                                  <circle cx={sx(sparkData.length - 1).toFixed(1)} cy={sy(sparkData[sparkData.length - 1]).toFixed(1)} r="2.5" fill={color} />
-                                )}
-                              </svg>
-                              {/* Trend */}
-                              <span className="text-[13px] font-bold w-5 text-right" style={{ color: trendColor }}>{trendIcon}</span>
-                            </div>
-                          </div>
-
-                          {/* Progress bar + set count */}
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
-                              <div
-                                className="h-full rounded-full transition-all duration-500"
-                                style={{ width: `${pct * 100}%`, background: isActive ? color : 'rgba(255,255,255,0.15)' }}
-                              />
-                            </div>
-                            <span className="text-[11px] font-bold tabular-nums w-14 text-right" style={{ color: isActive ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)' }}>
-                              {item.current} sets
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              {/* Exercise History radial chart */}
+              {user && <ExerciseRadialChart userId={user.id} exercises={exercises} weightUnit={displayUnit as WeightUnit} />}
             </>
           )}
 
