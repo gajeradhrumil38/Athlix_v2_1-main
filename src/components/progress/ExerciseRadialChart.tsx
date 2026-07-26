@@ -284,31 +284,61 @@ function renderArc(
     const name = seg.label.toUpperCase();
     const fit = fitCurvedLabel(name, cx, cy, labelRadius, midAngle, span, fontSizePx, fontSizePx - 2, 800);
     const style: React.CSSProperties = { opacity: revealed ? baseOpacity : 0, transition: `opacity 0.28s ease ${delay + 90}ms` };
+    const pct = Math.round((seg.volume / total) * 100);
     if (span >= 15 && fit.fits) {
       const chStyle: React.CSSProperties = { ...style, fontSize: fit.fontPx, fontWeight: 800 };
       fit.chars.forEach((c) => labels.push({ char: c.char, x: c.x, y: c.y, rot: c.rot, style: chStyle }));
-    } else {
-      const r1 = outer + 40;
+    } else if (pct >= 2) {
+      // Sub-2% slices get a color in the ring and count toward the total,
+      // but skip the leader label entirely — with real data (a dozen+
+      // muscle groups instead of the design reference's tidy demo set),
+      // labeling every sliver just adds clutter no one can read anyway.
+      const r1 = outer + 46; // pushed out further than the reference's +40 so a
+      // leader label never lands inside the radius an adjacent wedge's own
+      // in-wedge curved label occupies.
       const [x1, y1] = polar(cx, cy, r1, midAngle);
       const isBottomHalf = midAngle > 90 && midAngle < 270;
       const dxSign = isBottomHalf ? -1 : 1;
-      leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct: Math.round((seg.volume / total) * 100) });
+      leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct });
     }
   });
 
-  // Second pass: on each side (left/right), sort by natural vertical position
-  // and push overlapping labels apart with a minimum gap, so two narrow
-  // adjacent wedges never render overlapping leader-line labels.
+  // Second pass: on each side (left/right), resolve vertical overlap with a
+  // two-pass (forward, then backward) compression — a standard label-
+  // declutter technique. A single forward-only pass (push each label at
+  // least MIN_GAP below the previous, then clamp to the canvas edge) looks
+  // fine with 2-3 items, but once several small wedges cluster in one
+  // angular region — which real, uneven muscle-group data does constantly,
+  // unlike the reference's evenly-split demo — clamping alone collapses
+  // every item past the edge onto the SAME clamped position, rendering
+  // them as one illegible overlapping block. The backward pass afterward
+  // re-spaces everything from the bottom up so items compress toward each
+  // other instead of stacking on top of one another.
   const MIN_GAP = 15, TOP = 16, BOTTOM = 300 - 16;
   const leaders: LeaderVisual[] = [];
   (['left', 'right'] as const).forEach((side) => {
     const group = leaderCandidates.filter((c) => (side === 'right' ? c.dxSign > 0 : c.dxSign < 0)).sort((a, b) => a.naturalY - b.naturalY);
+    if (!group.length) return;
+
+    const forwardY: number[] = [];
     let prevY = -Infinity;
     group.forEach((c) => {
-      let finalY = Math.max(c.naturalY, prevY + MIN_GAP);
-      finalY = Math.min(finalY, BOTTOM);
-      finalY = Math.max(finalY, TOP);
-      prevY = finalY;
+      const y = Math.max(c.naturalY, prevY + MIN_GAP);
+      forwardY.push(y);
+      prevY = y;
+    });
+
+    const finalY: number[] = new Array(group.length);
+    let nextY = Infinity;
+    for (let i = group.length - 1; i >= 0; i--) {
+      const capped = i === group.length - 1 ? Math.min(forwardY[i], BOTTOM) : Math.min(forwardY[i], nextY - MIN_GAP);
+      finalY[i] = capped;
+      nextY = capped;
+    }
+    finalY.forEach((y, i) => { finalY[i] = Math.max(TOP, Math.min(BOTTOM, y)); });
+
+    group.forEach((c, i) => {
+      const y = finalY[i];
       const estWidth = c.text.length * 6.2 + 6;
       const SAFE_L = -45, SAFE_R = 350;
       let labelX = c.x1 + c.dxSign * 24;
@@ -317,8 +347,8 @@ function renderArc(
       const translateX = c.dxSign > 0 ? '0%' : '-100%';
       const lineEndX = labelX - c.dxSign * 12;
       const nubX = c.x1 + (lineEndX - c.x1) * 0.4;
-      const line = `M${c.x1},${c.y1} L${nubX},${c.y1} L${nubX},${finalY} L${lineEndX},${finalY}`;
-      leaders.push({ dotColor: c.dotColor, style: c.style, textAlign: c.dxSign > 0 ? 'left' : 'right', labelX, labelY: finalY, translateX, text: c.text, pct: c.pct, line });
+      const line = `M${c.x1},${c.y1} L${nubX},${c.y1} L${nubX},${y} L${lineEndX},${y}`;
+      leaders.push({ dotColor: c.dotColor, style: c.style, textAlign: c.dxSign > 0 ? 'left' : 'right', labelX, labelY: y, translateX, text: c.text, pct: c.pct, line });
     });
   });
   return { arcs, labels, leaders };
