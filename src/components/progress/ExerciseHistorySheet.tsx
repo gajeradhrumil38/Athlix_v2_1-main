@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
-import { X, Trophy } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, Trophy, Flame, Layers, Dumbbell } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseDateAtStartOfDay } from '../../lib/dates';
+import { haptics } from '../../lib/haptics';
 import type { LocalPersonalRecord } from '../../lib/supabaseData';
 
 interface ExerciseHistorySheetProps {
@@ -102,21 +104,48 @@ export const ExerciseHistorySheet: React.FC<ExerciseHistorySheetProps> = ({
   const weeksTracked = firstSessionDate ? Math.max(1, (now - firstSessionDate.getTime()) / (7 * 86_400_000)) : 1;
   const weeklyAverage = sessions.length / weeksTracked;
 
+  // Career totals — how much work has actually gone into this exercise,
+  // not just the recent-window stats above.
+  const totalSets = sessions.reduce((sum, s) => sum + s.sets.length, 0);
+  const totalVolume = sessions.reduce((sum, s) => sum + sessionVolume(s), 0);
+  const daysSinceLast = lastSession ? Math.round(daysAgo(lastSession.date)) : null;
+
   const trendLabel = trend === 'up' ? '↑ Improving' : trend === 'down' ? '↓ Declining' : trend === 'plateau' ? '→ Plateau' : null;
   const trendColor = trend === 'up' ? '#4ade80' : trend === 'down' ? '#f87171' : 'var(--text-muted)';
 
   return (
-    <div className="fixed inset-0 z-[210] flex items-end sm:items-center justify-center bg-black/60" onClick={onClose}>
-      <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-[210] flex items-end sm:items-center justify-center bg-black/60"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 24, scale: 0.98 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 320 }}
         className="w-full sm:max-w-md max-h-[88vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/10 bg-[linear-gradient(160deg,#16191F_0%,#111419_100%)] p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-4">
           <div>
             <p className="text-[17px] font-black text-white">{exerciseName}</p>
-            {muscleGroup && <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)] mt-0.5">{muscleGroup}</p>}
+            <div className="flex items-center gap-2 mt-0.5">
+              {muscleGroup && <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">{muscleGroup}</p>}
+              {daysSinceLast !== null && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/5 text-[var(--text-muted)]">
+                  {daysSinceLast === 0 ? 'Trained today' : daysSinceLast === 1 ? '1 day ago' : `${daysSinceLast} days ago`}
+                </span>
+              )}
+            </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8">
+          <button
+            onClick={() => { haptics.tick(); onClose(); }}
+            className="w-8 h-8 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 active:scale-90 transition-all duration-150 cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -130,8 +159,8 @@ export const ExerciseHistorySheet: React.FC<ExerciseHistorySheetProps> = ({
                 {(['weight', 'volume'] as const).map((v) => (
                   <button
                     key={v}
-                    onClick={() => setChartView(v)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.06em] transition-colors ${
+                    onClick={() => { haptics.tick(); setChartView(v); }}
+                    className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.06em] transition-all duration-150 cursor-pointer active:scale-95 ${
                       chartView === v ? 'bg-[var(--accent)] text-black' : 'text-[var(--text-muted)]'
                     }`}
                   >
@@ -213,9 +242,28 @@ export const ExerciseHistorySheet: React.FC<ExerciseHistorySheetProps> = ({
                 <p className="text-[16px] font-black text-white mt-1">{weeklyAverage.toFixed(1)}</p>
               </div>
             </div>
+
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)] mt-4 mb-2">Lifetime</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2 text-center">
+                <Flame className="w-3.5 h-3.5 mx-auto text-[var(--text-muted)]" />
+                <p className="text-[15px] font-black text-white mt-1">{sessions.length}</p>
+                <p className="text-[9px] uppercase tracking-[0.08em] text-[var(--text-muted)] mt-0.5">Sessions</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2 text-center">
+                <Layers className="w-3.5 h-3.5 mx-auto text-[var(--text-muted)]" />
+                <p className="text-[15px] font-black text-white mt-1">{totalSets}</p>
+                <p className="text-[9px] uppercase tracking-[0.08em] text-[var(--text-muted)] mt-0.5">Sets</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2 text-center">
+                <Dumbbell className="w-3.5 h-3.5 mx-auto text-[var(--text-muted)]" />
+                <p className="text-[15px] font-black text-white mt-1">{Math.round(totalVolume).toLocaleString()}</p>
+                <p className="text-[9px] uppercase tracking-[0.08em] text-[var(--text-muted)] mt-0.5">{weightUnit} lifted</p>
+              </div>
+            </div>
           </>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
