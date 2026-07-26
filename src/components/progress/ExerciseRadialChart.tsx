@@ -342,11 +342,25 @@ function renderArc(
     const finalY: number[] = new Array(group.length);
     let nextY = Infinity;
     for (let i = group.length - 1; i >= 0; i--) {
-      const capped = i === group.length - 1 ? Math.min(forwardY[i], BOTTOM) : Math.min(forwardY[i], nextY - MIN_GAP);
+      const capped = i === group.length - 1 ? forwardY[i] : Math.min(forwardY[i], nextY - MIN_GAP);
       finalY[i] = capped;
       nextY = capped;
     }
-    finalY.forEach((y, i) => { finalY[i] = Math.max(TOP, Math.min(BOTTOM, y)); });
+
+    // Verified with a standalone simulation (not guessed): clamping each
+    // item to [TOP, BOTTOM] independently here was the actual remaining
+    // bug — when several items' compressed Y all landed above TOP (a
+    // cluster of tiny wedges near the 12-o'clock seam), EVERY one of them
+    // clamped to the SAME TOP value, collapsing the spacing the two-pass
+    // compression above had just correctly established, and rendering as
+    // one illegible overlapping label. Shifting the whole already-spaced
+    // group rigidly into range — instead of clamping each Y on its own —
+    // keeps every item's relative spacing intact.
+    const minY = Math.min(...finalY), maxY = Math.max(...finalY);
+    let shift = 0;
+    if (minY < TOP) shift = TOP - minY;
+    else if (maxY > BOTTOM) shift = BOTTOM - maxY;
+    finalY.forEach((y, i) => { finalY[i] = y + shift; });
 
     group.forEach((c, i) => {
       const y = finalY[i];
