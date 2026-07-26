@@ -94,6 +94,19 @@ function fitCurvedLabel(
   return { ...result, fontPx, fits: result.total <= maxSpanDeg * 0.92 };
 }
 
+// Shrinks a leader label's font size (never the chart itself) until its
+// rendered text width fits within maxWidthPx, so a narrow phone screen
+// forces smaller label text instead of forcing a smaller pie.
+function fitLeaderLabel(text: string, maxWidthPx: number, maxFontPx: number, minFontPx: number, weight: number) {
+  let fontPx = maxFontPx;
+  let width = measureCtx(fontPx, weight).measureText(text).width;
+  while (width > maxWidthPx && fontPx > minFontPx) {
+    fontPx -= 0.5;
+    width = measureCtx(fontPx, weight).measureText(text).width;
+  }
+  return { fontPx, width };
+}
+
 // Smooth cubic-bezier path through points (Catmull-Rom -> Bezier), for a
 // minimal, non-jagged trend line.
 function smoothPath(pts: Array<{ x: number; y: number }>): string {
@@ -243,13 +256,14 @@ const muscleVolume = (m: { weeks: WeekBucket[] }) => m.weeks.reduce((s, w) => s 
 
 interface ArcVisual { path: string; fill: string; opacity: number; stroke: string; strokeWidth: number; onClick: (() => void) | null; style: React.CSSProperties; }
 interface LabelVisual { char: string; x: number; y: number; rot: number; style: React.CSSProperties; }
-interface LeaderVisual { dotColor: string; style: React.CSSProperties; textAlign: 'left' | 'right'; labelX: number; labelY: number; translateX: string; text: string; pct: number; line: string; }
+interface LeaderVisual { dotColor: string; style: React.CSSProperties; textAlign: 'left' | 'right'; labelX: number; labelY: number; translateX: string; text: string; pct: number; line: string; fontPx: number; }
 interface DividerVisual { path: string; opacity: number; }
 
 interface Segment { key: string; label: string; color: string; volume: number; isSelected: boolean; onClick: () => void; }
 
 function renderArc(
   segments: Segment[], cx: number, cy: number, inner: number, outer: number, gapDeg: number, revealed: boolean, fontSizePx: number,
+  maxLabelHalfWidth: number = 300,
 ): { arcs: ArcVisual[]; labels: LabelVisual[]; leaders: LeaderVisual[] } {
   const total = segments.reduce((s, x) => s + x.volume, 0) || 1;
   const availableDeg = 360 - gapDeg * segments.length;
@@ -257,7 +271,13 @@ function renderArc(
   let cursor = 0;
   const arcs: ArcVisual[] = [];
   const labels: LabelVisual[] = [];
-  const leaderCandidates: Array<{ x1: number; y1: number; naturalY: number; dxSign: number; dotColor: string; style: React.CSSProperties; text: string; pct: number }> = [];
+  const leaderCandidates: Array<{ x1: number; y1: number; naturalY: number; dxSign: number; dotColor: string; style: React.CSSProperties; text: string; pct: number; fontPx: number }> = [];
+  // How wide a leader label's text is allowed to be, given the fixed column
+  // it starts from and however much real screen width is actually available
+  // — the pie's own radius (`outer`) never changes here, only the label text
+  // shrinks to make room for itself on a narrow phone screen.
+  const COLUMN_X = outer + 32;
+  const allowedTextWidth = Math.max(28, maxLabelHalfWidth - COLUMN_X - 10);
 
   segments.forEach((seg, i) => {
     const span = (seg.volume / total) * availableDeg;
@@ -304,7 +324,8 @@ function renderArc(
       // "Shoulders" and "Triceps" — wedges just left of 12 o'clock — to the
       // right column, where their lines crossed over the wedges between them.
       const dxSign = x1 >= cx ? 1 : -1;
-      leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct });
+      const { fontPx } = fitLeaderLabel(`${seg.label} · ${pct}%`, allowedTextWidth, 11, 7, 800);
+      leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct, fontPx });
     }
   });
 
@@ -369,7 +390,6 @@ function renderArc(
     // outer edge — so a leader label can never land inside a neighboring
     // wedge's curved-text band in the first place, regardless of which
     // angle the tiny wedge happens to be at.
-    const COLUMN_X = outer + 32; // fixed horizontal distance from center (cx), same for every item on this side
     group.forEach((c, i) => {
       const y = finalY[i];
       const labelX = cx + c.dxSign * COLUMN_X;
@@ -377,7 +397,7 @@ function renderArc(
       const lineEndX = labelX - c.dxSign * 10;
       const nubX = c.x1 + (lineEndX - c.x1) * 0.5;
       const line = `M${c.x1},${c.y1} L${nubX},${c.y1} L${nubX},${y} L${lineEndX},${y}`;
-      leaders.push({ dotColor: c.dotColor, style: c.style, textAlign: c.dxSign > 0 ? 'left' : 'right', labelX, labelY: y, translateX, text: c.text, pct: c.pct, line });
+      leaders.push({ dotColor: c.dotColor, style: c.style, textAlign: c.dxSign > 0 ? 'left' : 'right', labelX, labelY: y, translateX, text: c.text, pct: c.pct, line, fontPx: c.fontPx });
     });
   });
   return { arcs, labels, leaders };
@@ -672,7 +692,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
     }
     if (path.length === 0) {
       const segments: Segment[] = muscleKeys.map((key) => ({ key, label: key, color: muscleColor(key), volume: muscleVolume(data[key]), isSelected: false, onClick: () => goTo([key]) }));
-      const r = renderArc(segments, cx, cy, 82, 140, 4, revealed, 9);
+      const r = renderArc(segments, cx, cy, 82, 140, 4, revealed, 9, wrapWidth / 2);
       return { outerArcs: r.arcs, outerLabels: r.labels, outerLeaders: r.leaders, innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
     }
     const m = data[path[0]];
@@ -760,22 +780,6 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   };
 
   const rings = buildRings();
-  // Outer-ring leader labels (small wedges' "Name · N%" text) extend well
-  // past the 300px ring box — measure how far with the same canvas API used
-  // for curved-label fitting, then shrink the whole chart (ring + labels
-  // together, via one CSS transform) just enough that nothing runs off the
-  // edge of a narrow phone screen. Never scales UP past 1 on wide screens.
-  let leaderHalfSpan = 150;
-  if (rings.outerLeaders.length) {
-    const ctx = measureCtx(11, 800);
-    rings.outerLeaders.forEach((ll) => {
-      const w = ctx.measureText(`${ll.text} · ${ll.pct}%`).width;
-      const edge = ll.textAlign === 'left' ? ll.labelX + w : ll.labelX - w;
-      leaderHalfSpan = Math.max(leaderHalfSpan, Math.abs(edge - 150));
-    });
-  }
-  const neededChartWidth = leaderHalfSpan * 2 + 12;
-  const chartScale = wrapWidth > 0 ? Math.min(1, wrapWidth / neededChartWidth) : 1;
   const volStuff = buildVolumeRows(data);
   const selected = buildSelected();
   const hasSelectedDay = path.length === 1 && !!selectedDay;
@@ -823,9 +827,8 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
       ) : (
         <>
           {/* Radial drill-down chart */}
-          <div ref={chartWrapRef} style={{ width: '100%', marginTop: 18 }}>
-          <div style={{ position: 'relative', width: 300, height: 300 * chartScale, margin: '0 auto' }}>
-          <div style={{ position: 'relative', width: 300, height: 300, transform: `scale(${chartScale})`, transformOrigin: 'top center' }}>
+          <div ref={chartWrapRef} style={{ width: '100%' }}>
+          <div style={{ position: 'relative', width: 300, height: 300, margin: '18px auto 0' }}>
             <svg width="300" height="300" viewBox="0 0 300 300" style={{ overflow: 'visible' }}>
               {rings.outerArcs.map((a, i) => (
                 <path key={`oa${i}`} d={a.path} fill={a.fill} opacity={a.opacity} stroke={a.stroke} strokeWidth={a.strokeWidth} onClick={a.onClick ?? undefined} style={a.style} />
@@ -846,7 +849,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
               ))}
               {rings.outerLeaders.map((ldl, i) => (
                 <div key={`old-${i}`} style={{ position: 'absolute', left: ldl.labelX, top: ldl.labelY, transform: `translate(${ldl.translateX}, -50%)`, textAlign: ldl.textAlign, ...ldl.style }}>
-                  <div style={{ color: ldl.dotColor, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1.15 }}>{ldl.text} · {ldl.pct}%</div>
+                  <div style={{ color: ldl.dotColor, fontSize: ldl.fontPx, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1.15 }}>{ldl.text} · {ldl.pct}%</div>
                 </div>
               ))}
               {rings.innerLabels.map((lb2, i) => (
@@ -889,7 +892,6 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
                 )}
               </div>
             </div>
-          </div>
           </div>
           </div>
           <p className="text-center text-[var(--text-muted)] text-[11px] mt-3.5">{chartHint}</p>
