@@ -258,11 +258,6 @@ function renderArc(
   const arcs: ArcVisual[] = [];
   const labels: LabelVisual[] = [];
   const leaderCandidates: Array<{ x1: number; y1: number; naturalY: number; dxSign: number; dotColor: string; style: React.CSSProperties; text: string; pct: number }> = [];
-  // Bounding box (with a little padding) around each curved in-wedge label,
-  // built from the actual measured positions of its characters — used below
-  // to keep leader labels from landing on top of a neighboring wedge's text.
-  type Box = { minX: number; maxX: number; minY: number; maxY: number };
-  const curvedBoxes: Box[] = [];
 
   segments.forEach((seg, i) => {
     const span = (seg.volume / total) * availableDeg;
@@ -292,20 +287,13 @@ function renderArc(
     const pct = Math.round((seg.volume / total) * 100);
     if (span >= 15 && fit.fits) {
       const chStyle: React.CSSProperties = { ...style, fontSize: fit.fontPx, fontWeight: 800 };
-      const pad = fit.fontPx * 0.7;
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      fit.chars.forEach((c) => {
-        labels.push({ char: c.char, x: c.x, y: c.y, rot: c.rot, style: chStyle });
-        minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x);
-        minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
-      });
-      if (fit.chars.length) curvedBoxes.push({ minX: minX - pad, maxX: maxX + pad, minY: minY - pad, maxY: maxY + pad });
+      fit.chars.forEach((c) => labels.push({ char: c.char, x: c.x, y: c.y, rot: c.rot, style: chStyle }));
     } else if (pct >= 2) {
       // Sub-2% slices get a color in the ring and count toward the total,
       // but skip the leader label entirely — with real data (a dozen+
       // muscle groups instead of the design reference's tidy demo set),
       // labeling every sliver just adds clutter no one can read anyway.
-      const r1 = outer + 52;
+      const r1 = outer + 8; // just outside the wedge's own edge — the line's start, not the label
       const [x1, y1] = polar(cx, cy, r1, midAngle);
       const isBottomHalf = midAngle > 90 && midAngle < 270;
       const dxSign = isBottomHalf ? -1 : 1;
@@ -362,39 +350,25 @@ function renderArc(
     else if (maxY > BOTTOM) shift = BOTTOM - maxY;
     finalY.forEach((y, i) => { finalY[i] = y + shift; });
 
+    // Fixed label column per side, following the classic labeled-donut
+    // pattern (github.com/dbuezas/9306799): every right-side label starts
+    // at the SAME x, every left-side label ends at the SAME x, rather than
+    // each floating at a distance derived from its own wedge's angle. This
+    // reads as a clean aligned list instead of a scattered ring of labels,
+    // and it has a structural side-effect that fixes the earlier overlap
+    // bug for good rather than reactively dodging it: curved in-wedge
+    // labels only ever live inside the ring's own labelRadius band, while
+    // this fixed column sits a fixed distance outside the ring's actual
+    // outer edge — so a leader label can never land inside a neighboring
+    // wedge's curved-text band in the first place, regardless of which
+    // angle the tiny wedge happens to be at.
+    const COLUMN_X = outer + 32; // fixed horizontal distance from center (cx), same for every item on this side
     group.forEach((c, i) => {
       const y = finalY[i];
-      const estWidth = c.text.length * 6.2 + 6;
-      const estHeight = 13;
-      const SAFE_L = -45, SAFE_R = 350;
-
-      // Third pass: even after vertical decluttering against OTHER leader
-      // labels, a seam-adjacent wedge's leader can still land inside a
-      // neighboring wedge's in-wedge curved-label box (they're resolved
-      // completely independently up to this point). Check this label's
-      // actual bounding box against every curved label's real measured
-      // box and, on overlap, push it further from the ring in its own
-      // outward direction — the same "detect a real intersection, then
-      // nudge" idea dedicated label-placement libraries (e.g. stirpie's
-      // RBush-based resolver) use, just without pulling in a spatial-index
-      // dependency for a handful of labels.
-      let pushOut = 0;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        const labelX = c.x1 + c.dxSign * (24 + pushOut);
-        const boxMinX = c.dxSign > 0 ? labelX : labelX - estWidth;
-        const boxMaxX = c.dxSign > 0 ? labelX + estWidth : labelX;
-        const boxMinY = y - estHeight / 2, boxMaxY = y + estHeight / 2;
-        const collides = curvedBoxes.some((b) => boxMinX < b.maxX && boxMaxX > b.minX && boxMinY < b.maxY && boxMaxY > b.minY);
-        if (!collides) break;
-        pushOut += 16;
-      }
-
-      let labelX = c.x1 + c.dxSign * (24 + pushOut);
-      if (c.dxSign > 0) labelX = Math.min(labelX, SAFE_R - estWidth);
-      else labelX = Math.max(labelX, SAFE_L + estWidth);
+      const labelX = cx + c.dxSign * COLUMN_X;
       const translateX = c.dxSign > 0 ? '0%' : '-100%';
-      const lineEndX = labelX - c.dxSign * 12;
-      const nubX = c.x1 + (lineEndX - c.x1) * 0.4;
+      const lineEndX = labelX - c.dxSign * 10;
+      const nubX = c.x1 + (lineEndX - c.x1) * 0.5;
       const line = `M${c.x1},${c.y1} L${nubX},${c.y1} L${nubX},${y} L${lineEndX},${y}`;
       leaders.push({ dotColor: c.dotColor, style: c.style, textAlign: c.dxSign > 0 ? 'left' : 'right', labelX, labelY: y, translateX, text: c.text, pct: c.pct, line });
     });
