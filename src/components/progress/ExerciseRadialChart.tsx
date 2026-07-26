@@ -305,7 +305,7 @@ function renderArc(
       // but skip the leader label entirely — with real data (a dozen+
       // muscle groups instead of the design reference's tidy demo set),
       // labeling every sliver just adds clutter no one can read anyway.
-      const r1 = outer + 40;
+      const r1 = outer + 52;
       const [x1, y1] = polar(cx, cy, r1, midAngle);
       const isBottomHalf = midAngle > 90 && midAngle < 270;
       const dxSign = isBottomHalf ? -1 : 1;
@@ -482,11 +482,22 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
     () => buildMonthData(allSessions, monthStart, monthEnd, personalRecords),
     [allSessions, personalRecords, monthStart.getTime(), monthEnd.getTime()],
   );
-  const muscleKeys = Object.keys(data);
+  // Largest-volume muscle first, all the way around. This isn't just
+  // cosmetic: dedicated label-placement tools (e.g. stirpie, which this
+  // component's leader-label collision handling is modeled on) explicitly
+  // require descending-sorted input, because it's what keeps similarly-
+  // sized — and similarly-labeled — wedges grouped together instead of a
+  // tiny sliver landing next to a mid-size wedge purely by chance of
+  // insertion order, which is what was putting leader labels for tiny
+  // wedges right on top of a neighbor's curved in-wedge text.
+  const muscleKeys = useMemo(
+    () => Object.keys(data).sort((a, b) => muscleVolume(data[b]) - muscleVolume(data[a])),
+    [data],
+  );
 
   const computeMuscleAngles = useCallback((d: MuscleData) => {
     const gapDeg = 4;
-    const keys = Object.keys(d);
+    const keys = Object.keys(d).sort((a, b) => muscleVolume(d[b]) - muscleVolume(d[a]));
     const total = keys.reduce((s, k) => s + muscleVolume(d[k]), 0) || 1;
     const availableDeg = 360 - gapDeg * keys.length;
     let cursor = 0;
