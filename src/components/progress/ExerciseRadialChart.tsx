@@ -295,8 +295,15 @@ function renderArc(
       // labeling every sliver just adds clutter no one can read anyway.
       const r1 = outer + 8; // just outside the wedge's own edge — the line's start, not the label
       const [x1, y1] = polar(cx, cy, r1, midAngle);
-      const isBottomHalf = midAngle > 90 && midAngle < 270;
-      const dxSign = isBottomHalf ? -1 : 1;
+      // Side must follow the wedge's actual position (x1 vs center), not a
+      // fixed top/bottom split — a wedge sitting just left of 12 o'clock has
+      // x1 < cx and belongs on the LEFT, even though it's near the "top".
+      // The previous `midAngle > 90 && midAngle < 270` test answered a
+      // different question (top vs bottom half) and got quadrants near the
+      // 12/6 o'clock seams backwards, which is exactly what sent both
+      // "Shoulders" and "Triceps" — wedges just left of 12 o'clock — to the
+      // right column, where their lines crossed over the wedges between them.
+      const dxSign = x1 >= cx ? 1 : -1;
       leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct });
     }
   });
