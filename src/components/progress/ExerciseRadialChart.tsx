@@ -455,10 +455,27 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   const [, setTick] = useState(0);
   const transitionRef = useRef<TransitionState | null>(null);
   const rafRef = useRef<number>();
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  // Starts generous (no shrink) until ResizeObserver reports the card's real
+  // width — on mobile that's often narrower than the 300px ring plus its
+  // leader labels, which is what was clipping "Shoulders · 3%" etc. off the
+  // edge of the screen.
+  const [wrapWidth, setWrapWidth] = useState<number>(() => (typeof window !== 'undefined' ? window.innerWidth : 400));
 
   useEffect(() => {
     getPersonalRecords(userId).then(setPersonalRecords).catch(() => setPersonalRecords([]));
   }, [userId]);
+
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setWrapWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setRevealed(true), 60);
@@ -743,6 +760,22 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   };
 
   const rings = buildRings();
+  // Outer-ring leader labels (small wedges' "Name · N%" text) extend well
+  // past the 300px ring box — measure how far with the same canvas API used
+  // for curved-label fitting, then shrink the whole chart (ring + labels
+  // together, via one CSS transform) just enough that nothing runs off the
+  // edge of a narrow phone screen. Never scales UP past 1 on wide screens.
+  let leaderHalfSpan = 150;
+  if (rings.outerLeaders.length) {
+    const ctx = measureCtx(11, 800);
+    rings.outerLeaders.forEach((ll) => {
+      const w = ctx.measureText(`${ll.text} · ${ll.pct}%`).width;
+      const edge = ll.textAlign === 'left' ? ll.labelX + w : ll.labelX - w;
+      leaderHalfSpan = Math.max(leaderHalfSpan, Math.abs(edge - 150));
+    });
+  }
+  const neededChartWidth = leaderHalfSpan * 2 + 12;
+  const chartScale = wrapWidth > 0 ? Math.min(1, wrapWidth / neededChartWidth) : 1;
   const volStuff = buildVolumeRows(data);
   const selected = buildSelected();
   const hasSelectedDay = path.length === 1 && !!selectedDay;
@@ -790,7 +823,9 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
       ) : (
         <>
           {/* Radial drill-down chart */}
-          <div style={{ position: 'relative', width: 300, height: 300, margin: '18px auto 0' }}>
+          <div ref={chartWrapRef} style={{ width: '100%', marginTop: 18 }}>
+          <div style={{ position: 'relative', width: 300, height: 300 * chartScale, margin: '0 auto' }}>
+          <div style={{ position: 'relative', width: 300, height: 300, transform: `scale(${chartScale})`, transformOrigin: 'top center' }}>
             <svg width="300" height="300" viewBox="0 0 300 300" style={{ overflow: 'visible' }}>
               {rings.outerArcs.map((a, i) => (
                 <path key={`oa${i}`} d={a.path} fill={a.fill} opacity={a.opacity} stroke={a.stroke} strokeWidth={a.strokeWidth} onClick={a.onClick ?? undefined} style={a.style} />
@@ -854,6 +889,8 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
                 )}
               </div>
             </div>
+          </div>
+          </div>
           </div>
           <p className="text-center text-[var(--text-muted)] text-[11px] mt-3.5">{chartHint}</p>
 
