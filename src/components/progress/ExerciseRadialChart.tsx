@@ -992,27 +992,27 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
               <div className="mt-3.5">
                 <div className="flex items-center justify-between gap-2.5 mb-2.5">
                   <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--text-muted)] whitespace-nowrap">Volume trend</div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => selectHistoryPoint(selected.historyIdx - 1)}
-                      disabled={selected.historyIdx <= 0}
-                      aria-label="Previous session"
-                      className="w-5 h-5 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 transition-colors disabled:opacity-25 disabled:pointer-events-none cursor-pointer"
-                    >
-                      <ChevronLeft className="w-3 h-3" />
-                    </button>
-                    <span className="text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">{selected.frequency}</span>
-                    <button
-                      onClick={() => selectHistoryPoint(selected.historyIdx + 1)}
-                      disabled={selected.historyIdx >= selected.historyLen - 1}
-                      aria-label="Next session"
-                      className="w-5 h-5 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 transition-colors disabled:opacity-25 disabled:pointer-events-none cursor-pointer"
-                    >
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
+                  <span className="text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">{selected.frequency}</span>
                 </div>
                 <div className="relative mx-auto" style={{ width: 300, height: 110 }}>
+                  <button
+                    onClick={() => selectHistoryPoint(selected.historyIdx - 1)}
+                    disabled={selected.historyIdx <= 0}
+                    aria-label="Previous session"
+                    className="absolute top-1/2 -translate-y-1/2 left-0 z-10 w-7 h-7 flex items-center justify-center rounded-full text-white/75 hover:text-white transition-all disabled:opacity-0 disabled:pointer-events-none cursor-pointer"
+                    style={{ background: 'rgba(10,12,16,0.55)', backdropFilter: 'blur(6px)' }}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => selectHistoryPoint(selected.historyIdx + 1)}
+                    disabled={selected.historyIdx >= selected.historyLen - 1}
+                    aria-label="Next session"
+                    className="absolute top-1/2 -translate-y-1/2 right-0 z-10 w-7 h-7 flex items-center justify-center rounded-full text-white/75 hover:text-white transition-all disabled:opacity-0 disabled:pointer-events-none cursor-pointer"
+                    style={{ background: 'rgba(10,12,16,0.55)', backdropFilter: 'blur(6px)' }}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                   <svg width="300" height="110" viewBox="0 0 300 110" style={{ position: 'absolute', inset: 0 }}>
                     <defs>
                       <linearGradient id="exRadialAreaGrad" x1="0" y1="0" x2="0" y2="1">
