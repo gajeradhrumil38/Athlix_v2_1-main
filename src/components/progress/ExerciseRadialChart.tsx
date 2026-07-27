@@ -239,6 +239,20 @@ const dayVolume = (d: DayEntry) => d.sets * d.reps * d.weight;
 const weekVolume = (w: WeekBucket) => w.days.reduce((s, d) => s + dayVolume(d), 0);
 const muscleVolume = (m: { weeks: WeekBucket[] }) => m.weeks.reduce((s, w) => s + weekVolume(w), 0);
 
+// A day/week/muscle's size for RING WEDGE PROPORTIONS specifically — never
+// used for the literal "N lbs" figures shown in the Monthly volume list or
+// PR displays, which stay strictly weight-based via dayVolume/weekVolume/
+// muscleVolume above. Reps-only / bodyweight work (planks, Russian twists,
+// most Core exercises) is saved with weight=0, so dayVolume is 0 for it —
+// arc angles are proportional to volume, so a 0-volume day/week/muscle got
+// a literal 0° slice and simply never rendered or appeared clickable, even
+// though it was genuinely logged. Falling back to a rep-count-based
+// workload (and finally a flat 1) guarantees anything actually logged this
+// month still claims a real, tappable share of the ring.
+const daySize = (d: DayEntry) => dayVolume(d) || d.sets * d.reps || d.sets || 1;
+const weekSize = (w: WeekBucket) => w.days.reduce((s, d) => s + daySize(d), 0);
+const muscleSize = (m: { weeks: WeekBucket[] }) => m.weeks.reduce((s, w) => s + weekSize(w), 0);
+
 // Muscle groups under this share of the month's total volume get bundled
 // into one "Other" wedge instead of each claiming a sliver of the ring.
 // This is what actually fixes the label-collision problem this component
@@ -256,33 +270,38 @@ const OTHER_THRESHOLD_PCT = 5;
 const OTHER_KEY = '__grouped_other__';
 const OTHER_COLOR = '#5b6478';
 
-interface TopSegment { key: string; label: string; color: string; volume: number; isOther: boolean; memberKeys: string[]; }
+interface TopSegment { key: string; label: string; color: string; volume: number; size: number; isOther: boolean; memberKeys: string[]; }
 
 // Single source of truth for "what wedges does the top-level ring have,
 // and in what order" — used both to actually render the ring and to
 // compute the drill-in/out transition's start/end angles, so the two can
 // never drift apart the way they would if each recomputed grouping/sorting
-// independently.
+// independently. Grouping/sorting/span all key off `size` (the fallback-
+// adjusted metric), not `volume` (real weight lifted) — otherwise an
+// all-bodyweight muscle group like Core-with-only-Russian-twists reads as
+// 0% and gets swept into "Other" or a 0° arc regardless of how much was
+// actually logged. `volume` is kept on each segment only as real-weight
+// context, not for sizing.
 function buildTopSegments(d: MuscleData): TopSegment[] {
-  const keys = Object.keys(d).sort((a, b) => muscleVolume(d[b]) - muscleVolume(d[a]));
-  const total = keys.reduce((s, k) => s + muscleVolume(d[k]), 0) || 1;
+  const keys = Object.keys(d).sort((a, b) => muscleSize(d[b]) - muscleSize(d[a]));
+  const totalSize = keys.reduce((s, k) => s + muscleSize(d[k]), 0) || 1;
   const major: TopSegment[] = [];
   const minor: TopSegment[] = [];
   keys.forEach((key) => {
-    const volume = muscleVolume(d[key]);
-    const pct = (volume / total) * 100;
-    const item: TopSegment = { key, label: key, color: muscleColor(key), volume, isOther: false, memberKeys: [key] };
+    const size = muscleSize(d[key]);
+    const pct = (size / totalSize) * 100;
+    const item: TopSegment = { key, label: key, color: muscleColor(key), volume: muscleVolume(d[key]), size, isOther: false, memberKeys: [key] };
     (pct < OTHER_THRESHOLD_PCT ? minor : major).push(item);
   });
   // A single small muscle group isn't worth hiding behind an "Other"
   // bucket of one — only bundle when there's actually clutter to solve.
-  if (minor.length < 2) return [...major, ...minor].sort((a, b) => b.volume - a.volume);
+  if (minor.length < 2) return [...major, ...minor].sort((a, b) => b.size - a.size);
   const other: TopSegment = {
     key: OTHER_KEY, label: 'Other', color: OTHER_COLOR,
-    volume: minor.reduce((s, m) => s + m.volume, 0), isOther: true,
-    memberKeys: minor.map((m) => m.key),
+    volume: minor.reduce((s, m) => s + m.volume, 0), size: minor.reduce((s, m) => s + m.size, 0),
+    isOther: true, memberKeys: minor.map((m) => m.key),
   };
-  return [...major, other].sort((a, b) => b.volume - a.volume);
+  return [...major, other].sort((a, b) => b.size - a.size);
 }
 
 /* ── Arc-segment rendering (pure, ported from the design reference) ─ */
@@ -464,10 +483,15 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   // reflect the exact same grouping.
   const topSegments = useMemo(() => buildTopSegments(data), [data]);
   const otherSegment = topSegments.find((s) => s.isOther);
-  const otherTotal = topSegments.reduce((s, x) => s + x.volume, 0) || 1;
+  // Matches the ring's own wedge proportions (size-based, with the same
+  // bodyweight/reps-only fallback) rather than literal weight-volume — a
+  // Core session that's all Russian twists has 0 weight-volume but still
+  // gets a real wedge in the ring, so its legend pill should say something
+  // more useful than a misleading "Core · 0%".
+  const otherTotal = topSegments.reduce((s, x) => s + x.size, 0) || 1;
   const otherMembers = useMemo(
     () => (otherSegment ? otherSegment.memberKeys
-      .map((key) => ({ key, color: muscleColor(key), pct: Math.round((muscleVolume(data[key]) / otherTotal) * 100) }))
+      .map((key) => ({ key, color: muscleColor(key), pct: Math.round((muscleSize(data[key]) / otherTotal) * 100) }))
       .sort((a, b) => b.pct - a.pct) : []),
     [otherSegment, data, otherTotal],
   );
@@ -482,11 +506,11 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   const computeMuscleAngles = useCallback((d: MuscleData) => {
     const gapDeg = 4;
     const segs = buildTopSegments(d);
-    const total = segs.reduce((s, x) => s + x.volume, 0) || 1;
+    const total = segs.reduce((s, x) => s + x.size, 0) || 1;
     const availableDeg = 360 - gapDeg * segs.length;
     let cursor = 0;
     return segs.map((seg) => {
-      const span = (seg.volume / total) * availableDeg;
+      const span = (seg.size / total) * availableDeg;
       const a0 = cursor + gapDeg / 2, a1 = a0 + span;
       cursor += span + gapDeg;
       return { key: seg.key, color: seg.color, a0, a1, memberKeys: seg.memberKeys };
@@ -497,19 +521,24 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
     const m = d[muscleKey];
     const base = muscleColor(muscleKey);
     const gapWeek = 6, gapDay = 3;
-    const totalVol = m.weeks.reduce((s, w) => s + weekVolume(w), 0) || 1;
+    // Sized by muscleSize's day/week fallback chain (weight-volume, else
+    // reps-based workload, else just sets) — same reasoning as
+    // buildTopSegments: a bodyweight-only day/week otherwise computes a
+    // literal 0° span and never renders or becomes tappable, even though
+    // it holds a genuinely logged session.
+    const totalVol = m.weeks.reduce((s, w) => s + weekSize(w), 0) || 1;
     const availableDeg = 360 - gapWeek * m.weeks.length;
     let cursor = 0, globalIdx = 0;
     const segs: Array<{ key: string; a0: number; a1: number; color: string }> = [];
     m.weeks.forEach((w) => {
-      const wVol = weekVolume(w) || 1;
+      const wVol = weekSize(w) || 1;
       const weekSpan = (wVol / totalVol) * availableDeg;
       const weekStart = cursor + gapWeek / 2;
       cursor += weekSpan + gapWeek;
       const dayAvailable = weekSpan - gapDay * w.days.length;
       let dCursor = weekStart;
       w.days.forEach((dd) => {
-        const dVol = dayVolume(dd);
+        const dVol = daySize(dd);
         const dSpan = (dVol / wVol) * dayAvailable;
         const dStart = dCursor + gapDay / 2;
         dCursor += dSpan + gapDay;
@@ -652,7 +681,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
     }
     if (path.length === 0) {
       const segments: Segment[] = topSegments.map((s) => ({
-        key: s.key, label: s.label, color: s.color, volume: s.volume,
+        key: s.key, label: s.label, color: s.color, volume: s.size,
         isSelected: s.isOther && otherHighlighted,
         onClick: s.isOther ? () => setOtherHighlighted((v) => !v) : () => goTo([s.key]),
       }));
