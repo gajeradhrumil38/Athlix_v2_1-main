@@ -811,6 +811,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
       chartLine: line, chartArea: area,
       chartDots: dots.map((dd) => ({ ...dd, r: dd.isActive ? 5 : 2.5, stroke: dd.isActive ? '#ffffff' : 'none' })),
       chartLabels: dots.map((dd) => ({ x: dd.x, y: dd.y, dateLabel: dd.dateLabel, value: Math.round(dd.value).toLocaleString(), bold: dd.isActive ? 800 : 600 })),
+      historyIdx: activeIdx, historyLen: n,
     };
   };
 
@@ -991,7 +992,25 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
               <div className="mt-3.5">
                 <div className="flex items-center justify-between gap-2.5 mb-2.5">
                   <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--text-muted)] whitespace-nowrap">Volume trend</div>
-                  <span className="text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">{selected.frequency}</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => selectHistoryPoint(selected.historyIdx - 1)}
+                      disabled={selected.historyIdx <= 0}
+                      aria-label="Previous session"
+                      className="w-5 h-5 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 transition-colors disabled:opacity-25 disabled:pointer-events-none cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <span className="text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">{selected.frequency}</span>
+                    <button
+                      onClick={() => selectHistoryPoint(selected.historyIdx + 1)}
+                      disabled={selected.historyIdx >= selected.historyLen - 1}
+                      aria-label="Next session"
+                      className="w-5 h-5 flex items-center justify-center rounded-full text-[var(--text-muted)] hover:text-white hover:bg-white/8 transition-colors disabled:opacity-25 disabled:pointer-events-none cursor-pointer"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
                 <div className="relative mx-auto" style={{ width: 300, height: 110 }}>
                   <svg width="300" height="110" viewBox="0 0 300 110" style={{ position: 'absolute', inset: 0 }}>
@@ -1006,6 +1025,12 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
                     {selected.chartDots.map((cd, i) => (
                       <React.Fragment key={i}>
                         <circle cx={cd.x} cy={cd.y} r={10} fill="transparent" onClick={cd.onClick} style={{ cursor: 'pointer' }} />
+                        {cd.isActive && (
+                          <circle cx={cd.x} cy={cd.y} r={cd.r} fill="none" stroke={selected.color} strokeWidth={2} opacity={0.6}>
+                            <animate attributeName="r" values={`${cd.r};${cd.r + 7};${cd.r}`} dur="1.8s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.6;0;0.6" dur="1.8s" repeatCount="indefinite" />
+                          </circle>
+                        )}
                         <circle cx={cd.x} cy={cd.y} r={cd.r} fill={selected.color} stroke={cd.stroke} strokeWidth={2} onClick={cd.onClick} style={{ cursor: 'pointer' }} />
                       </React.Fragment>
                     ))}
