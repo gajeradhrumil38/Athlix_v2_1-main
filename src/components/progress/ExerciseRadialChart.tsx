@@ -281,7 +281,7 @@ function renderArc(
   // just past the ring's own edge) reclaims that room; font-size shrinking
   // (below) then only has to cover the remaining, smaller gap.
   const MIN_TEXT_ALLOWANCE = 34;
-  const COLUMN_X = Math.max(outer + 10, Math.min(outer + 32, maxLabelHalfWidth - MIN_TEXT_ALLOWANCE - 10));
+  const COLUMN_X = Math.max(outer + 10, Math.min(outer + 20, maxLabelHalfWidth - MIN_TEXT_ALLOWANCE - 10));
   const allowedTextWidth = Math.max(24, maxLabelHalfWidth - COLUMN_X - 10);
 
   segments.forEach((seg, i) => {
@@ -329,7 +329,7 @@ function renderArc(
       // "Shoulders" and "Triceps" — wedges just left of 12 o'clock — to the
       // right column, where their lines crossed over the wedges between them.
       const dxSign = x1 >= cx ? 1 : -1;
-      const { fontPx } = fitLeaderLabel(`${seg.label} · ${pct}%`, allowedTextWidth, 11, 7, 800);
+      const { fontPx } = fitLeaderLabel(`${seg.label} · ${pct}`, allowedTextWidth, 13, 9, 800);
       leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct, fontPx });
     }
   });
@@ -854,7 +854,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
               ))}
               {rings.outerLeaders.map((ldl, i) => (
                 <div key={`old-${i}`} style={{ position: 'absolute', left: ldl.labelX, top: ldl.labelY, transform: `translate(${ldl.translateX}, -50%)`, textAlign: ldl.textAlign, ...ldl.style }}>
-                  <div style={{ color: ldl.dotColor, fontSize: ldl.fontPx, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1.15 }}>{ldl.text} · {ldl.pct}%</div>
+                  <div style={{ color: ldl.dotColor, fontSize: ldl.fontPx, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1.15 }}>{ldl.text} · {ldl.pct}</div>
                 </div>
               ))}
               {rings.innerLabels.map((lb2, i) => (
