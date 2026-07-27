@@ -103,8 +103,9 @@ const PlanSetRow: React.FC<{
   index: number;
   set: PlannedSet;
   weightUnit: string;
+  isRepsOnly: boolean;
   onOpenDial: (field: 'weight' | 'reps') => void;
-}> = ({ index, set, weightUnit, onOpenDial }) => (
+}> = ({ index, set, weightUnit, isRepsOnly, onOpenDial }) => (
   <div
     className="relative overflow-hidden rounded-2xl border mx-4"
     style={{ background: 'var(--bg-base)', borderColor: 'var(--border)' }}
@@ -117,16 +118,19 @@ const PlanSetRow: React.FC<{
       >
         Set {index}
       </div>
-      {(set.weight > 0 || set.reps > 0) && (
+      {((!isRepsOnly && set.weight > 0) || set.reps > 0) && (
         <span className="ml-2 text-[10px] font-medium tabular-nums" style={{ color: 'var(--text-muted)' }}>
-          {set.weight > 0 ? `${set.weight}${weightUnit}` : ''}
-          {set.weight > 0 && set.reps > 0 ? ' × ' : ''}
+          {!isRepsOnly && set.weight > 0 ? `${set.weight}${weightUnit}` : ''}
+          {!isRepsOnly && set.weight > 0 && set.reps > 0 ? ' × ' : ''}
           {set.reps > 0 ? `${set.reps} reps` : ''}
         </span>
       )}
     </div>
-    <div className="grid grid-cols-2 gap-2 px-3 pb-3 pl-4">
-      <ValueBox label={weightUnit} value={set.weight} onTap={() => onOpenDial('weight')} />
+    {/* Reps-only exercises (bodyweight moves like planks, Russian twists)
+        never show an editable weight box — the dial let a plain scroll drift
+        into a stray large "weight" that then got saved as real set data. */}
+    <div className={`grid gap-2 px-3 pb-3 pl-4 ${isRepsOnly ? 'grid-cols-1' : 'grid-cols-2'}`}>
+      {!isRepsOnly && <ValueBox label={weightUnit} value={set.weight} onTap={() => onOpenDial('weight')} />}
       <ValueBox label="reps" value={set.reps} onTap={() => onOpenDial('reps')} />
     </div>
   </div>
@@ -142,6 +146,8 @@ const PlanExerciseCard: React.FC<{
   onOpenDial: (setIdx: number, field: 'weight' | 'reps') => void;
 }> = ({ ex, weightUnit, isWorkoutOnly, onChange, onRemove, onOpenDial }) => {
   const color = muscleColor(ex.muscleGroup);
+  const { overrides: typeOverrides } = useExerciseOverrides();
+  const isRepsOnly = resolveEffectiveInputType(ex.name, typeOverrides) === 'reps_only';
   const [confirmRemoveIdx, setConfirmRemoveIdx] = useState<number | null>(null);
 
   const addSet = () => {
@@ -193,7 +199,7 @@ const PlanExerciseCard: React.FC<{
       <div className="flex flex-col gap-2 pb-2">
         {ex.sets.map((s, i) => (
           <React.Fragment key={i}>
-            <PlanSetRow index={i + 1} set={s} weightUnit={weightUnit} onOpenDial={(field) => onOpenDial(i, field)} />
+            <PlanSetRow index={i + 1} set={s} weightUnit={weightUnit} isRepsOnly={isRepsOnly} onOpenDial={(field) => onOpenDial(i, field)} />
             <SetSeparator onCopy={() => copySet(i)} onRemove={() => setConfirmRemoveIdx(i)} />
           </React.Fragment>
         ))}
@@ -450,6 +456,15 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
       sets = Array.from({ length: n }, () => ({ weight: w, reps: r }));
     }
 
+    // Zero out any weight a reps-only exercise inherited from history/last-
+    // session seeding — a bodyweight move's "last time" data shouldn't carry
+    // a weight figure into a fresh plan (and if it's ever legitimately
+    // wanted, the missing weight box will simply be added back once the
+    // exercise is reclassified, not silently reappear with a stale number).
+    if (resolveEffectiveInputType(ex.name, typeOverrides) === 'reps_only') {
+      sets = sets.map((s) => ({ ...s, weight: 0 }));
+    }
+
     const newEx: PlannedExercise = {
       id: createId(),
       name: ex.name,
@@ -487,7 +502,9 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
             muscle_group: ex.muscleGroup,
             default_sets: ex.sets.length,
             default_reps: Math.max(1, Math.round(ex.sets.reduce((s, r) => s + r.reps, 0) / ex.sets.length)),
-            default_weight: Math.round(ex.sets.reduce((s, r) => s + r.weight, 0) / ex.sets.length),
+            default_weight: resolveEffectiveInputType(ex.name, typeOverrides) === 'reps_only'
+              ? 0
+              : Math.round(ex.sets.reduce((s, r) => s + r.weight, 0) / ex.sets.length),
             exercise_db_id: ex.exercise_db_id ?? null,
             order_index: i,
           })),
@@ -499,19 +516,25 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
       setSaving(false);
     }
 
-    const workoutExercises: ExerciseEntry[] = exercises.map((ex) => ({
-      id: createId(),
-      name: ex.name,
-      muscleGroup: ex.muscleGroup,
-      exercise_db_id: ex.exercise_db_id,
-      sets: ex.sets.map((s) => ({
+    const workoutExercises: ExerciseEntry[] = exercises.map((ex) => {
+      const repsOnly = resolveEffectiveInputType(ex.name, typeOverrides) === 'reps_only';
+      return {
         id: createId(),
-        weight: s.weight || null,
-        reps: s.reps || null,
-        done: false,
-        ...seedPlannedTargets(ex.name, s.weight || 0, s.reps || 0),
-      })) as ExerciseEntry['sets'],
-    }));
+        name: ex.name,
+        muscleGroup: ex.muscleGroup,
+        exercise_db_id: ex.exercise_db_id,
+        sets: ex.sets.map((s) => {
+          const weight = repsOnly ? 0 : s.weight;
+          return {
+            id: createId(),
+            weight: weight || null,
+            reps: s.reps || null,
+            done: false,
+            ...seedPlannedTargets(ex.name, weight || 0, s.reps || 0),
+          };
+        }) as ExerciseEntry['sets'],
+      };
+    });
 
     onStartPlan(workoutExercises, planTitle);
   };
@@ -567,7 +590,10 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
       muscleGroup: te.muscle_group || 'Core',
       exercise_db_id: te.exercise_db_id || undefined,
       sets: Array.from({ length: te.default_sets || 3 }, () => ({
-        weight: te.default_weight || 0,
+        // A saved template's default_weight can be stale for a reps-only
+        // exercise (e.g. from before it was reclassified, or from this
+        // exact bug pre-fix) — never let a loaded plan reintroduce one.
+        weight: resolveEffectiveInputType(te.name, typeOverrides) === 'reps_only' ? 0 : te.default_weight || 0,
         reps: te.default_reps || 10,
       })),
     }));
@@ -1002,7 +1028,7 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
         <DialPicker
           title={dialState.field === 'weight' ? 'Weight' : 'Reps'}
           fieldKind={dialState.field}
-          inputType="weight_reps"
+          inputType={dialExercise ? resolveEffectiveInputType(dialExercise.name, typeOverrides) : 'weight_reps'}
           initialValue={dialState.field === 'weight' ? dialSet.weight : dialSet.reps}
           weightUnit="lbs"
           onClose={() => setDialState(null)}
