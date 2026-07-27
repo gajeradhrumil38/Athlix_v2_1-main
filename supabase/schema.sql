@@ -273,14 +273,29 @@ INSERT INTO public.exercise_library (name, muscle_group, is_custom) VALUES
 ('Treadmill', 'Cardio', false), ('Cycling', 'Cardio', false), ('Rowing Machine', 'Cardio', false), ('Stair Climber', 'Cardio', false), ('Jump Rope', 'Cardio', false), ('HIIT', 'Cardio', false), ('Battle Ropes', 'Cardio', false), ('Swimming', 'Cardio', false), ('Elliptical', 'Cardio', false);
 
 -- Triggers for automatic profile creation
+-- SET search_path pins this SECURITY DEFINER function against schema-
+-- shadowing privilege escalation; EXECUTE is revoked from anon/authenticated
+-- since it's only ever meant to fire via the trigger below, never called
+-- directly through /rest/v1/rpc/handle_new_user.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   INSERT INTO public.profiles (id, full_name, unit_preference, body_weight_unit)
   VALUES (new.id, new.raw_user_meta_data->>'full_name', 'lbs', 'lbs');
   RETURN new;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- Revoking from anon/authenticated alone isn't enough: CREATE OR REPLACE
+-- resets a function's grants to Postgres's default (EXECUTE TO PUBLIC),
+-- and a PUBLIC grant applies to every role regardless of individual
+-- REVOKEs. PUBLIC has to be revoked explicitly too.
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM anon, authenticated;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
@@ -708,6 +723,111 @@ BEGIN
   END LOOP;
 
   RETURN v_workout_id;
+END;
+$$;
+
+-- Atomically replaces a workout's exercise/set rows (used by Calendar.tsx's
+-- set editor and its "merge workouts" feature). Previously done client-side
+-- as a DELETE followed by a separate, possibly-chunked INSERT with no
+-- transaction tying them together — a failure between the two left the
+-- workout with its old sets gone and none of the new ones saved (confirmed
+-- live: 31 production workouts ended up with zero exercises this way).
+-- Running both inside one PL/pgSQL function body gives them Postgres's
+-- implicit single-transaction guarantee instead.
+CREATE OR REPLACE FUNCTION public.update_workout_sets(
+  p_workout_id UUID,
+  p_exercises JSONB
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID := auth.uid();
+  v_owned BOOLEAN;
+  v_exercise JSONB;
+  v_set JSONB;
+  v_order_index INTEGER := 0;
+  v_exercise_name TEXT;
+  v_exercise_muscle_group TEXT;
+  v_exercise_db_id TEXT;
+  v_reps INTEGER;
+  v_weight DOUBLE PRECISION;
+  v_unit TEXT;
+  v_muscle_groups TEXT[];
+  v_any_set BOOLEAN := false;
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  SELECT EXISTS(
+    SELECT 1 FROM public.workouts WHERE id = p_workout_id AND user_id = v_user_id
+  ) INTO v_owned;
+  IF NOT v_owned THEN
+    RAISE EXCEPTION 'Workout not found';
+  END IF;
+
+  IF p_exercises IS NULL OR jsonb_typeof(p_exercises) <> 'array' OR jsonb_array_length(p_exercises) = 0 THEN
+    RAISE EXCEPTION 'At least one exercise is required';
+  END IF;
+
+  SELECT COALESCE(array_agg(DISTINCT muscle_group), ARRAY[]::TEXT[])
+  INTO v_muscle_groups
+  FROM (
+    SELECT NULLIF(btrim(item->>'muscle_group'), '') AS muscle_group
+    FROM jsonb_array_elements(p_exercises) AS item
+  ) grouped
+  WHERE muscle_group IS NOT NULL;
+
+  DELETE FROM public.exercises WHERE workout_id = p_workout_id;
+
+  FOR v_exercise IN
+    SELECT value FROM jsonb_array_elements(p_exercises)
+  LOOP
+    v_exercise_name := NULLIF(btrim(v_exercise->>'name'), '');
+    v_exercise_muscle_group := NULLIF(btrim(v_exercise->>'muscle_group'), '');
+    v_exercise_db_id := NULLIF(v_exercise->>'exercise_db_id', '');
+
+    IF v_exercise_name IS NULL THEN
+      RAISE EXCEPTION 'Exercise name is required';
+    END IF;
+
+    FOR v_set IN
+      SELECT value FROM jsonb_array_elements(COALESCE(v_exercise->'completed_sets', '[]'::jsonb))
+    LOOP
+      v_reps := GREATEST(COALESCE((v_set->>'reps')::INTEGER, 0), 0);
+      v_weight := GREATEST(COALESCE((v_set->>'weight')::DOUBLE PRECISION, 0), 0);
+      v_unit := lower(COALESCE(NULLIF(v_set->>'unit', ''), 'kg'));
+
+      IF v_unit NOT IN ('kg', 'lbs', 'km', 'mi') THEN
+        v_unit := 'kg';
+      END IF;
+
+      IF v_reps <= 0 AND v_weight <= 0 THEN
+        CONTINUE;
+      END IF;
+
+      INSERT INTO public.exercises (
+        workout_id, name, muscle_group, sets, reps, weight, unit, order_index, exercise_db_id
+      )
+      VALUES (
+        p_workout_id, v_exercise_name, v_exercise_muscle_group, 1, v_reps, v_weight, v_unit, v_order_index, v_exercise_db_id
+      );
+
+      v_order_index := v_order_index + 1;
+      v_any_set := true;
+    END LOOP;
+  END LOOP;
+
+  IF NOT v_any_set THEN
+    RAISE EXCEPTION 'Keep at least one set, or delete the workout instead.';
+  END IF;
+
+  UPDATE public.workouts
+  SET muscle_groups = v_muscle_groups
+  WHERE id = p_workout_id AND user_id = v_user_id;
 END;
 $$;
 

@@ -1821,16 +1821,6 @@ export const updateWorkoutSets = async (
     return { exercises: res.exercises, muscle_groups: res.workout.muscle_groups || [] };
   }
 
-  // Ownership guard
-  const { data: owned, error: ownErr } = await supabase
-    .from('workouts')
-    .select('id')
-    .eq('id', workoutId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (ownErr) throw normalizeError(ownErr, 'Failed to verify workout.');
-  if (!owned) throw new Error('Workout not found.');
-
   const valid = exercises
     .map((ex) => ({
       ...ex,
@@ -1842,42 +1832,29 @@ export const updateWorkoutSets = async (
 
   if (valid.length === 0) throw new Error('Keep at least one set, or delete the workout instead.');
 
-  // Build the replacement rows
-  const rows: RawRecord[] = [];
-  let order = 0;
-  valid.forEach((ex) => {
-    ex.completed_sets.forEach((set) => {
-      rows.push({
-        id: createId(),
-        workout_id: workoutId,
-        name: ex.name,
-        muscle_group: ex.muscle_group || null,
-        sets: 1,
-        reps: set.reps,
-        weight: set.weight || 0,
-        unit: set.unit || 'lbs',
-        order_index: order++,
-        exercise_db_id: ex.exercise_db_id || null,
-      });
-    });
+  // Replace old sets with new ones via a single RPC (see migration
+  // 20260727000001_update_workout_sets_atomic.sql) instead of a client-side
+  // delete-then-insert — that sequence was two separate network calls with
+  // no transaction tying them together, so a failure between them (a
+  // dropped connection, a bad row partway through a chunked insert) left
+  // the workout with its old sets deleted and none of the new ones saved.
+  // Confirmed live: 31 workouts in production had exactly this — a title
+  // and date with zero exercises attached.
+  const { error: rpcError } = await supabase.rpc('update_workout_sets', {
+    p_workout_id: workoutId,
+    p_exercises: valid,
   });
-
-  // Replace: delete old set rows, insert new
-  const { error: delErr } = await supabase.from('exercises').delete().eq('workout_id', workoutId);
-  if (delErr) throw normalizeError(delErr, 'Failed to update workout sets.');
-
-  await insertRows('exercises', rows);
+  if (rpcError) throw normalizeError(rpcError, 'Failed to update workout sets.');
   invalidateExerciseRowsCache();
 
-  const muscle_groups = Array.from(new Set(valid.map((ex) => ex.muscle_group).filter(Boolean) as string[]));
-  const { error: wErr } = await supabase
-    .from('workouts')
-    .update({ muscle_groups })
-    .eq('id', workoutId)
-    .eq('user_id', userId);
-  if (wErr) throw normalizeError(wErr, 'Sets saved, but failed to update the workout summary.');
+  const [{ data: freshExercises, error: exErr }, { data: workoutRow, error: wErr }] = await Promise.all([
+    supabase.from('exercises').select('*').eq('workout_id', workoutId).order('order_index', { ascending: true }),
+    supabase.from('workouts').select('muscle_groups').eq('id', workoutId).maybeSingle(),
+  ]);
+  if (exErr) throw normalizeError(exErr, 'Sets saved, but failed to reload them.');
+  if (wErr) throw normalizeError(wErr, 'Sets saved, but failed to reload the workout summary.');
 
-  return { exercises: rows as unknown as LocalExercise[], muscle_groups };
+  return { exercises: (freshExercises || []) as unknown as LocalExercise[], muscle_groups: workoutRow?.muscle_groups || [] };
 };
 
 /** Rename a workout session. Trims the new title; no-ops if blank or unchanged. */
