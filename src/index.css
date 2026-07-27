@@ -243,6 +243,15 @@
     -webkit-backdrop-filter: blur(50px) saturate(2.0) brightness(1.04);
   }
 
+  /* Fixed mobile top header (Layout.tsx) — was referenced but never defined,
+     leaving the header fully transparent (only its 1px bottom border was
+     visible) so scrolled-under page content showed straight through it. */
+  .lg-nav {
+    background: var(--lg-nav-bg);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  }
+
   /* "Clear" glass — lighter variant for nested overlays, popovers, tooltips */
   .lg-clear {
     background: rgba(255, 255, 255, 0.04);

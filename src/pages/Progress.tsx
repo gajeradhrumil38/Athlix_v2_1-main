@@ -808,7 +808,7 @@ export const Progress: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-28 md:pb-10">
       {/* ── Sticky Tab Nav ─────────────────────────────────── */}
-      <div className="sticky top-0 z-20" style={{ background: 'var(--bg-base)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="sticky top-[calc(54px+env(safe-area-inset-top))] md:top-0 z-20" style={{ background: 'var(--bg-base)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[var(--bg-elevated)] border border-white/8 relative">
             {TABS.map((tab) => {
