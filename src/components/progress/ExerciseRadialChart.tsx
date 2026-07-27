@@ -261,20 +261,33 @@ const muscleSize = (m: { weeks: WeekBucket[] }) => m.weeks.reduce((s, w) => s + 
 // their own curved label (same room constraint as the top-level ring) —
 // this always-visible list is what makes every exercise identifiable
 // regardless of how thin its wedge ended up.
-interface ExerciseRow { name: string; sets: number; size: number; latestKey: string; }
-function buildExerciseRows(m: { weeks: WeekBucket[] }): ExerciseRow[] {
+interface ExerciseRow { name: string; sets: number; size: number; pct: number; color: string; latestKey: string; }
+function buildExerciseRows(m: { weeks: WeekBucket[] }, baseColor: string): ExerciseRow[] {
   const byName = new Map<string, DayEntry[]>();
   m.weeks.forEach((w) => w.days.forEach((d) => {
     if (!byName.has(d.name)) byName.set(d.name, []);
     byName.get(d.name)!.push(d);
   }));
-  const rows: ExerciseRow[] = Array.from(byName.entries()).map(([name, entries]) => {
-    const sets = entries.reduce((s, d) => s + d.sets, 0);
-    const size = entries.reduce((s, d) => s + daySize(d), 0);
-    const latest = entries.reduce((a, b) => (a.date > b.date ? a : b));
-    return { name, sets, size, latestKey: latest.key };
-  });
-  return rows.sort((a, b) => b.size - a.size);
+  const sorted = Array.from(byName.entries())
+    .map(([name, entries]) => {
+      const sets = entries.reduce((s, d) => s + d.sets, 0);
+      const size = entries.reduce((s, d) => s + daySize(d), 0);
+      const latest = entries.reduce((a, b) => (a.date > b.date ? a : b));
+      return { name, sets, size, latestKey: latest.key };
+    })
+    .sort((a, b) => b.size - a.size);
+  const maxSize = Math.max(...sorted.map((r) => r.size), 1);
+  // A distinct shade per exercise (same cycling technique renderDaySegments
+  // uses for its wedges) plus a relative-to-largest bar underneath each
+  // name, matching the Monthly volume list's look below this — a flat list
+  // of identically-colored, bar-less rows read as monotonous, especially
+  // for an all-reps-only muscle like Core where every row was the same
+  // accent dot with no sense of which exercise actually dominated.
+  return sorted.map((r, i) => ({
+    ...r,
+    pct: Math.round((r.size / maxSize) * 100),
+    color: shade(baseColor, SHADE_STEPS[i % SHADE_STEPS.length]),
+  }));
 }
 
 // Muscle groups under this share of the month's total volume get bundled
@@ -798,7 +811,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
 
   const rings = buildRings();
   const volStuff = buildVolumeRows(data);
-  const exerciseRows = path.length === 1 && data[path[0]] ? buildExerciseRows(data[path[0]]) : [];
+  const exerciseRows = path.length === 1 && data[path[0]] ? buildExerciseRows(data[path[0]], muscleColor(path[0])) : [];
   const selected = buildSelected();
   const hasSelectedDay = path.length === 1 && !!selectedDay;
   const restHub = computeHubStats(data, path[0]);
@@ -1018,12 +1031,17 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
                     <button
                       key={r.name}
                       onClick={() => selectDay(r.latestKey)}
-                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer text-left"
+                      className="w-full flex flex-col gap-2 px-3 py-2.5 rounded-xl cursor-pointer text-left"
                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
                     >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: muscleColor(path[0]) }} />
-                      <span className="flex-1 min-w-0 text-[13px] font-semibold text-white truncate">{r.name}</span>
-                      <span className="text-[11px] font-bold text-[var(--text-muted)] flex-shrink-0">{r.sets} sets</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.color }} />
+                        <span className="flex-1 min-w-0 text-[13px] font-semibold text-white truncate">{r.name}</span>
+                        <span className="text-[11px] font-bold text-[var(--text-muted)] flex-shrink-0">{r.sets} sets</span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden ml-[18px]" style={{ background: '#1a2030' }}>
+                        <div className="h-full rounded-full" style={{ width: `${r.pct}%`, background: r.color }} />
+                      </div>
                     </button>
                   ))}
                 </div>
