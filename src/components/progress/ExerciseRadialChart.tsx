@@ -253,6 +253,30 @@ const daySize = (d: DayEntry) => dayVolume(d) || d.sets * d.reps || d.sets || 1;
 const weekSize = (w: WeekBucket) => w.days.reduce((s, d) => s + daySize(d), 0);
 const muscleSize = (m: { weeks: WeekBucket[] }) => m.weeks.reduce((s, w) => s + weekSize(w), 0);
 
+// A muscle's individual exercises, one row per distinct name (not per
+// session — the same exercise done in three different workouts this month
+// is one row with 3 sessions folded in). The drilled-in ring shows every
+// session as its own wedge, but a muscle worked with many different
+// exercises produces many thin wedges most of which are too small to carry
+// their own curved label (same room constraint as the top-level ring) —
+// this always-visible list is what makes every exercise identifiable
+// regardless of how thin its wedge ended up.
+interface ExerciseRow { name: string; sets: number; size: number; latestKey: string; }
+function buildExerciseRows(m: { weeks: WeekBucket[] }): ExerciseRow[] {
+  const byName = new Map<string, DayEntry[]>();
+  m.weeks.forEach((w) => w.days.forEach((d) => {
+    if (!byName.has(d.name)) byName.set(d.name, []);
+    byName.get(d.name)!.push(d);
+  }));
+  const rows: ExerciseRow[] = Array.from(byName.entries()).map(([name, entries]) => {
+    const sets = entries.reduce((s, d) => s + d.sets, 0);
+    const size = entries.reduce((s, d) => s + daySize(d), 0);
+    const latest = entries.reduce((a, b) => (a.date > b.date ? a : b));
+    return { name, sets, size, latestKey: latest.key };
+  });
+  return rows.sort((a, b) => b.size - a.size);
+}
+
 // Muscle groups under this share of the month's total volume get bundled
 // into one "Other" wedge instead of each claiming a sliver of the ring.
 // This is what actually fixes the label-collision problem this component
@@ -774,6 +798,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
 
   const rings = buildRings();
   const volStuff = buildVolumeRows(data);
+  const exerciseRows = path.length === 1 && data[path[0]] ? buildExerciseRows(data[path[0]]) : [];
   const selected = buildSelected();
   const hasSelectedDay = path.length === 1 && !!selectedDay;
   const restHub = computeHubStats(data, path[0]);
@@ -979,8 +1004,30 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
               </div>
             </div>
           ) : path.length === 1 ? (
-            <div className="rounded-2xl border border-dashed border-white/[0.08] p-5 text-center text-[13px] text-[var(--text-muted)] mt-4">
-              Tap a workout segment to see set-by-set detail.
+            <div className="mt-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)] mb-2">
+                {path[0]} exercises this month
+              </p>
+              {exerciseRows.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/[0.08] p-5 text-center text-[13px] text-[var(--text-muted)]">
+                  Tap a workout segment to see set-by-set detail.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {exerciseRows.map((r) => (
+                    <button
+                      key={r.name}
+                      onClick={() => selectDay(r.latestKey)}
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer text-left"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                    >
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: muscleColor(path[0]) }} />
+                      <span className="flex-1 min-w-0 text-[13px] font-semibold text-white truncate">{r.name}</span>
+                      <span className="text-[11px] font-bold text-[var(--text-muted)] flex-shrink-0">{r.sets} sets</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
 
