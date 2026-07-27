@@ -552,6 +552,9 @@ DECLARE
   v_reps INTEGER;
   v_weight DOUBLE PRECISION;
   v_unit TEXT;
+  v_title TEXT;
+  v_distinct_exercise_names INTEGER;
+  v_only_exercise_name TEXT;
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Authentication required';
@@ -563,6 +566,29 @@ BEGIN
 
   IF p_exercises IS NULL OR jsonb_typeof(p_exercises) <> 'array' OR jsonb_array_length(p_exercises) = 0 THEN
     RAISE EXCEPTION 'At least one exercise is required';
+  END IF;
+
+  v_title := btrim(p_title);
+
+  -- A workout with exactly one distinct exercise whose title is literally
+  -- that exercise's name (case-insensitive) is a known bad pattern (e.g. a
+  -- caller passing the exercise name as the workout title) — fall back to
+  -- a neutral title instead of persisting it, rather than rejecting the
+  -- save. This is a backend-level guard so it can't recur regardless of
+  -- which client code calls this RPC.
+  SELECT count(DISTINCT NULLIF(btrim(item->>'name'), ''))
+  INTO v_distinct_exercise_names
+  FROM jsonb_array_elements(p_exercises) AS item;
+
+  IF v_distinct_exercise_names = 1 THEN
+    SELECT NULLIF(btrim(item->>'name'), '')
+    INTO v_only_exercise_name
+    FROM jsonb_array_elements(p_exercises) AS item
+    LIMIT 1;
+
+    IF v_only_exercise_name IS NOT NULL AND lower(v_title) = lower(v_only_exercise_name) THEN
+      v_title := 'Workout';
+    END IF;
   END IF;
 
   SELECT COALESCE(array_agg(DISTINCT muscle_group), ARRAY[]::TEXT[])
@@ -583,7 +609,7 @@ BEGIN
   )
   VALUES (
     v_user_id,
-    btrim(p_title),
+    v_title,
     p_workout_date,
     GREATEST(COALESCE(p_duration_minutes, 0), 0),
     NULLIF(btrim(COALESCE(p_notes, '')), ''),
