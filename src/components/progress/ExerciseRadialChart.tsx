@@ -272,12 +272,17 @@ function renderArc(
   const arcs: ArcVisual[] = [];
   const labels: LabelVisual[] = [];
   const leaderCandidates: Array<{ x1: number; y1: number; naturalY: number; dxSign: number; dotColor: string; style: React.CSSProperties; text: string; pct: number; fontPx: number }> = [];
-  // How wide a leader label's text is allowed to be, given the fixed column
-  // it starts from and however much real screen width is actually available
-  // — the pie's own radius (`outer`) never changes here, only the label text
-  // shrinks to make room for itself on a narrow phone screen.
-  const COLUMN_X = outer + 32;
-  const allowedTextWidth = Math.max(28, maxLabelHalfWidth - COLUMN_X - 10);
+  // The label column sits outside the ring at a distance that adapts to
+  // available screen width — `outer` (the ring's own radius) never changes,
+  // so the pie itself never shrinks, but on a narrow phone the desktop
+  // default of outer+32 can already eat the entire available half-width,
+  // leaving literally zero room for text no matter how small the font gets.
+  // Pulling the column in toward the ring (down to a floor of outer+10,
+  // just past the ring's own edge) reclaims that room; font-size shrinking
+  // (below) then only has to cover the remaining, smaller gap.
+  const MIN_TEXT_ALLOWANCE = 34;
+  const COLUMN_X = Math.max(outer + 10, Math.min(outer + 32, maxLabelHalfWidth - MIN_TEXT_ALLOWANCE - 10));
+  const allowedTextWidth = Math.max(24, maxLabelHalfWidth - COLUMN_X - 10);
 
   segments.forEach((seg, i) => {
     const span = (seg.volume / total) * availableDeg;
