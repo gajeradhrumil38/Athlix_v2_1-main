@@ -245,9 +245,18 @@
 
   /* Fixed mobile top header (Layout.tsx) — was referenced but never defined,
      leaving the header fully transparent (only its 1px bottom border was
-     visible) so scrolled-under page content showed straight through it. */
+     visible) so scrolled-under page content showed straight through it.
+     --lg-nav-bg (10% white) was designed as a *tint layer* sitting on top
+     of a separate strong blur layer (see the bottom nav's two-div
+     .lg-distortion + --lg-nav-bg combo a few lines up) — used alone as a
+     single background it's nowhere near opaque enough to hide anything
+     behind it, and backdrop-filter blur support/rendering isn't something
+     a header whose entire job is "hide the content behind me" can depend
+     on as its only line of defense. Matching --bg-base (#030508) at high
+     opacity makes this reliably opaque on its own; the blur on top is a
+     bonus, not the mechanism doing the actual hiding. */
   .lg-nav {
-    background: var(--lg-nav-bg);
+    background: rgba(3, 5, 8, 0.94);
     backdrop-filter: blur(20px) saturate(1.4);
     -webkit-backdrop-filter: blur(20px) saturate(1.4);
   }
