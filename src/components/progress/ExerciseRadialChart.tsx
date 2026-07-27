@@ -652,7 +652,12 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
     else if (pathArr.length === 1) startTransition('in', pathArr[0]);
   };
   const goBack = () => goTo([]);
-  const selectDay = (dayKey: string) => { setSelectedDay(dayKey); setHistoryIndex(null); };
+  // Tapping the already-selected wedge again clears the selection (un-glows
+  // it, closes the detail card) instead of just re-selecting the same day.
+  const selectDay = (dayKey: string) => {
+    setSelectedDay((prev) => (prev === dayKey ? null : dayKey));
+    setHistoryIndex(null);
+  };
   const selectHistoryPoint = (idx: number) => setHistoryIndex(idx);
   const prevMonth = () => setMonthOffset((o) => o - 1);
   const nextMonth = () => setMonthOffset((o) => Math.min(0, o + 1));
