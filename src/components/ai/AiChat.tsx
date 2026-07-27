@@ -218,6 +218,16 @@ function trackTokenUsage(tokens: number): void {
   localStorage.setItem(USAGE_STORAGE, JSON.stringify(data));
 }
 
+// Matches src/pages/Log.tsx's freeform-workout default (line ~222) — a
+// workout logged through chat has no plan/title of its own, so it should
+// get the same generic time-of-day name a freeform Log-page workout would,
+// not the exercise's own name (which is what workout.title ended up as
+// before this fix, e.g. a "Hammer Curl" workout literally titled
+// "Hammer Curl" — confirmed live in the workouts table).
+function defaultWorkoutTitle(): string {
+  return new Date().getHours() < 12 ? 'Morning Workout' : 'Evening Workout';
+}
+
 /* ── Simple markdown → React (bold, bullets, newlines) ─────────────── */
 function renderText(raw: string) {
   return raw.split('\n').map((line, li) => {
@@ -328,7 +338,7 @@ async function executeTool(
     const best = matches[0];
     const completedSets = Array.from({ length: sets }, () => ({ reps, weight, unit }));
     await saveWorkout(userId, {
-      title: best.name,
+      title: defaultWorkoutTitle(),
       date,
       duration_minutes: 0,
       exercises: [{ name: best.name, muscle_group: best.muscle_group, exercise_db_id: best.id || null, completed_sets: completedSets }],
@@ -895,7 +905,7 @@ export const AiChat: React.FC = () => {
       const exerciseName = best?.name || name;
       const completedSets = sets.map((s) => ({ reps: s.reps, weight: s.weight, unit }));
       await saveWorkout(user.id, {
-        title: exerciseName,
+        title: defaultWorkoutTitle(),
         date: format(new Date(), 'yyyy-MM-dd'),
         duration_minutes: 0,
         exercises: [{
