@@ -999,19 +999,17 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
                     onClick={() => selectHistoryPoint(selected.historyIdx - 1)}
                     disabled={selected.historyIdx <= 0}
                     aria-label="Previous session"
-                    className="absolute top-1/2 -translate-y-1/2 left-0 z-10 w-7 h-7 flex items-center justify-center rounded-full text-white/75 hover:text-white transition-all disabled:opacity-0 disabled:pointer-events-none cursor-pointer"
-                    style={{ background: 'rgba(10,12,16,0.55)', backdropFilter: 'blur(6px)' }}
+                    className="absolute top-1/2 -translate-y-1/2 -left-6 z-10 w-7 h-7 flex items-center justify-center text-white/60 hover:text-white transition-all disabled:opacity-0 disabled:pointer-events-none cursor-pointer"
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="w-6 h-6" />
                   </button>
                   <button
                     onClick={() => selectHistoryPoint(selected.historyIdx + 1)}
                     disabled={selected.historyIdx >= selected.historyLen - 1}
                     aria-label="Next session"
-                    className="absolute top-1/2 -translate-y-1/2 right-0 z-10 w-7 h-7 flex items-center justify-center rounded-full text-white/75 hover:text-white transition-all disabled:opacity-0 disabled:pointer-events-none cursor-pointer"
-                    style={{ background: 'rgba(10,12,16,0.55)', backdropFilter: 'blur(6px)' }}
+                    className="absolute top-1/2 -translate-y-1/2 -right-6 z-10 w-7 h-7 flex items-center justify-center text-white/60 hover:text-white transition-all disabled:opacity-0 disabled:pointer-events-none cursor-pointer"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-6 h-6" />
                   </button>
                   <svg width="300" height="110" viewBox="0 0 300 110" style={{ position: 'absolute', inset: 0 }}>
                     <defs>
