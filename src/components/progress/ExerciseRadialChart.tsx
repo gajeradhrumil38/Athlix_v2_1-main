@@ -94,19 +94,6 @@ function fitCurvedLabel(
   return { ...result, fontPx, fits: result.total <= maxSpanDeg * 0.92 };
 }
 
-// Shrinks a leader label's font size (never the chart itself) until its
-// rendered text width fits within maxWidthPx, so a narrow phone screen
-// forces smaller label text instead of forcing a smaller pie.
-function fitLeaderLabel(text: string, maxWidthPx: number, maxFontPx: number, minFontPx: number, weight: number) {
-  let fontPx = maxFontPx;
-  let width = measureCtx(fontPx, weight).measureText(text).width;
-  while (width > maxWidthPx && fontPx > minFontPx) {
-    fontPx -= 0.5;
-    width = measureCtx(fontPx, weight).measureText(text).width;
-  }
-  return { fontPx, width };
-}
-
 // Smooth cubic-bezier path through points (Catmull-Rom -> Bezier), for a
 // minimal, non-jagged trend line.
 function smoothPath(pts: Array<{ x: number; y: number }>): string {
@@ -252,37 +239,70 @@ const dayVolume = (d: DayEntry) => d.sets * d.reps * d.weight;
 const weekVolume = (w: WeekBucket) => w.days.reduce((s, d) => s + dayVolume(d), 0);
 const muscleVolume = (m: { weeks: WeekBucket[] }) => m.weeks.reduce((s, w) => s + weekVolume(w), 0);
 
+// Muscle groups under this share of the month's total volume get bundled
+// into one "Other" wedge instead of each claiming a sliver of the ring.
+// This is what actually fixes the label-collision problem this component
+// spent a long time patching reactively (compression passes, fixed leader
+// columns, shrink-to-fit text): there's structurally not enough room around
+// a 300px ring for 4-5 tiny individual labels, so instead of continuing to
+// fight that with geometry, the tiny slices just don't get their own labels
+// at all — the always-visible legend row below the ring (see the
+// component's JSX) is what makes them identifiable and still tappable.
+const OTHER_THRESHOLD_PCT = 5;
+// Distinct from the literal string "Other" that buildMonthData falls back
+// to for exercises with no muscle_group set (see byMuscle above) — using a
+// non-colliding key means a real "Other" muscle group and this synthetic
+// bundle can never be confused with each other.
+const OTHER_KEY = '__grouped_other__';
+const OTHER_COLOR = '#5b6478';
+
+interface TopSegment { key: string; label: string; color: string; volume: number; isOther: boolean; memberKeys: string[]; }
+
+// Single source of truth for "what wedges does the top-level ring have,
+// and in what order" — used both to actually render the ring and to
+// compute the drill-in/out transition's start/end angles, so the two can
+// never drift apart the way they would if each recomputed grouping/sorting
+// independently.
+function buildTopSegments(d: MuscleData): TopSegment[] {
+  const keys = Object.keys(d).sort((a, b) => muscleVolume(d[b]) - muscleVolume(d[a]));
+  const total = keys.reduce((s, k) => s + muscleVolume(d[k]), 0) || 1;
+  const major: TopSegment[] = [];
+  const minor: TopSegment[] = [];
+  keys.forEach((key) => {
+    const volume = muscleVolume(d[key]);
+    const pct = (volume / total) * 100;
+    const item: TopSegment = { key, label: key, color: muscleColor(key), volume, isOther: false, memberKeys: [key] };
+    (pct < OTHER_THRESHOLD_PCT ? minor : major).push(item);
+  });
+  // A single small muscle group isn't worth hiding behind an "Other"
+  // bucket of one — only bundle when there's actually clutter to solve.
+  if (minor.length < 2) return [...major, ...minor].sort((a, b) => b.volume - a.volume);
+  const other: TopSegment = {
+    key: OTHER_KEY, label: 'Other', color: OTHER_COLOR,
+    volume: minor.reduce((s, m) => s + m.volume, 0), isOther: true,
+    memberKeys: minor.map((m) => m.key),
+  };
+  return [...major, other].sort((a, b) => b.volume - a.volume);
+}
+
 /* ── Arc-segment rendering (pure, ported from the design reference) ─ */
 
 interface ArcVisual { path: string; fill: string; opacity: number; stroke: string; strokeWidth: number; onClick: (() => void) | null; style: React.CSSProperties; }
 interface LabelVisual { char: string; x: number; y: number; rot: number; style: React.CSSProperties; }
-interface LeaderVisual { dotColor: string; style: React.CSSProperties; textAlign: 'left' | 'right'; labelX: number; labelY: number; translateX: string; text: string; pct: number; line: string; fontPx: number; }
 interface DividerVisual { path: string; opacity: number; }
 
 interface Segment { key: string; label: string; color: string; volume: number; isSelected: boolean; onClick: () => void; }
 
 function renderArc(
   segments: Segment[], cx: number, cy: number, inner: number, outer: number, gapDeg: number, revealed: boolean, fontSizePx: number,
-  maxLabelHalfWidth: number = 300,
-): { arcs: ArcVisual[]; labels: LabelVisual[]; leaders: LeaderVisual[] } {
+): { arcs: ArcVisual[]; labels: LabelVisual[] } {
   const total = segments.reduce((s, x) => s + x.volume, 0) || 1;
   const availableDeg = 360 - gapDeg * segments.length;
   const labelRadius = (inner + outer) / 2;
   let cursor = 0;
   const arcs: ArcVisual[] = [];
   const labels: LabelVisual[] = [];
-  const leaderCandidates: Array<{ x1: number; y1: number; naturalY: number; dxSign: number; dotColor: string; style: React.CSSProperties; text: string; pct: number; fontPx: number }> = [];
-  // The label column sits outside the ring at a distance that adapts to
-  // available screen width — `outer` (the ring's own radius) never changes,
-  // so the pie itself never shrinks, but on a narrow phone the desktop
-  // default of outer+32 can already eat the entire available half-width,
-  // leaving literally zero room for text no matter how small the font gets.
-  // Pulling the column in toward the ring (down to a floor of outer+10,
-  // just past the ring's own edge) reclaims that room; font-size shrinking
-  // (below) then only has to cover the remaining, smaller gap.
-  const MIN_TEXT_ALLOWANCE = 34;
-  const COLUMN_X = Math.max(outer + 10, Math.min(outer + 20, maxLabelHalfWidth - MIN_TEXT_ALLOWANCE - 10));
-  const allowedTextWidth = Math.max(24, maxLabelHalfWidth - COLUMN_X - 10);
+  const anySelected = segments.some((s) => s.isSelected);
 
   segments.forEach((seg, i) => {
     const span = (seg.volume / total) * availableDeg;
@@ -290,122 +310,40 @@ function renderArc(
     const a1 = a0 + span;
     const midAngle = (a0 + a1) / 2;
     cursor += span + gapDeg;
-    const baseOpacity = !segments.some((s) => s.isSelected) || seg.isSelected ? 1 : 0.45;
+    // Dim non-selected wedges harder, and give the selected one a scale +
+    // glow, so tapping a wedge reads as a deliberate selection rather than
+    // just a precursor to the drill-in transition.
+    const baseOpacity = !anySelected || seg.isSelected ? 1 : 0.28;
     const delay = i * 26;
     arcs.push({
       path: arcPath(cx, cy, inner, outer, a0, a1),
       fill: seg.color,
       opacity: revealed ? baseOpacity : 0,
       stroke: seg.isSelected ? '#ffffff' : 'none',
-      strokeWidth: seg.isSelected ? 1.5 : 0,
+      strokeWidth: seg.isSelected ? 2 : 0,
       onClick: seg.onClick,
       style: {
         transformOrigin: '150px 150px',
-        transition: `opacity 0.32s ease ${delay}ms, transform 0.38s cubic-bezier(.22,.85,.25,1) ${delay}ms`,
-        transform: revealed ? 'scale(1)' : 'scale(0.9)',
+        transition: `opacity 0.32s ease ${delay}ms, transform 0.38s cubic-bezier(.22,.85,.25,1) ${delay}ms, filter 0.32s ease ${delay}ms`,
+        transform: revealed ? (seg.isSelected ? 'scale(1.045)' : 'scale(1)') : 'scale(0.9)',
+        filter: seg.isSelected && revealed ? `drop-shadow(0 0 6px ${seg.color})` : 'none',
         cursor: 'pointer',
       },
     });
     const name = seg.label.toUpperCase();
     const fit = fitCurvedLabel(name, cx, cy, labelRadius, midAngle, span, fontSizePx, fontSizePx - 2, 800);
     const style: React.CSSProperties = { opacity: revealed ? baseOpacity : 0, transition: `opacity 0.28s ease ${delay + 90}ms` };
-    const pct = Math.round((seg.volume / total) * 100);
+    // Slices too narrow for their own in-ring label just don't get one —
+    // matches renderDaySegments' existing behavior for small day-segments.
+    // Sub-OTHER_THRESHOLD_PCT muscles are bundled into the "Other" wedge by
+    // buildTopSegments before they ever reach here, and are individually
+    // identifiable via the always-visible legend row below the ring instead.
     if (span >= 15 && fit.fits) {
       const chStyle: React.CSSProperties = { ...style, fontSize: fit.fontPx, fontWeight: 800 };
       fit.chars.forEach((c) => labels.push({ char: c.char, x: c.x, y: c.y, rot: c.rot, style: chStyle }));
-    } else if (pct >= 2) {
-      // Sub-2% slices get a color in the ring and count toward the total,
-      // but skip the leader label entirely — with real data (a dozen+
-      // muscle groups instead of the design reference's tidy demo set),
-      // labeling every sliver just adds clutter no one can read anyway.
-      const r1 = outer + 8; // just outside the wedge's own edge — the line's start, not the label
-      const [x1, y1] = polar(cx, cy, r1, midAngle);
-      // Side must follow the wedge's actual position (x1 vs center), not a
-      // fixed top/bottom split — a wedge sitting just left of 12 o'clock has
-      // x1 < cx and belongs on the LEFT, even though it's near the "top".
-      // The previous `midAngle > 90 && midAngle < 270` test answered a
-      // different question (top vs bottom half) and got quadrants near the
-      // 12/6 o'clock seams backwards, which is exactly what sent both
-      // "Shoulders" and "Triceps" — wedges just left of 12 o'clock — to the
-      // right column, where their lines crossed over the wedges between them.
-      const dxSign = x1 >= cx ? 1 : -1;
-      const { fontPx } = fitLeaderLabel(`${seg.label} · ${pct}`, allowedTextWidth, 13, 9, 800);
-      leaderCandidates.push({ x1, y1, naturalY: y1, dxSign, dotColor: seg.color, style, text: seg.label, pct, fontPx });
     }
   });
-
-  // Second pass: on each side (left/right), resolve vertical overlap with a
-  // two-pass (forward, then backward) compression — a standard label-
-  // declutter technique (the same idea behind dedicated label-placement
-  // libraries like stirpie/d3-annotation-style leader systems). A single
-  // forward-only pass (push each label at least MIN_GAP below the
-  // previous, then clamp to the canvas edge) looks fine with 2-3 items,
-  // but once several small wedges cluster in one angular region — which
-  // real, uneven muscle-group data does constantly, unlike the reference's
-  // evenly-split demo — clamping alone collapses every item past the edge
-  // onto the SAME clamped position. The backward pass re-spaces everything
-  // from the bottom up so items compress toward each other instead of
-  // stacking on top of one another.
-  const MIN_GAP = 15, TOP = 10, BOTTOM = 290;
-  const leaders: LeaderVisual[] = [];
-  (['left', 'right'] as const).forEach((side) => {
-    const group = leaderCandidates.filter((c) => (side === 'right' ? c.dxSign > 0 : c.dxSign < 0)).sort((a, b) => a.naturalY - b.naturalY);
-    if (!group.length) return;
-
-    const forwardY: number[] = [];
-    let prevY = -Infinity;
-    group.forEach((c) => {
-      const y = Math.max(c.naturalY, prevY + MIN_GAP);
-      forwardY.push(y);
-      prevY = y;
-    });
-
-    const finalY: number[] = new Array(group.length);
-    let nextY = Infinity;
-    for (let i = group.length - 1; i >= 0; i--) {
-      const capped = i === group.length - 1 ? forwardY[i] : Math.min(forwardY[i], nextY - MIN_GAP);
-      finalY[i] = capped;
-      nextY = capped;
-    }
-
-    // Verified with a standalone simulation (not guessed): clamping each
-    // item to [TOP, BOTTOM] independently here was the actual remaining
-    // bug — when several items' compressed Y all landed above TOP (a
-    // cluster of tiny wedges near the 12-o'clock seam), EVERY one of them
-    // clamped to the SAME TOP value, collapsing the spacing the two-pass
-    // compression above had just correctly established, and rendering as
-    // one illegible overlapping label. Shifting the whole already-spaced
-    // group rigidly into range — instead of clamping each Y on its own —
-    // keeps every item's relative spacing intact.
-    const minY = Math.min(...finalY), maxY = Math.max(...finalY);
-    let shift = 0;
-    if (minY < TOP) shift = TOP - minY;
-    else if (maxY > BOTTOM) shift = BOTTOM - maxY;
-    finalY.forEach((y, i) => { finalY[i] = y + shift; });
-
-    // Fixed label column per side, following the classic labeled-donut
-    // pattern (github.com/dbuezas/9306799): every right-side label starts
-    // at the SAME x, every left-side label ends at the SAME x, rather than
-    // each floating at a distance derived from its own wedge's angle. This
-    // reads as a clean aligned list instead of a scattered ring of labels,
-    // and it has a structural side-effect that fixes the earlier overlap
-    // bug for good rather than reactively dodging it: curved in-wedge
-    // labels only ever live inside the ring's own labelRadius band, while
-    // this fixed column sits a fixed distance outside the ring's actual
-    // outer edge — so a leader label can never land inside a neighboring
-    // wedge's curved-text band in the first place, regardless of which
-    // angle the tiny wedge happens to be at.
-    group.forEach((c, i) => {
-      const y = finalY[i];
-      const labelX = cx + c.dxSign * COLUMN_X;
-      const translateX = c.dxSign > 0 ? '0%' : '-100%';
-      const lineEndX = labelX - c.dxSign * 10;
-      const nubX = c.x1 + (lineEndX - c.x1) * 0.5;
-      const line = `M${c.x1},${c.y1} L${nubX},${c.y1} L${nubX},${y} L${lineEndX},${y}`;
-      leaders.push({ dotColor: c.dotColor, style: c.style, textAlign: c.dxSign > 0 ? 'left' : 'right', labelX, labelY: y, translateX, text: c.text, pct: c.pct, line, fontPx: c.fontPx });
-    });
-  });
-  return { arcs, labels, leaders };
+  return { arcs, labels };
 }
 
 function renderDaySegments(
@@ -417,19 +355,20 @@ function renderDaySegments(
   daySegs.forEach((seg, i) => {
     const a0 = seg.angleStart, a1 = seg.angleStart + seg.angleSpan;
     const midAngle = (a0 + a1) / 2;
-    const baseOpacity = !daySegs.some((s) => s.isSelected) || seg.isSelected ? 1 : 0.45;
+    const baseOpacity = !daySegs.some((s) => s.isSelected) || seg.isSelected ? 1 : 0.28;
     const delay = i * 26 + 40;
     arcs.push({
       path: arcPath(cx, cy, inner, outer, a0, a1),
       fill: seg.color,
       opacity: revealed ? baseOpacity : 0,
       stroke: seg.isSelected ? '#ffffff' : 'none',
-      strokeWidth: seg.isSelected ? 1.5 : 0,
+      strokeWidth: seg.isSelected ? 2 : 0,
       onClick: seg.onClick,
       style: {
         transformOrigin: '150px 150px',
-        transition: `opacity 0.32s ease ${delay}ms, transform 0.38s cubic-bezier(.22,.85,.25,1) ${delay}ms`,
-        transform: revealed ? 'scale(1)' : 'scale(0.9)',
+        transition: `opacity 0.32s ease ${delay}ms, transform 0.38s cubic-bezier(.22,.85,.25,1) ${delay}ms, filter 0.32s ease ${delay}ms`,
+        transform: revealed ? (seg.isSelected ? 'scale(1.045)' : 'scale(1)') : 'scale(0.9)',
+        filter: seg.isSelected && revealed ? `drop-shadow(0 0 6px ${seg.color})` : 'none',
         cursor: 'pointer',
       },
     });
@@ -477,30 +416,18 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [personalRecords, setPersonalRecords] = useState<LocalPersonalRecord[]>([]);
+  // Whether the "Other" wedge (small muscle groups bundled together) is
+  // toggled on — dims the major wedges and glows Other, same selection
+  // language as tapping a day segment in the drilled-in ring, but it never
+  // drills further since "Other" has no single muscle's day data of its own.
+  const [otherHighlighted, setOtherHighlighted] = useState(false);
   const [, setTick] = useState(0);
   const transitionRef = useRef<TransitionState | null>(null);
   const rafRef = useRef<number>();
-  const chartWrapRef = useRef<HTMLDivElement>(null);
-  // Starts generous (no shrink) until ResizeObserver reports the card's real
-  // width — on mobile that's often narrower than the 300px ring plus its
-  // leader labels, which is what was clipping "Shoulders · 3%" etc. off the
-  // edge of the screen.
-  const [wrapWidth, setWrapWidth] = useState<number>(() => (typeof window !== 'undefined' ? window.innerWidth : 400));
 
   useEffect(() => {
     getPersonalRecords(userId).then(setPersonalRecords).catch(() => setPersonalRecords([]));
   }, [userId]);
-
-  useEffect(() => {
-    const el = chartWrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setWrapWidth(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setRevealed(true), 60);
@@ -531,19 +458,38 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
     () => Object.keys(data).sort((a, b) => muscleVolume(data[b]) - muscleVolume(data[a])),
     [data],
   );
+  // The top-level ring's actual wedges: major muscle groups plus one merged
+  // "Other" bucket for anything under OTHER_THRESHOLD_PCT. Shared between
+  // the ring render and the always-visible legend row below it, so both
+  // reflect the exact same grouping.
+  const topSegments = useMemo(() => buildTopSegments(data), [data]);
+  const otherSegment = topSegments.find((s) => s.isOther);
+  const otherTotal = topSegments.reduce((s, x) => s + x.volume, 0) || 1;
+  const otherMembers = useMemo(
+    () => (otherSegment ? otherSegment.memberKeys
+      .map((key) => ({ key, color: muscleColor(key), pct: Math.round((muscleVolume(data[key]) / otherTotal) * 100) }))
+      .sort((a, b) => b.pct - a.pct) : []),
+    [otherSegment, data, otherTotal],
+  );
 
+  useEffect(() => setOtherHighlighted(false), [monthStart.getTime()]);
+
+  // Mirrors buildTopSegments' grouping exactly (same function, same sort
+  // order) so a drill-in/out transition's start/end angles always line up
+  // with what the static ring actually drew — including the "Other" wedge,
+  // which this needs to treat as just another segment with its own key/a0/a1
+  // even though it isn't drillable (its onClick never calls startTransition).
   const computeMuscleAngles = useCallback((d: MuscleData) => {
     const gapDeg = 4;
-    const keys = Object.keys(d).sort((a, b) => muscleVolume(d[b]) - muscleVolume(d[a]));
-    const total = keys.reduce((s, k) => s + muscleVolume(d[k]), 0) || 1;
-    const availableDeg = 360 - gapDeg * keys.length;
+    const segs = buildTopSegments(d);
+    const total = segs.reduce((s, x) => s + x.volume, 0) || 1;
+    const availableDeg = 360 - gapDeg * segs.length;
     let cursor = 0;
-    return keys.map((key) => {
-      const vol = muscleVolume(d[key]);
-      const span = (vol / total) * availableDeg;
+    return segs.map((seg) => {
+      const span = (seg.volume / total) * availableDeg;
       const a0 = cursor + gapDeg / 2, a1 = a0 + span;
       cursor += span + gapDeg;
-      return { key, color: muscleColor(key), a0, a1 };
+      return { key: seg.key, color: seg.color, a0, a1, memberKeys: seg.memberKeys };
     });
   }, []);
 
@@ -593,9 +539,17 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
   const startTransition = (dir: 'in' | 'out', key: string) => {
     if (transitionRef.current) return;
     const muscleAngles = computeMuscleAngles(data);
+    // A muscle reached via the "Other" legend row (see the JSX below) has
+    // no wedge of its own on the ring — it was bundled into buildTopSegments'
+    // merged Other entry. Falling back to whichever top-level entry lists it
+    // as a member resolves it to Other's wedge instead, so the day-segments
+    // still visually grow out of (and collapse back into) the ring region
+    // that muscle's color actually lives in.
+    const resolve = (k: string) => muscleAngles.find((a) => a.key === k) ?? muscleAngles.find((a) => a.memberKeys.includes(k));
     const frames: TransitionFrame[] = [];
     if (dir === 'in') {
-      const clicked = muscleAngles.find((a) => a.key === key)!;
+      const clicked = resolve(key);
+      if (!clicked) return;
       const wedgeSpan = clicked.a1 - clicked.a0;
       computeDaySegs(data, key).forEach((d) => frames.push({
         color: d.color,
@@ -603,12 +557,13 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
         to: { a0: d.a0, a1: d.a1, r0: 76, r1: 140, opacity: 1 },
       }));
       muscleAngles.forEach((m) => {
-        if (m.key === key) return;
+        if (m.key === clicked.key) return;
         const mid = (m.a0 + m.a1) / 2;
         frames.push({ color: m.color, from: { a0: m.a0, a1: m.a1, r0: 82, r1: 140, opacity: 1 }, to: { a0: mid, a1: mid, r0: 82, r1: 140, opacity: 0 } });
       });
     } else {
-      const target = muscleAngles.find((a) => a.key === key)!;
+      const target = resolve(key);
+      if (!target) return;
       const wedgeSpan = target.a1 - target.a0;
       computeDaySegs(data, key).forEach((d) => frames.push({
         color: d.color,
@@ -616,7 +571,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
         to: { a0: target.a0 + (d.a0 / 360) * wedgeSpan, a1: target.a0 + (d.a1 / 360) * wedgeSpan, r0: 82, r1: 140, opacity: 0.55 },
       }));
       muscleAngles.forEach((m) => {
-        if (m.key === key) return;
+        if (m.key === target.key) return;
         const mid = (m.a0 + m.a1) / 2;
         frames.push({ color: m.color, from: { a0: mid, a1: mid, r0: 82, r1: 140, opacity: 0 }, to: { a0: m.a0, a1: m.a1, r0: 82, r1: 140, opacity: 1 } });
       });
@@ -693,15 +648,19 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
         const opacity = lerp(f.from.opacity, f.to.opacity, t.progress);
         return { path: arcPath(150, 150, r0, r1, a0, a1), fill: f.color, opacity, stroke: 'none', strokeWidth: 0, onClick: null, style: {} };
       });
-      return { outerArcs: arcs, outerLabels: [] as LabelVisual[], outerLeaders: [] as LeaderVisual[], innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
+      return { outerArcs: arcs, outerLabels: [] as LabelVisual[], innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
     }
     if (path.length === 0) {
-      const segments: Segment[] = muscleKeys.map((key) => ({ key, label: key, color: muscleColor(key), volume: muscleVolume(data[key]), isSelected: false, onClick: () => goTo([key]) }));
-      const r = renderArc(segments, cx, cy, 82, 140, 4, revealed, 9, wrapWidth / 2);
-      return { outerArcs: r.arcs, outerLabels: r.labels, outerLeaders: r.leaders, innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
+      const segments: Segment[] = topSegments.map((s) => ({
+        key: s.key, label: s.label, color: s.color, volume: s.volume,
+        isSelected: s.isOther && otherHighlighted,
+        onClick: s.isOther ? () => setOtherHighlighted((v) => !v) : () => goTo([s.key]),
+      }));
+      const r = renderArc(segments, cx, cy, 82, 140, 4, revealed, 9);
+      return { outerArcs: r.arcs, outerLabels: r.labels, innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
     }
     const m = data[path[0]];
-    if (!m) return { outerArcs: [] as ArcVisual[], outerLabels: [] as LabelVisual[], outerLeaders: [] as LeaderVisual[], innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
+    if (!m) return { outerArcs: [] as ArcVisual[], outerLabels: [] as LabelVisual[], innerArcs: [] as ArcVisual[], innerLabels: [] as LabelVisual[], innerDividers: [] as DividerVisual[] };
     const base = muscleColor(path[0]);
     const gapWeek = 6, gapDay = 3;
     const totalVol = m.weeks.reduce((s, w) => s + weekVolume(w), 0) || 1;
@@ -729,7 +688,7 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
       });
     });
     const inner = renderDaySegments(daySegs, cx, cy, revealed);
-    return { outerArcs: [] as ArcVisual[], outerLabels: [] as LabelVisual[], outerLeaders: [] as LeaderVisual[], innerArcs: inner.arcs, innerLabels: inner.labels, innerDividers: inner.dividers };
+    return { outerArcs: [] as ArcVisual[], outerLabels: [] as LabelVisual[], innerArcs: inner.arcs, innerLabels: inner.labels, innerDividers: inner.dividers };
   };
 
   const buildSelected = () => {
@@ -832,14 +791,10 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
       ) : (
         <>
           {/* Radial drill-down chart */}
-          <div ref={chartWrapRef} style={{ width: '100%' }}>
           <div style={{ position: 'relative', width: 300, height: 300, margin: '18px auto 0' }}>
             <svg width="300" height="300" viewBox="0 0 300 300" style={{ overflow: 'visible' }}>
               {rings.outerArcs.map((a, i) => (
                 <path key={`oa${i}`} d={a.path} fill={a.fill} opacity={a.opacity} stroke={a.stroke} strokeWidth={a.strokeWidth} onClick={a.onClick ?? undefined} style={a.style} />
-              ))}
-              {rings.outerLeaders.map((ll, i) => (
-                <path key={`ol${i}`} d={ll.line} stroke={ll.dotColor} strokeWidth={1} fill="none" opacity={0.55} style={ll.style} />
               ))}
               {rings.innerArcs.map((a, i) => (
                 <path key={`ia${i}`} d={a.path} fill={a.fill} opacity={a.opacity} stroke={a.stroke} strokeWidth={a.strokeWidth} onClick={a.onClick ?? undefined} style={a.style} />
@@ -851,11 +806,6 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2, transition: 'opacity 0.18s ease', opacity: transitionRef.current ? 0 : 1 }}>
               {rings.outerLabels.map((lb, i) => (
                 <div key={`ol2-${i}`} style={{ position: 'absolute', left: lb.x, top: lb.y, transform: `translate(-50%,-50%) rotate(${lb.rot}deg)`, color: '#0a0c10', whiteSpace: 'nowrap', ...lb.style }}>{lb.char}</div>
-              ))}
-              {rings.outerLeaders.map((ldl, i) => (
-                <div key={`old-${i}`} style={{ position: 'absolute', left: ldl.labelX, top: ldl.labelY, transform: `translate(${ldl.translateX}, -50%)`, textAlign: ldl.textAlign, ...ldl.style }}>
-                  <div style={{ color: ldl.dotColor, fontSize: ldl.fontPx, fontWeight: 800, whiteSpace: 'nowrap', lineHeight: 1.15 }}>{ldl.text} · {ldl.pct}</div>
-                </div>
               ))}
               {rings.innerLabels.map((lb2, i) => (
                 <div key={`il2-${i}`} style={{ position: 'absolute', left: lb2.x, top: lb2.y, transform: `translate(-50%,-50%) rotate(${lb2.rot}deg)`, color: 'rgba(10,12,16,0.88)', whiteSpace: 'nowrap', ...lb2.style }}>{lb2.char}</div>
@@ -898,8 +848,28 @@ export const ExerciseRadialChart: React.FC<ExerciseRadialChartProps> = ({ userId
               </div>
             </div>
           </div>
-          </div>
           <p className="text-center text-[var(--text-muted)] text-[11px] mt-3.5">{chartHint}</p>
+
+          {/* "Other" breakdown — always visible, not hidden behind a tap:
+             each small muscle group that got folded into the ring's Other
+             wedge still gets its own color dot + name + share here, and is
+             individually tappable to drill into that muscle's own days. */}
+          {path.length === 0 && otherSegment && (
+            <div className="flex flex-wrap gap-1.5 justify-center mt-3">
+              {otherMembers.map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => goTo([m.key])}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-pointer"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: m.color }} />
+                  <span className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>{m.key}</span>
+                  <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>{m.pct}%</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Detail card for a selected workout session */}
           {hasSelectedDay && selected ? (
