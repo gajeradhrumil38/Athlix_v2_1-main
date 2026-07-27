@@ -236,6 +236,10 @@ export const Layout: React.FC = () => {
       )}
 
       {/* ── Main content ──────────────────────────────── */}
+      {/* 55px, not 54px: the fixed header's inner row is h-[54px], but the
+          header itself also has a 1px border-bottom (line ~204) that adds
+          to its total rendered height. Reserving only 54px left a 1px gap
+          between the header and whatever docks directly below it. */}
       <main
         className={`flex-1 flex flex-col h-full relative overflow-y-auto ${
           isImmersiveRoute
@@ -244,7 +248,7 @@ export const Layout: React.FC = () => {
               ? 'pb-[calc(88px+env(safe-area-inset-bottom))] md:pb-0'
               : isHeaderlessRoute
                 ? 'pt-[env(safe-area-inset-top)] pb-[calc(88px+env(safe-area-inset-bottom))] md:pt-0 md:pb-0'
-                : 'pt-[calc(54px+env(safe-area-inset-top))] pb-[calc(88px+env(safe-area-inset-bottom))] md:pt-0 md:pb-0'
+                : 'pt-[calc(55px+env(safe-area-inset-top))] pb-[calc(88px+env(safe-area-inset-bottom))] md:pt-0 md:pb-0'
         }`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
