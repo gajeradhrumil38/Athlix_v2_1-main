@@ -857,7 +857,7 @@ export const Progress: React.FC = () => {
       </div>
 
       {/* ── Tab Content ─────────────────────────────────── */}
-      <div className="max-w-4xl mx-auto px-4 pt-4">
+      <div className="max-w-4xl mx-auto px-4 pt-2">
         <motion.div
           key={activeTab}
           initial={{ opacity: 0, y: 8 }}
