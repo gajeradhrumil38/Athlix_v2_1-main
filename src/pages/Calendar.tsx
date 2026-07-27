@@ -101,9 +101,14 @@ const isGenericTitle = (t?: string | null) => {
 };
 
 const getDisplayTitle = (w: any) => {
+  // Prefer the actual exercise performed over the workout's title — for a
+  // plan-started workout that title is the plan's name (e.g. "Push Day"),
+  // not something derived from what was logged, so leading with it hid the
+  // exercise entirely instead of just supplementing it (see `planLabel`
+  // below, which surfaces the title as a secondary badge instead).
   const names = getExerciseNames(w);
-  if (names.length > 0 && isGenericTitle(w.title)) return names[0];
-  return w.title || names[0] || 'Workout';
+  if (names.length > 0) return names[0];
+  return w.title || 'Workout';
 };
 
 const matchesFilter = (w: any, f: string | null) => {
@@ -263,7 +268,7 @@ const WorkoutCard: React.FC<{
   const muscle    = (workout.muscle_groups || [])[0];
   const chips     = names.slice(0, 4);
   const extra     = names.length - chips.length;
-  const planLabel = !isGenericTitle(workout.title) && workout.title !== title ? workout.title : null;
+  const planLabel = workout.title && workout.title !== title ? workout.title : null;
   const hasDetail = (workout.exercises || []).length > 0;
 
   const beginEdit = () => { setGroups(groupExerciseSets(workout, unit)); setEditing(true); setExpanded(true); };

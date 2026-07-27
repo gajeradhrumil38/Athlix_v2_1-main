@@ -26,21 +26,17 @@ const calcVolume = (exercises: any[], unit: WeightUnit): number =>
 
 const fmtNum = (v: number) => Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1);
 
-const isGenericTitle = (t?: string | null) => {
-  if (!t) return true;
-  const lower = t.trim().toLowerCase();
-  return (
-    ['workout','morning workout','afternoon workout','evening workout'].includes(lower) ||
-    /^plan\s*[—–-]/.test(lower)
-  );
-};
-
 const getDisplayTitle = (workout: any): string => {
+  // Prefer the actual exercise performed over the workout's title — for a
+  // plan-started workout that title is the plan's name (e.g. "Push Day"),
+  // not something derived from what was logged, so leading with it hid the
+  // exercise entirely instead of just supplementing it (see `planLabel`
+  // below, which surfaces the title as a secondary badge instead).
   const names: string[] = Array.from(
     new Set((workout.exercises || []).map((e: any) => e.name as string).filter(Boolean))
   );
-  if (names.length > 0 && isGenericTitle(workout.title)) return names[0];
-  return workout.title || names[0] || 'Workout';
+  if (names.length > 0) return names[0];
+  return workout.title || 'Workout';
 };
 
 // ── Timeline card ─────────────────────────────────────────────────────────────
@@ -61,7 +57,7 @@ const TimelineItem: React.FC<{
   const parsedDate  = parseDateAtStartOfDay(workout.date);
   const dateLabel   = parsedDate ? format(parsedDate, 'EEE, MMM d · yyyy') : '--';
   const displayTitle = getDisplayTitle(workout);
-  const planLabel    = !isGenericTitle(workout.title) && workout.title !== displayTitle ? workout.title : null;
+  const planLabel    = workout.title && workout.title !== displayTitle ? workout.title : null;
   const PREVIEW_MAX = 4; // exercises shown collapsed
   const previewExs  = sortedExercises.slice(0, PREVIEW_MAX);
   const hiddenCount = sortedExercises.length - PREVIEW_MAX;
