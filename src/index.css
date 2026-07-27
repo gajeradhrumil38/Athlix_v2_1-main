@@ -259,6 +259,15 @@
     background: rgba(3, 5, 8, 0.94);
     backdrop-filter: blur(20px) saturate(1.4);
     -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    /* WebKit/Safari can lag or momentarily drop backdrop-filter compositing
+       on a `position: fixed` element during active momentum scroll — the
+       element itself, background, and offsets are all correct, but the GPU
+       layer briefly recomposites as transparent for a frame or two, which
+       reads as "content flashes through the header while scrolling". Forcing
+       this onto its own stable compositor layer avoids that recompute. */
+    transform: translateZ(0);
+    will-change: transform;
+    isolation: isolate;
   }
 
   /* "Clear" glass — lighter variant for nested overlays, popovers, tooltips */
