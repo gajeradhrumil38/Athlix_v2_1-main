@@ -17,6 +17,11 @@ export interface SavedRun {
   splits?: { km: number; pace: number }[];
   elevationGain?: number;
   fromCloud?: boolean;
+  // Supabase workouts.id this run's Log/Calendar entry lives at, if one
+  // was created (only happens for logged-in users — see ActiveRun.tsx's
+  // handleStop()). Undefined for runs saved before this existed, or for
+  // any run that never got a workout entry in the first place.
+  workoutId?: string;
 }
 
 const KEY = 'athlix:runs';
@@ -161,11 +166,17 @@ export async function saveRunToCloud(userId: string, run: SavedRun): Promise<num
   }
 }
 
+export async function linkRunToWorkout(runId: number, workoutId: string): Promise<void> {
+  try {
+    await supabase.from('runs').update({ workout_id: workoutId }).eq('id', runId);
+  } catch { /* best-effort — a failed link just means this run won't cascade-delete its workout later */ }
+}
+
 export async function loadRunsFromCloud(userId: string): Promise<SavedRun[]> {
   try {
     const { data, error } = await supabase
       .from('runs')
-      .select('id, run_ts, distance, duration, pace, path, splits, elevation_gain')
+      .select('id, run_ts, distance, duration, pace, path, splits, elevation_gain, workout_id')
       .eq('user_id', userId)
       .order('run_ts', { ascending: false })
       .limit(120);
@@ -180,6 +191,7 @@ export async function loadRunsFromCloud(userId: string): Promise<SavedRun[]> {
       path: (Array.isArray(r.path) ? r.path : []) as GpsPoint[],
       splits: (Array.isArray(r.splits) ? r.splits : []) as { km: number; pace: number }[],
       elevationGain: Number(r.elevation_gain ?? 0),
+      workoutId: (r.workout_id as string | null) ?? undefined,
       fromCloud: true,
     }));
   } catch {
