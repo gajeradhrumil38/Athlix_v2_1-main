@@ -1168,49 +1168,36 @@ export const RunHistory: React.FC = () => {
                 </motion.div>
               )}
 
-              {/* Stats — no-box vertical layout, blends into gradient */}
+              {/* Stats — no-box vertical layout, blends into gradient.
+                  Sized to fit one screen with no scrolling (explicit
+                  request) — vertically centered in the space below the
+                  top bar instead of a scrollable region. This also
+                  removes the old scroll-following backdrop entirely
+                  (it had a hard-coded height, which was the visible
+                  seam in the earlier screenshot) — with nothing
+                  scrolling, the single viewport-fixed gradient above is
+                  sufficient on its own. */}
               <div
-                className="absolute bottom-0 left-0 right-0 z-10 cursor-default"
+                className="absolute left-0 right-0 z-10 cursor-default flex flex-col items-center justify-center"
                 onClick={(e) => e.stopPropagation()}
+                style={{
+                  top: 'calc(max(16px, env(safe-area-inset-top)) + 66px)',
+                  bottom: 0,
+                }}
               >
                 <div
-                  className="overflow-y-auto flex flex-col items-center"
-                  style={{
-                    position: 'relative',
-                    maxHeight: '74vh',
-                    paddingBottom: 'max(28px, env(safe-area-inset-bottom))',
-                    WebkitOverflowScrolling: 'touch',
-                    // Forces this scroll container onto its own GPU layer —
-                    // the same fix already used for the header nav bar
-                    // earlier this session, for the same underlying reason:
-                    // WebKit can visibly tear/ghost text during active
-                    // scroll on a layer it's still compositing on the fly.
-                    transform: 'translateZ(0)',
-                    willChange: 'transform',
-                  }}
+                  className="w-full flex flex-col items-center"
+                  style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}
                 >
-                  {/* Dark backdrop that scrolls WITH the hero/PACE/TIME
-                      text instead of staying fixed to the viewport like
-                      the radial spotlight above — that one stops
-                      protecting the text the moment you scroll it past
-                      the spotlight's fixed screen position, which is
-                      exactly when a bright map tile or lime route segment
-                      could end up right behind it with nothing to blend it. */}
-                  <div style={{
-                    position: 'absolute', top: 0, left: 0, right: 0, height: 460, zIndex: 0, pointerEvents: 'none',
-                    background: 'radial-gradient(85% 100% at 50% 0%, rgba(13,15,20,0.88) 0%, rgba(13,15,20,0.6) 55%, transparent 100%)',
-                  }} />
-
                   {/* Distance hero — 108px, lineHeight 1.05 (matches the
                       Run Detail Screen reference exactly). A line-height
                       above 1 leaves the line box taller than the glyph
-                      needs, unlike the compressed 0.88 this used to carry —
-                      that's what was pushing the ascender past this
-                      container's own overflow-y: auto edge and clipping it. */}
+                      needs, unlike the compressed 0.88 this used to carry,
+                      which used to clip the ascender. */}
                   <motion.div
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.12, type: 'spring', stiffness: 240, damping: 22 }}
-                    className="flex items-baseline justify-center gap-2 mt-8 mb-1 px-6"
+                    className="flex items-baseline justify-center gap-2 mb-1 px-6"
                   >
                     <span className="font-victory font-black tabular-nums text-white"
                       style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
@@ -1229,7 +1216,7 @@ export const RunHistory: React.FC = () => {
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.22 }}
                     className="w-full flex flex-col items-center px-6"
-                    style={{ gap: 28, marginTop: 16 }}
+                    style={{ gap: 16, marginTop: 12 }}
                   >
                     {[
                       {
@@ -1283,8 +1270,8 @@ export const RunHistory: React.FC = () => {
                   {selected.splits && selected.splits.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.32 }}
-                      className="w-full px-6 py-3 flex flex-col items-center"
-                      style={{ marginTop: 12, gap: 8 }}
+                      className="w-full px-6 py-2 flex flex-col items-center"
+                      style={{ marginTop: 8, gap: 6 }}
                     >
                       <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                         SPLITS · /{distanceUnit}

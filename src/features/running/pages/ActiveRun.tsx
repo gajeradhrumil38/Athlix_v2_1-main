@@ -674,16 +674,6 @@ export const ActiveRun: React.FC = () => {
           className="relative z-10 flex flex-1 flex-col items-center justify-end gap-3 px-5"
           style={{ paddingBottom: 'max(28px, env(safe-area-inset-bottom))' }}
         >
-          {/* Dark backdrop directly behind the hero + PACE numbers — the
-              radial spotlight above is fixed to the viewport and this
-              content is bottom-anchored/grows with the data (splits,
-              elevation), so its actual on-screen position isn't fixed;
-              anchoring this one to the bottom of the same content column
-              keeps it under the big text regardless. */}
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: 520, zIndex: 0, pointerEvents: 'none',
-            background: 'radial-gradient(85% 100% at 50% 100%, rgba(13,15,20,0.88) 0%, rgba(13,15,20,0.55) 55%, transparent 100%)',
-          }} />
           {/* Hero distance — same vertical-stack layout as the history detail
               screen (Run Detail Screen.dc.html) so a run looks the same
               whether you're seeing it right after finishing or later from
