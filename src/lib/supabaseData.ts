@@ -1674,6 +1674,14 @@ export const saveWorkout = async (
   );
 
   if (!rpcError && workoutIdFromRpc) {
+    // This is the path virtually every save actually takes (the fallback
+    // below only runs when the RPC itself fails) — the cache invalidation
+    // was only ever wired into that rare fallback branch, so a normal
+    // successful save left getCachedExerciseRows serving up to 45s of
+    // stale data. That's exactly what made the exercise picker's "last
+    // time" preview show an old weight right after logging a new one.
+    invalidateExerciseRowsCache();
+
     const { data: workoutRow, error: workoutFetchError } = await supabase
       .from('workouts')
       .select('*')
@@ -1800,6 +1808,7 @@ export const deleteWorkout = async (userId: string, workoutId: string) => {
     .eq('user_id', userId);
 
   if (error) throw normalizeError(error, 'Failed to delete workout.');
+  invalidateExerciseRowsCache();
 };
 
 /**
