@@ -13,6 +13,7 @@ import { RunRouteBackground } from '../components/RunRouteBackground';
 import { formatDuration, formatPace, calculateDistance } from '../utils/gpsCalculations';
 import type { GpsPoint } from '../utils/gpsCalculations';
 import { useAuth } from '../../../contexts/AuthContext';
+import { deleteWorkout } from '../../../lib/supabaseData';
 import { whoopService } from '../../whoop/services/whoopService';
 import type { WhoopWorkout } from '../../whoop/types';
 
@@ -648,6 +649,11 @@ export const RunHistory: React.FC = () => {
     // Date.now()-based id (mergeRuns keeps it so the localStorage delete
     // above still resolves), which never matches a real Supabase row.
     if (user && run.fromCloud && run.cloudId != null) void deleteRunFromCloud(run.cloudId);
+    // Cascade to the linked workout log entry (Exercise Log + Calendar
+    // both read from the same workouts table, so this clears both).
+    // Best-effort — a run saved before workoutId existed has nothing to
+    // cascade to, and a failure here doesn't undo the run delete above.
+    if (user && run.workoutId) void deleteWorkout(user.id, run.workoutId);
     setLocalRuns((prev) => prev.filter((r) => r.id !== run.id));
     setCloudRuns((prev) => prev.filter((r) => r.id !== (run.cloudId ?? run.id)));
     if (selected?.id === run.id) setSelected(null);
