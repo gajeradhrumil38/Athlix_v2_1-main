@@ -149,11 +149,22 @@ const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size =
           src={tileUrl}
           alt=""
           loading="lazy"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }}
+          // CARTO's dark_all tiles measure ~11/255 average brightness with a
+          // ~68/255 ceiling even on their brightest (road-line) pixels —
+          // confirmed by sampling an actual tile. At the previous opacity
+          // and dark overlay, that's indistinguishable from zero content:
+          // the tile was loading correctly, it just couldn't be seen. This
+          // boosts road-line contrast into visible range while keeping the
+          // tile's own tone dark, instead of stacking more darkness on top
+          // of already-near-black source pixels.
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'brightness(2.6) contrast(1.4)',
+          }}
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
       )}
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,12,16,0.4)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,12,16,0.15)' }} />
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block', position: 'relative' }}>
         {/* Subtle glow under route */}
         <polyline points={polyline} fill="none" stroke="#C8FF00" strokeWidth="5" strokeLinecap="round"
