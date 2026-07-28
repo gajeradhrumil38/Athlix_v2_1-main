@@ -653,7 +653,11 @@ export const RunHistory: React.FC = () => {
     // both read from the same workouts table, so this clears both).
     // Best-effort — a run saved before workoutId existed has nothing to
     // cascade to, and a failure here doesn't undo the run delete above.
-    if (user && run.workoutId) void deleteWorkout(user.id, run.workoutId);
+    if (user && run.workoutId) {
+      deleteWorkout(user.id, run.workoutId).catch((e) => {
+        console.warn('Failed to cascade-delete linked workout:', e);
+      });
+    }
     setLocalRuns((prev) => prev.filter((r) => r.id !== run.id));
     setCloudRuns((prev) => prev.filter((r) => r.id !== (run.cloudId ?? run.id)));
     if (selected?.id === run.id) setSelected(null);
