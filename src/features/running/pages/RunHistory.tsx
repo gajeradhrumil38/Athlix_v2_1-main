@@ -1108,19 +1108,13 @@ export const RunHistory: React.FC = () => {
                   <ChevronLeft className="h-5 w-5" />
                 </button>
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                  className="flex flex-col items-center gap-0.5">
-                  <span className="text-[11px] font-black uppercase tracking-[0.24em]" style={{ color: 'var(--accent)' }}>
-                    {format(new Date(selected.timestamp), "EEE, MMM d")}
+                  className="flex flex-col items-center" style={{ gap: 2 }}>
+                  <span className="font-victory font-black" style={{ fontSize: 20, letterSpacing: '0.02em', color: 'var(--accent)' }}>
+                    {format(new Date(selected.timestamp), "EEE, MMM d").toUpperCase()}
                   </span>
-                  <span className="text-[10px] font-semibold text-white/35 tracking-[0.1em]">
-                    {format(new Date(selected.timestamp), "h:mm a")}
+                  <span className="text-[13px] font-medium text-white/50">
+                    {format(new Date(selected.timestamp), "h:mm a")} · {demo ? 'Cedar Rapids, IA' : 'Outdoor'}
                   </span>
-                  {demo && (
-                    <span className="mt-0.5 rounded-full px-2 py-px text-[8px] font-black uppercase tracking-[0.14em]"
-                      style={{ background: 'rgba(200,255,0,0.08)', color: 'rgba(200,255,0,0.5)', border: '1px solid rgba(200,255,0,0.15)' }}>
-                      Cedar Rapids, IA
-                    </span>
-                  )}
                 </motion.div>
                 <button
                   onClick={(e) => {
@@ -1179,11 +1173,15 @@ export const RunHistory: React.FC = () => {
                     </span>
                   </motion.div>
 
-                  {/* Vertical stat rows — centered, label above value */}
+                  {/* Vertical stat stack — plain gap spacing, no row
+                      dividers, PACE weighted bigger than TIME/CALORIES —
+                      matches the Run Detail Screen design exactly rather
+                      than the boxed/bordered treatment used elsewhere. */}
                   <motion.div
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.22 }}
-                    className="w-full"
+                    className="w-full flex flex-col items-center px-6"
+                    style={{ gap: 28, marginTop: 16 }}
                   >
                     {[
                       {
@@ -1191,19 +1189,19 @@ export const RunHistory: React.FC = () => {
                         value: selected.pace > 0 ? formatPace(paceDisplay(selected.pace)) : '--:--',
                         sub: `/${distanceUnit}`,
                         accent: true,
+                        size: 46,
                       },
-                      { label: 'TIME', value: formatDuration(selected.duration), sub: 'elapsed', accent: false },
-                      { label: 'CALORIES', value: String(cal), sub: 'kcal', accent: false },
+                      { label: 'TIME', value: formatDuration(selected.duration), sub: 'elapsed', accent: false, size: 40 },
+                      { label: 'CALORIES', value: String(cal), sub: 'kcal', accent: false, size: 40 },
                     ].map((s, i) => (
-                      <div key={i} className="flex flex-col items-center px-6 py-3.5"
-                        style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                        <span className="text-[11px] font-black uppercase tracking-[0.2em] mb-1.5"
+                      <div key={i} className="flex flex-col items-center" style={{ gap: 6 }}>
+                        <span className="text-[11px] font-black uppercase tracking-[0.2em]"
                           style={{ color: 'rgba(255,255,255,0.38)' }}>
                           {s.label}
                         </span>
                         <div className="flex items-baseline gap-1.5">
-                          <span className="font-victory text-[36px] font-black tabular-nums leading-none"
-                            style={{ color: s.accent ? '#C8FF00' : 'white' }}>
+                          <span className="font-victory font-black tabular-nums leading-none"
+                            style={{ fontSize: s.size, color: s.accent ? '#C8FF00' : 'white' }}>
                             {s.value}
                           </span>
                           {s.sub && (
@@ -1216,10 +1214,10 @@ export const RunHistory: React.FC = () => {
                       </div>
                     ))}
 
-                    {/* Effort row */}
-                    <div className="flex flex-col items-center px-6 py-3.5"
-                      style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                      <span className="text-[11px] font-black uppercase tracking-[0.2em] mb-1.5"
+                    {/* Effort row — not part of the original design, kept
+                        at the same visual weight as TIME/CALORIES */}
+                    <div className="flex flex-col items-center" style={{ gap: 6 }}>
+                      <span className="text-[11px] font-black uppercase tracking-[0.2em]"
                         style={{ color: 'rgba(255,255,255,0.38)' }}>
                         EFFORT
                       </span>
@@ -1237,7 +1235,7 @@ export const RunHistory: React.FC = () => {
                     <motion.div
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.32 }}
                       className="w-full px-6 py-3"
-                      style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+                      style={{ marginTop: 12 }}
                     >
                       <span className="text-[10px] font-black uppercase tracking-[0.22em] block text-center"
                         style={{ color: 'rgba(255,255,255,0.26)' }}>

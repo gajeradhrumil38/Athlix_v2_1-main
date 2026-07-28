@@ -600,12 +600,12 @@ export const ActiveRun: React.FC = () => {
             <ChevronLeft className="h-5 w-5" />
           </CircleBtn>
 
-          <div className="flex flex-col items-center gap-0.5">
-            <span className="text-[11px] font-black uppercase tracking-[0.24em]" style={{ color: 'var(--accent)' }}>
+          <div className="flex flex-col items-center" style={{ gap: 2 }}>
+            <span className="font-victory font-black" style={{ fontSize: 20, letterSpacing: '0.02em', color: 'var(--accent)' }}>
               {format(new Date(finished.timestamp), 'EEE, MMM d').toUpperCase()}
             </span>
-            <span className="text-[10px] font-semibold text-white/35">
-              {format(new Date(finished.timestamp), 'h:mm a')}
+            <span className="text-[13px] font-medium text-white/50">
+              {format(new Date(finished.timestamp), 'h:mm a')} · Outdoor
             </span>
           </div>
 
@@ -661,27 +661,30 @@ export const ActiveRun: React.FC = () => {
             <span className="font-victory text-[28px] font-black" style={{ color: isPR ? '#fac775' : 'var(--accent)' }}>{finished.unit.toUpperCase()}</span>
           </motion.div>
 
-          {/* Vertical stat rows — centered, label above value */}
+          {/* Vertical stat stack — plain gap spacing, no row dividers,
+              PACE weighted bigger than TIME/CALORIES — matches the Run
+              Detail Screen design exactly (and the history detail screen,
+              which uses the identical treatment). */}
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-            className="w-full"
+            className="w-full flex flex-col items-center px-6"
+            style={{ gap: 28, marginTop: 4 }}
           >
             {[
-              { label: 'PACE', value: finished.pace > 0 ? formatPace(finished.pace) : '--:--', sub: `/${finished.unit}`, accent: true },
-              { label: 'TIME', value: formatDuration(finished.duration), sub: 'elapsed', accent: false },
-              { label: 'CALORIES', value: String(cal), sub: 'kcal', accent: false },
+              { label: 'PACE', value: finished.pace > 0 ? formatPace(finished.pace) : '--:--', sub: `/${finished.unit}`, accent: true, size: 46 },
+              { label: 'TIME', value: formatDuration(finished.duration), sub: 'elapsed', accent: false, size: 40 },
+              { label: 'CALORIES', value: String(cal), sub: 'kcal', accent: false, size: 40 },
               ...(finished.elevationGain > 0
-                ? [{ label: 'ELEV', value: String(Math.round(finished.elevationGain)), sub: 'm gain', accent: false }]
+                ? [{ label: 'ELEV', value: String(Math.round(finished.elevationGain)), sub: 'm gain', accent: false, size: 40 }]
                 : []),
             ].map((s, i) => (
-              <div key={i} className="flex flex-col items-center px-6 py-3.5"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] mb-1.5" style={{ color: 'rgba(255,255,255,0.38)' }}>
+              <div key={i} className="flex flex-col items-center" style={{ gap: 6 }}>
+                <span className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.38)' }}>
                   {s.label}
                 </span>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-victory text-[36px] font-black tabular-nums leading-none"
-                    style={{ color: s.accent ? '#C8FF00' : 'white' }}>
+                  <span className="font-victory font-black tabular-nums leading-none"
+                    style={{ fontSize: s.size, color: s.accent ? '#C8FF00' : 'white' }}>
                     {s.value}
                   </span>
                   <span className="text-[13px] font-semibold"
@@ -692,9 +695,10 @@ export const ActiveRun: React.FC = () => {
               </div>
             ))}
 
-            {/* Effort row */}
-            <div className="flex flex-col items-center px-6 py-3.5" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-              <span className="text-[11px] font-black uppercase tracking-[0.2em] mb-1.5" style={{ color: 'rgba(255,255,255,0.38)' }}>
+            {/* Effort row — not part of the original design, kept at the
+                same visual weight as TIME/CALORIES */}
+            <div className="flex flex-col items-center" style={{ gap: 6 }}>
+              <span className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.38)' }}>
                 EFFORT
               </span>
               <div className="flex items-center gap-2.5">
@@ -711,7 +715,7 @@ export const ActiveRun: React.FC = () => {
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}
               className="w-full px-6 py-3"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+              style={{ marginTop: 4 }}
             >
               <span className="text-[10px] font-black uppercase tracking-[0.22em] block text-center" style={{ color: 'rgba(255,255,255,0.26)' }}>
                 SPLITS · /{finished.unit}
