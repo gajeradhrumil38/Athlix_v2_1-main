@@ -69,6 +69,14 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
     return catmullRomPath(simplified, 6);
   }, [path]);
 
+  // Leaflet's SVG renderer sets this as a plain `stroke` attribute, not an
+  // inline style, so a literal `var(--accent)` string wouldn't resolve —
+  // read the actual computed color instead of hardcoding the hex value.
+  const accentColor = useMemo(
+    () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#C8FF00',
+    [],
+  );
+
   return (
     <div className="h-full w-full overflow-hidden">
       <style>{`
@@ -100,7 +108,7 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
         {polylinePositions.length > 1 && (
           <Polyline
             positions={polylinePositions}
-            pathOptions={{ color: '#C8FF00', weight: 4, opacity: 0.9 }}
+            pathOptions={{ color: accentColor, weight: 4, opacity: 0.9 }}
           />
         )}
 

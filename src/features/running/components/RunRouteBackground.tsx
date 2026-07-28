@@ -34,6 +34,15 @@ export const RunRouteBackground: React.FC<{ path: GpsPoint[] }> = ({ path }) => 
     return catmullRomPath(simplified, 8);
   }, [path]);
 
+  // Leaflet's SVG renderer sets this as a plain `stroke` attribute, not an
+  // inline style, so a literal `var(--accent)` string wouldn't resolve —
+  // read the actual computed color instead of hardcoding the hex value,
+  // so a future accent-color change doesn't leave the route color behind.
+  const accentColor = useMemo(
+    () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#C8FF00',
+    [],
+  );
+
   return (
     <div
       style={{
@@ -72,7 +81,7 @@ export const RunRouteBackground: React.FC<{ path: GpsPoint[] }> = ({ path }) => 
           {smoothPath.length > 1 && (
             <Polyline
               positions={smoothPath}
-              pathOptions={{ color: '#C8FF00', weight: 11, opacity: 1 }}
+              pathOptions={{ color: accentColor, weight: 11, opacity: 1 }}
             />
           )}
           <FitRoute path={path} />

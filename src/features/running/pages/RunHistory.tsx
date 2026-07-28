@@ -535,10 +535,13 @@ export const RunHistory: React.FC = () => {
     }
     // Remove from localStorage
     deleteRun(run.id);
-    // Remove from cloud (best-effort)
-    if (user && run.fromCloud) void deleteRunFromCloud(run.id);
+    // Remove from cloud (best-effort) — must use cloudId, not id: for a run
+    // that exists both locally and in the cloud, `id` is the local
+    // Date.now()-based id (mergeRuns keeps it so the localStorage delete
+    // above still resolves), which never matches a real Supabase row.
+    if (user && run.fromCloud && run.cloudId != null) void deleteRunFromCloud(run.cloudId);
     setLocalRuns((prev) => prev.filter((r) => r.id !== run.id));
-    setCloudRuns((prev) => prev.filter((r) => r.id !== run.id));
+    setCloudRuns((prev) => prev.filter((r) => r.id !== (run.cloudId ?? run.id)));
     if (selected?.id === run.id) setSelected(null);
     setConfirmDelete(null);
     toast.success('Run deleted');

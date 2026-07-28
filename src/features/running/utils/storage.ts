@@ -3,6 +3,12 @@ import type { GpsPoint } from './gpsCalculations';
 
 export interface SavedRun {
   id: number;
+  // The Supabase `runs` row's real id, distinct from `id` -- which for a
+  // run that exists both locally and in the cloud stays the local
+  // Date.now()-based id (mergeRuns keeps it so local storage operations
+  // still resolve correctly). Cloud-only operations (deleteRunFromCloud)
+  // must use this, never `id`.
+  cloudId?: number;
   path: GpsPoint[];
   distance: number;
   duration: number;
@@ -159,6 +165,7 @@ export async function loadRunsFromCloud(userId: string): Promise<SavedRun[]> {
     if (error || !data) return [];
     return (data as any[]).map((r) => ({
       id: r.id as number,
+      cloudId: r.id as number,
       timestamp: r.run_ts as number,
       distance: Number(r.distance),
       duration: Number(r.duration),
@@ -188,7 +195,12 @@ export function mergeRuns(local: SavedRun[], cloud: SavedRun[]): SavedRun[] {
     let matched = false;
     for (const [ts] of merged) {
       if (Math.abs(ts - cr.timestamp) < 2000) {
-        merged.set(ts, { ...cr, id: merged.get(ts)!.id }); // keep local id
+        // Keep the local id (local storage operations still key off it) but
+        // always carry the real cloud id through as cloudId — losing it
+        // here (the old code discarded it entirely) meant deleteRunFromCloud
+        // got called with the local Date.now() id, matched no row in
+        // Supabase, and silently left the cloud row orphaned forever.
+        merged.set(ts, { ...cr, id: merged.get(ts)!.id, cloudId: cr.id });
         matched = true;
         break;
       }

@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Square, MapPin, AlertCircle, ChevronLeft, LocateOff, Play, Pause,
-  Home, History, Target, Layers, Lock, Share2, Pencil,
+  Home, History, Target, Share2, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -12,7 +12,7 @@ import { saveWorkout } from '../../../lib/supabaseData';
 import { useRunTracking } from '../hooks/useRunTracking';
 import { RunMap } from '../components/RunMap';
 import { RunRouteBackground } from '../components/RunRouteBackground';
-import { saveRun, getRuns, saveRunToCloud } from '../utils/storage';
+import { saveRun, getRuns, saveRunToCloud, loadRunsFromCloud, mergeRuns } from '../utils/storage';
 import { formatDuration, formatPace } from '../utils/gpsCalculations';
 import type { GpsPoint } from '../utils/gpsCalculations';
 
@@ -296,29 +296,41 @@ export const ActiveRun: React.FC = () => {
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [showStartConfirm, setShowStartConfirm] = useState(false);
 
-  // Last run stats computed once from storage
-  const [lastRun] = useState(() => {
-    const runs = getRuns();
-    return runs.length > 0 ? runs[runs.length - 1] : null;
-  });
-  const [weekStats] = useState(() => {
-    const runs = getRuns();
+  // Idle-screen stats (last run / weekly total / streak) — starts from
+  // local storage only (synchronous, no loading flash), then merges in
+  // cloud history once it loads. Previously these were local-only forever
+  // (a lazy useState initializer that never re-ran), so a fresh install or
+  // a second device showed "Last Run: --" / a reset streak despite real
+  // cloud history existing — the same class of gap as a stale cache that
+  // never gets refreshed.
+  const [allRuns, setAllRuns] = useState(() => getRuns());
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    loadRunsFromCloud(user.id).then((cloud) => {
+      if (cancelled || cloud.length === 0) return;
+      setAllRuns((local) => mergeRuns(local, cloud));
+    });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const lastRun = allRuns.length > 0 ? allRuns[allRuns.length - 1] : null;
+  const weekStats = useMemo(() => {
     const now = Date.now();
     const weekMs = 7 * 24 * 60 * 60 * 1000;
-    const weekRuns = runs.filter((r) => r.timestamp >= now - weekMs);
+    const weekRuns = allRuns.filter((r) => r.timestamp >= now - weekMs);
     const weekKm = weekRuns.reduce((s, r) => s + r.distance, 0);
     return { count: weekRuns.length, km: weekKm };
-  });
-  const [streak] = useState(() => {
-    const runs = getRuns();
-    if (runs.length === 0) return 0;
+  }, [allRuns]);
+  const streak = useMemo(() => {
+    if (allRuns.length === 0) return 0;
     const dayMs = 24 * 60 * 60 * 1000;
     const today = Math.floor(Date.now() / dayMs);
-    const days = new Set(runs.map((r) => Math.floor(r.timestamp / dayMs)));
+    const days = new Set(allRuns.map((r) => Math.floor(r.timestamp / dayMs)));
     let s = 0;
     for (let d = today; days.has(d); d--) s++;
     return s;
-  });
+  }, [allRuns]);
 
   const [finished, setFinished] = useState<{
     distance: number;
@@ -358,8 +370,14 @@ export const ActiveRun: React.FC = () => {
     const displayDist = distanceUnit === 'mi' ? summary.distance * 0.621371 : summary.distance;
     const displayPaceVal = distanceUnit === 'mi' ? summary.pace * 1.609344 : summary.pace;
     const saved = saveRun(summary);
+    setAllRuns((prev) => [...prev, saved]);
     if (user) {
-      void saveRunToCloud(user.id, saved);
+      // Awaited (not fire-and-forget) so a failure surfaces instead of
+      // silently losing the dedicated run record (path/splits/pace) even
+      // though the workout-history entry below still saves successfully.
+      saveRunToCloud(user.id, saved).then((cloudId) => {
+        if (cloudId == null) toast.error('Run saved on this device, but cloud sync failed.');
+      });
     }
     if (user) {
       const durationMinutes = Math.max(1, Math.round(summary.duration / 60000));
@@ -713,16 +731,7 @@ export const ActiveRun: React.FC = () => {
         )}
 
         <div className="flex items-center gap-2">
-          {isRunning && !isPaused ? (
-            <>
-              <CircleBtn onClick={() => {}}>
-                <Layers className="h-4 w-4" />
-              </CircleBtn>
-              <CircleBtn onClick={() => {}}>
-                <Lock className="h-4 w-4" />
-              </CircleBtn>
-            </>
-          ) : (
+          {!(isRunning && !isPaused) && (
             <CircleBtn onClick={() => navigate('/')}>
               <Home className="h-4 w-4" />
             </CircleBtn>
