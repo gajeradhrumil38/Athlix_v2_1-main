@@ -153,93 +153,55 @@ const DIST_OPTIONS_KM = [1, 2, 3, 5, 6, 8, 10, 15, 21.1, 42.2];
 const TIME_OPTIONS    = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 75, 90, 120];
 const PACE_OPTIONS    = ['4:00','4:30','5:00','5:30','6:00','6:30','7:00','7:30','8:00','8:30','9:00','9:30','10:00','11:00','12:00'];
 
-/* ── Drum-roll scroll picker ────────────────────────────────────── */
-const ITEM_H = 50;
-const VISIBLE = 5;
-
-const ScrollPicker: React.FC<{
+/* ── Goal value chip picker ───────────────────────────────────────
+   Was a custom scroll-snap "drum roll": onScroll computed the selected
+   index from raw scrollTop/ITEM_H, rounded. That only ever matches
+   cleanly on a perfectly-settled snap position — real touch/trackpad
+   momentum routinely lands mid-pixel near scroll boundaries (worst right
+   at the top, which is exactly where the smallest values — 1 mi, 1.5 mi,
+   2 mi — live), so those rounded to the wrong neighbor or never fired
+   onChange at all. Chips remove scroll precision from the equation
+   entirely: every value is its own directly-tappable target, so
+   selection can't depend on where a scroll gesture happened to stop. */
+const ChipPicker: React.FC<{
   options: string[];
   index: number;
   onChange: (i: number) => void;
   unit?: string;
 }> = ({ options, index, onChange, unit }) => {
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const settling = React.useRef(false);
+  const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  React.useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    settling.current = true;
-    el.scrollTop = index * ITEM_H;
-    settling.current = false;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleScroll = React.useCallback(() => {
-    if (settling.current) return;
-    const el = containerRef.current;
-    if (!el) return;
-    const raw = Math.round(el.scrollTop / ITEM_H);
-    const clamped = Math.max(0, Math.min(options.length - 1, raw));
-    if (clamped !== index) onChange(clamped);
-  }, [index, onChange, options.length]);
+  useEffect(() => {
+    chipRefs.current[index]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [index]);
 
   return (
-    <div style={{ position: 'relative', height: ITEM_H * VISIBLE, overflow: 'hidden', borderRadius: 14 }}>
-      {/* Center highlight band */}
-      <div style={{
-        position: 'absolute', top: ITEM_H * 2, left: 8, right: 8, height: ITEM_H,
-        background: 'rgba(200,255,0,0.07)',
-        border: '1px solid rgba(200,255,0,0.22)',
-        borderRadius: 10, pointerEvents: 'none', zIndex: 1,
-      }} />
-      {/* Top + bottom fade */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-        background: 'linear-gradient(to bottom, #161a22 0%, transparent 38%, transparent 62%, #161a22 100%)' }} />
-      {/* Scrollable list */}
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        style={{
-          height: '100%', overflowY: 'scroll', overflowX: 'hidden',
-          scrollSnapType: 'y mandatory', scrollbarWidth: 'none',
-          paddingTop: ITEM_H * 2, paddingBottom: ITEM_H * 2,
-          boxSizing: 'content-box',
-        }}
-      >
-        {options.map((opt, i) => {
-          const active = i === index;
-          return (
-            <div
-              key={i}
-              onClick={() => {
-                onChange(i);
-                settling.current = true;
-                containerRef.current?.scrollTo({ top: i * ITEM_H, behavior: 'smooth' });
-                setTimeout(() => { settling.current = false; }, 400);
-              }}
-              style={{
-                height: ITEM_H, scrollSnapAlign: 'start',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 5, cursor: 'pointer', userSelect: 'none',
-              }}
-            >
-              <span style={{
-                fontFamily: "'Victory Striker Sans', 'DM Sans', sans-serif",
-                fontSize: active ? 28 : 18, fontWeight: 900, letterSpacing: '0.02em',
-                color: active ? '#ffffff' : 'rgba(255,255,255,0.2)',
-                transition: 'font-size 0.12s ease, color 0.12s ease',
-              }}>
-                {opt}
+    <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none', paddingBottom: 2 }}>
+      {options.map((opt, i) => {
+        const active = i === index;
+        return (
+          <button
+            key={i}
+            ref={(el) => { chipRefs.current[i] = el; }}
+            onClick={() => onChange(i)}
+            className="flex shrink-0 flex-col items-center justify-center rounded-2xl transition-all active:scale-95"
+            style={{
+              minWidth: 60, height: 60, padding: '0 12px',
+              background: active ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
+              border: active ? '1.5px solid var(--accent)' : '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <span className="font-victory leading-none" style={{ fontSize: 17, fontWeight: 900, color: active ? '#000' : '#fff' }}>
+              {opt}
+            </span>
+            {unit && (
+              <span className="mt-1 text-[9px] font-bold" style={{ color: active ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.32)' }}>
+                {unit}
               </span>
-              {active && unit && (
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(200,255,0,0.75)', marginTop: 2 }}>
-                  {unit}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 };
@@ -260,6 +222,28 @@ const EffortBars: React.FC<{ effort: number }> = ({ effort }) => (
     ))}
   </div>
 );
+
+/* ── Goal ring icon — mirrors the ring+glow construction used on the run
+   history cards (MiniRingMetric), so the same "ring = goal/progress"
+   visual language reads consistently across the idle, running, and
+   history screens instead of a plain bullseye glyph. ── */
+const GoalRingIcon: React.FC = () => {
+  const S = 40, R = 15, C = 2 * Math.PI * R;
+  return (
+    <div style={{ position: 'relative', width: S, height: S, flexShrink: 0 }}>
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '50%', pointerEvents: 'none',
+        background: 'radial-gradient(circle, rgba(200,255,0,0.16) 0%, transparent 68%)',
+      }} />
+      <svg width={S} height={S} viewBox={`0 0 ${S} ${S}`} style={{ display: 'block', transform: 'rotate(-90deg)' }}>
+        <circle cx={S / 2} cy={S / 2} r={R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="4" />
+        <circle cx={S / 2} cy={S / 2} r={R} fill="none" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={C * 0.24} />
+      </svg>
+      <Target className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 14, height: 14, color: 'var(--accent)' }} />
+    </div>
+  );
+};
 
 /* ── Main component ────────────────────────────────────────────── */
 export const ActiveRun: React.FC = () => {
@@ -810,7 +794,7 @@ export const ActiveRun: React.FC = () => {
               <div style={{ ...glassCardStyle, overflow: 'hidden' }}>
                 <div className="flex items-center justify-between p-4 gap-3">
                   <div className="flex items-center gap-3">
-                    <Target className="h-5 w-5 shrink-0" style={{ color: 'var(--accent)' }} />
+                    <GoalRingIcon />
                     <div>
                       <span className="block text-[9px] font-black uppercase tracking-[0.18em] mb-1" style={{ color: 'var(--accent)' }}>Goal</span>
                       <div className="flex items-baseline gap-1.5">
@@ -1341,7 +1325,7 @@ export const ActiveRun: React.FC = () => {
                   </span>
                 </div>
 
-                <ScrollPicker
+                <ChipPicker
                   options={opts}
                   index={curIdx}
                   onChange={setIdx}
