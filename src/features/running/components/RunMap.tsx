@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { LocateFixed, Scan } from 'lucide-react';
 import type { GpsPoint } from '../utils/gpsCalculations';
 import { douglasPeucker, catmullRomPath } from '../utils/gpsCalculations';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -28,13 +29,31 @@ const currentPositionIcon = L.divIcon({
   iconAnchor: [9, 9],
 });
 
-function MapAutoCenter({ center }: { center: [number, number] | null }) {
+// Auto-recenters on the runner's position while `followMode` is on. A real
+// user drag or pinch always fires Leaflet's 'dragstart'/'zoomstart' events —
+// our own programmatic setView() below never does (it keeps the zoom level
+// unchanged, so Leaflet skips the zoom events, and setView never fires
+// 'dragstart' since that's specific to actual pointer/touch dragging) — so
+// these are a reliable signal that the runner touched the map themselves,
+// used to drop out of follow mode so their pan/zoom isn't fought every 1-2s.
+function MapFollowController({
+  center, followMode, onUserInteract,
+}: { center: [number, number] | null; followMode: boolean; onUserInteract: () => void }) {
   const map = useMap();
   const lastCenterRef = useRef<[number, number] | null>(null);
   const lastCenterUpdateAtRef = useRef(0);
 
   useEffect(() => {
-    if (!center) return;
+    map.on('dragstart', onUserInteract);
+    map.on('zoomstart', onUserInteract);
+    return () => {
+      map.off('dragstart', onUserInteract);
+      map.off('zoomstart', onUserInteract);
+    };
+  }, [map, onUserInteract]);
+
+  useEffect(() => {
+    if (!followMode || !center) return;
 
     const now = Date.now();
     const lastCenter = lastCenterRef.current;
@@ -46,7 +65,7 @@ function MapAutoCenter({ center }: { center: [number, number] | null }) {
     map.setView(center, map.getZoom(), { animate: false });
     lastCenterRef.current = center;
     lastCenterUpdateAtRef.current = now;
-  }, [center, map]);
+  }, [center, map, followMode]);
   return null;
 }
 
@@ -77,8 +96,25 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
     [],
   );
 
+  const mapRef = useRef<L.Map | null>(null);
+  const [followMode, setFollowMode] = useState(true);
+  const onUserInteract = useCallback(() => setFollowMode(false), []);
+
+  const handleRecenter = () => {
+    const map = mapRef.current;
+    if (map && center) map.setView(center, map.getZoom(), { animate: true });
+    setFollowMode(true);
+  };
+
+  const handleFitRoute = () => {
+    if (path.length < 2 || !mapRef.current) return;
+    const bounds = L.latLngBounds(path.map((p) => [p.lat, p.lng] as [number, number]));
+    mapRef.current.fitBounds(bounds, { padding: [56, 56] });
+    setFollowMode(false);
+  };
+
   return (
-    <div className="h-full w-full overflow-hidden">
+    <div className="h-full w-full overflow-hidden" style={{ position: 'relative' }}>
       <style>{`
         /* Match CARTO dark tile background — unloaded tiles are dark, not white */
         .leaflet-container { background: #0d0f14 !important; }
@@ -89,6 +125,7 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
         .leaflet-control-attribution { display: none !important; }
       `}</style>
       <MapContainer
+        ref={mapRef}
         center={center ?? DEFAULT_CENTER}
         zoom={16}
         style={{ height: '100%', width: '100%', background: '#0d0f14' }}
@@ -103,7 +140,7 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
           updateWhenIdle
         />
 
-        <MapAutoCenter center={center} />
+        <MapFollowController center={center} followMode={followMode} onUserInteract={onUserInteract} />
 
         {polylinePositions.length > 1 && (
           <Polyline
@@ -119,6 +156,32 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
           />
         )}
       </MapContainer>
+
+      {/* Free-look controls: pinch/drag drops out of follow mode (see
+          MapFollowController) so the runner can freely explore the traced
+          route without it snapping back every 1-2s; these bring it back. */}
+      <div className="absolute flex flex-col gap-2" style={{ top: 96, right: 14, zIndex: 30 }}>
+        {path.length > 1 && (
+          <button
+            onClick={handleFitRoute}
+            aria-label="Fit whole route on screen"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90"
+            style={{ background: 'rgba(13,15,20,0.8)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(10px)' }}
+          >
+            <Scan className="h-4 w-4" style={{ color: 'rgba(255,255,255,0.85)' }} />
+          </button>
+        )}
+        {!followMode && currentPosition && (
+          <button
+            onClick={handleRecenter}
+            aria-label="Recenter on my location"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90"
+            style={{ background: 'var(--accent)', boxShadow: '0 0 0 4px rgba(200,255,0,0.14), 0 6px 18px rgba(0,0,0,0.4)' }}
+          >
+            <LocateFixed className="h-4 w-4" style={{ color: '#0d0f14' }} />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
