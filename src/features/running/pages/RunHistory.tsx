@@ -1066,7 +1066,7 @@ export const RunHistory: React.FC = () => {
                     className="flex items-baseline justify-center gap-2 mt-4 mb-1 px-6"
                   >
                     <span className="font-victory font-black leading-none tabular-nums text-white"
-                      style={{ fontSize: 88, letterSpacing: '-0.02em', lineHeight: 0.88 }}>
+                      style={{ fontSize: 96, letterSpacing: '-0.02em', lineHeight: 0.88 }}>
                       {dist(selected.distance).toFixed(2)}
                     </span>
                     <span className="font-victory font-black" style={{ fontSize: 28, color: pr ? '#fac775' : '#C8FF00', lineHeight: 1 }}>
