@@ -209,7 +209,7 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
       {/* Free-look controls: pinch/drag drops out of follow mode (see
           MapFollowController) so the runner can freely explore the traced
           route without it snapping back every 1-2s; these bring it back. */}
-      <div className="absolute flex flex-col gap-2" style={{ top: 96, right: 14, zIndex: 30 }}>
+      <div className="absolute flex flex-col gap-2" style={{ top: 108, right: 14, zIndex: 30 }}>
         {path.length > 1 && (
           <button
             onClick={handleFitRoute}

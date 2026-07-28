@@ -782,7 +782,7 @@ export const ActiveRun: React.FC = () => {
             >
               <MapPin className="h-2.5 w-2.5" style={{ color: currentPosition ? 'var(--accent)' : 'rgba(255,255,255,0.4)' }} />
               <span className="text-[9px] font-black uppercase tracking-[0.18em]"
-                style={{ color: currentPosition ? 'var(--accent)' : 'rgba(255,255,255,0.4)' }}>
+                style={{ color: currentPosition ? 'var(--accent)' : 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
                 {currentPosition ? 'GPS LOCKED' : 'ACQUIRING GPS'}
               </span>
             </div>
@@ -799,7 +799,7 @@ export const ActiveRun: React.FC = () => {
               style={{ animation: 'recBlink 1.1s step-end infinite' }}
             />
             <style>{`@keyframes recBlink { 0%,100%{opacity:1} 50%{opacity:0.2} }`}</style>
-            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white" style={{ whiteSpace: 'nowrap' }}>
               REC · {activeGoal === '5k' ? '5K' : activeGoal === '30min' ? '30M' : activeGoal === 'pace' ? 'PACE' : 'FREE'}
             </span>
           </div>
@@ -811,7 +811,7 @@ export const ActiveRun: React.FC = () => {
               <span style={{ width: 3, height: 11, borderRadius: 2, background: 'var(--accent)' }} />
               <span style={{ width: 3, height: 11, borderRadius: 2, background: 'var(--accent)' }} />
             </span>
-            <span className="text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: 'var(--accent)' }}>
+            <span className="text-[10px] font-black uppercase tracking-[0.14em]" style={{ color: 'var(--accent)', whiteSpace: 'nowrap' }}>
               {isAutoPaused ? 'AUTO-PAUSED · STOPPED MOVING' : 'PAUSED'}
             </span>
           </div>
@@ -948,19 +948,26 @@ export const ActiveRun: React.FC = () => {
             </motion.div>
           )}
 
-          {/* ─────────── RUNNING ─────────── */}
-          {isRunning && !isPaused && (
+          {/* ─────────── RUNNING / PAUSED — one continuously-mounted block ───────────
+              Pause/resume used to be two separate motion.div's with different
+              AnimatePresence keys, so every tap unmounted the whole ring+stats
+              subtree and mounted a fresh one — a visible flash even though the
+              underlying numbers barely changed. Now it's a single block; only
+              `isPaused` toggles a few style props, and the two buttons below
+              use Framer Motion's `layout` prop so a shape/position change
+              (pill <-> circle) animates as a smooth morph instead of a swap. */}
+          {isRunning && (
             <motion.div
-              key="running"
+              key="active"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               className="flex flex-col items-center"
             >
-              {/* Ring + stat grid, side by side — keeps the panel short so the
-                  live map underneath stays visible while running. No card
-                  box around it — it sits directly on the bottom panel's own
-                  gradient so the map reads through instead of a boxed tile. */}
+              {/* Ring + stat grid — stays mounted across pause/resume, just
+                  dims slightly to signal paused. No card box around it — it
+                  sits directly on the bottom panel's own gradient so the map
+                  reads through instead of a boxed tile. */}
               <div className="flex w-full items-center gap-4" style={{ padding: '6px 4px 18px' }}>
                 <RingMetric
                   pct={goalProgress}
@@ -972,8 +979,10 @@ export const ActiveRun: React.FC = () => {
                     : activeGoal === 'pace' ? PACE_OPTIONS[goalPaceIdx]
                     : 'OPEN'
                   }
+                  dimmed={isPaused}
                 />
-                <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-4">
+                <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-4"
+                  style={{ opacity: isPaused ? 0.88 : 1, transition: 'opacity 0.3s ease' }}>
                   {[
                     { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
                     { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
@@ -1001,103 +1010,60 @@ export const ActiveRun: React.FC = () => {
               </div>
 
               {/* Alerts */}
-              {needsInternet && (
+              {!isPaused && needsInternet && (
                 <div className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] font-semibold text-amber-200" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.2)', marginBottom: 8 }}>
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   Map tiles need internet — GPS tracking continues offline.
                 </div>
               )}
 
-              {/* Controls row */}
+              {/* Controls row — same two buttons throughout; layout animates
+                  the pill<->circle morph instead of swapping elements */}
               <div className="flex w-full items-center gap-3">
-                <button
-                  onClick={pauseRun}
-                  className="flex h-[60px] flex-1 items-center justify-center gap-2.5 rounded-full transition-all active:scale-[0.95]"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.16)' }}
+                <motion.button
+                  layout
+                  transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                  onClick={isPaused ? resumeRun : pauseRun}
+                  className="flex flex-1 items-center justify-center gap-2.5 rounded-full active:scale-[0.96]"
+                  style={{
+                    height: isPaused ? 62 : 60,
+                    background: isPaused ? 'var(--accent)' : 'rgba(255,255,255,0.07)',
+                    border: isPaused ? 'none' : '1.5px solid rgba(255,255,255,0.16)',
+                    boxShadow: isPaused ? '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' : 'none',
+                  }}
                 >
-                  <Pause className="h-5 w-5 fill-white text-white" />
-                  <span className="font-victory text-[15px] font-black tracking-[0.18em] text-white uppercase">PAUSE</span>
-                </button>
-                <button
-                  onClick={() => setShowStopConfirm(true)}
-                  className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full transition-all active:scale-95"
-                  style={{ background: '#ef4444', boxShadow: '0 0 0 6px rgba(239,68,68,0.16), 0 10px 28px rgba(239,68,68,0.4)' }}
+                  <motion.span layout="position" className="flex items-center gap-2.5">
+                    {isPaused
+                      ? <Play className="h-5 w-5 fill-black" />
+                      : <Pause className="h-5 w-5 fill-white text-white" />}
+                    <span className="font-victory text-[15px] font-black tracking-[0.18em] uppercase"
+                      style={{ color: isPaused ? '#000' : '#fff' }}>
+                      {isPaused ? 'RESUME' : 'PAUSE'}
+                    </span>
+                  </motion.span>
+                </motion.button>
+                <motion.button
+                  layout
+                  transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                  onClick={isPaused ? () => { void handleStop(); } : () => setShowStopConfirm(true)}
+                  className="flex shrink-0 items-center justify-center rounded-full active:scale-95"
+                  style={{
+                    height: isPaused ? 62 : 72,
+                    width: isPaused ? undefined : 72,
+                    flex: isPaused ? 1 : '0 0 auto',
+                    gap: isPaused ? 10 : 0,
+                    background: isPaused ? 'rgba(239,68,68,0.9)' : '#ef4444',
+                    boxShadow: isPaused ? 'none' : '0 0 0 6px rgba(239,68,68,0.16), 0 10px 28px rgba(239,68,68,0.4)',
+                  }}
                 >
-                  <Square className="h-6 w-6 fill-white text-white" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ─────────── PAUSED ─────────── */}
-          {isRunning && isPaused && (
-            <motion.div
-              key="paused"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center"
-            >
-              {/* Ring + stat grid, dimmed to signal paused. No card box —
-                  sits directly on the bottom panel's own gradient. */}
-              <div className="flex w-full items-center gap-4" style={{ padding: '6px 4px 18px' }}>
-                <RingMetric
-                  pct={goalProgress}
-                  distDisplay={displayDistance.toFixed(2)}
-                  distUnit={distanceUnit}
-                  goalDisplay={
-                    activeGoal === '5k'    ? `${distOpts[goalDistIdx]} ${distanceUnit.toUpperCase()}`
-                    : activeGoal === '30min' ? `${TIME_OPTIONS[goalTimeIdx]}M`
-                    : activeGoal === 'pace' ? PACE_OPTIONS[goalPaceIdx]
-                    : 'OPEN'
-                  }
-                  dimmed
-                />
-                <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-4" style={{ opacity: 0.88 }}>
-                  {[
-                    { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
-                    { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
-                    { label: 'CAL', value: String(Math.round(totalDistance * 65)), unit: 'kcal', hl: false },
-                    { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', hl: false },
-                  ].map((row, i) => (
-                    <div key={i}>
-                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] mb-1"
-                        style={{ color: row.hl ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}>
-                        {row.label}
-                      </span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-victory tabular-nums leading-none"
-                          style={{ fontSize: 27, color: row.hl ? 'var(--accent)' : '#ffffff' }}>
-                          {row.value}
-                        </span>
-                        <span className="text-[10px] font-semibold whitespace-nowrap"
-                          style={{ color: 'rgba(255,255,255,0.38)' }}>
-                          {row.unit}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Resume + Finish */}
-              <div className="flex w-full gap-3">
-                <button
-                  onClick={resumeRun}
-                  className="flex h-[62px] flex-1 items-center justify-center gap-2.5 rounded-full text-black transition-all active:scale-[0.97]"
-                  style={{ background: 'var(--accent)', boxShadow: '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' }}
-                >
-                  <Play className="h-5 w-5 fill-black" />
-                  <span className="font-victory text-[15px] font-black tracking-[0.18em] uppercase">RESUME</span>
-                </button>
-                <button
-                  onClick={() => { void handleStop(); }}
-                  className="flex h-[62px] flex-1 items-center justify-center gap-2.5 rounded-full text-white transition-all active:scale-[0.97]"
-                  style={{ background: 'rgba(239,68,68,0.9)' }}
-                >
-                  <Square className="h-4 w-4 fill-white" />
-                  <span className="font-victory text-[15px] font-black tracking-[0.18em] uppercase">FINISH</span>
-                </button>
+                  <Square className={isPaused ? 'h-4 w-4 fill-white' : 'h-6 w-6 fill-white text-white'} />
+                  {isPaused && (
+                    <motion.span layout="position"
+                      className="font-victory text-[15px] font-black tracking-[0.18em] text-white uppercase">
+                      FINISH
+                    </motion.span>
+                  )}
+                </motion.button>
               </div>
             </motion.div>
           )}
