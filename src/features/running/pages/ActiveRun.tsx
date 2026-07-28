@@ -655,7 +655,7 @@ export const ActiveRun: React.FC = () => {
             transition={{ delay: 0.2, type: 'spring', stiffness: 220, damping: 20 }}
             className="flex items-baseline gap-2"
           >
-            <span className="font-victory text-[96px] font-black leading-none tabular-nums text-white" style={{ letterSpacing: '-0.02em' }}>
+            <span className="font-victory text-[96px] font-black leading-none tabular-nums text-white" style={{ letterSpacing: '-0.02em', lineHeight: 0.95 }}>
               {finished.distance.toFixed(2)}
             </span>
             <span className="font-victory text-[28px] font-black" style={{ color: isPR ? '#fac775' : 'var(--accent)' }}>{finished.unit.toUpperCase()}</span>

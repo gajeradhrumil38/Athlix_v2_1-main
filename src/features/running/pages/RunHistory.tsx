@@ -1158,14 +1158,18 @@ export const RunHistory: React.FC = () => {
                     WebkitOverflowScrolling: 'touch',
                   }}
                 >
-                  {/* Distance hero */}
+                  {/* Distance hero — mt-8 + lineHeight 0.95 (not 0.88): at
+                      96px, a tighter line-box than the glyph's own rendered
+                      height pushes the ascender above the line box, which
+                      with only mt-4 of clearance was getting clipped by
+                      this container's own overflow-y: auto. */}
                   <motion.div
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.12, type: 'spring', stiffness: 240, damping: 22 }}
-                    className="flex items-baseline justify-center gap-2 mt-4 mb-1 px-6"
+                    className="flex items-baseline justify-center gap-2 mt-8 mb-1 px-6"
                   >
                     <span className="font-victory font-black leading-none tabular-nums text-white"
-                      style={{ fontSize: 96, letterSpacing: '-0.02em', lineHeight: 0.88 }}>
+                      style={{ fontSize: 96, letterSpacing: '-0.02em', lineHeight: 0.95 }}>
                       {dist(selected.distance).toFixed(2)}
                     </span>
                     <span className="font-victory font-black" style={{ fontSize: 28, color: pr ? '#fac775' : '#C8FF00', lineHeight: 1 }}>
