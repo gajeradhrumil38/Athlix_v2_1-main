@@ -50,7 +50,15 @@ export const RunRouteBackground: React.FC<{ path: GpsPoint[] }> = ({ path }) => 
         inset: 0,
         pointerEvents: 'none',
         userSelect: 'none',
-        filter: 'blur(1.5px) brightness(0.58) saturate(1.1)',
+        // Blur/saturate only — NOT brightness. CARTO's dark_all tiles
+        // measure ~11/255 average brightness on their own (verified by
+        // sampling one directly); the brightness(0.58) this used to carry
+        // darkened an already near-black tile even further, past the point
+        // of being visible at all — the map read as a plain black void
+        // with just the route line floating on it. The tile-specific boost
+        // below (same fix already applied to the run history map panels)
+        // happens BEFORE this blur, so it's safe to keep the softness here.
+        filter: 'blur(1.5px) saturate(1.1)',
         opacity: 0.98,
       }}
     >
@@ -58,6 +66,7 @@ export const RunRouteBackground: React.FC<{ path: GpsPoint[] }> = ({ path }) => 
         .rrbg .leaflet-container { background: #0d0f14 !important; }
         .rrbg .leaflet-control-attribution,
         .rrbg .leaflet-control-zoom { display: none !important; }
+        .rrbg .leaflet-tile { filter: brightness(2.6) contrast(1.3); }
       `}</style>
       <div className="rrbg" style={{ position: 'absolute', inset: 0 }}>
         <MapContainer
