@@ -788,10 +788,16 @@ export const ActiveRun: React.FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
-              className="flex flex-col gap-2.5"
+              className="flex flex-col gap-2"
             >
-              {/* Goal — GlassCard */}
-              <div style={{ ...glassCardStyle, overflow: 'hidden' }}>
+              {/* Goal — GlassCard, whole card is the tap target now (was
+                  just the small "Change" text — well under the 44px touch
+                  target guideline on its own) */}
+              <button
+                onClick={() => setShowGoalPicker(true)}
+                className="w-full text-left transition-all active:scale-[0.99]"
+                style={{ ...glassCardStyle, overflow: 'hidden' }}
+              >
                 <div className="flex items-center justify-between p-4 gap-3">
                   <div className="flex items-center gap-3">
                     <GoalRingIcon />
@@ -819,15 +825,11 @@ export const ActiveRun: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowGoalPicker(true)}
-                    className="flex items-center gap-0.5 text-[11px] font-black tracking-[0.06em] transition-opacity active:opacity-60 shrink-0"
-                    style={{ color: 'var(--accent)' }}
-                  >
+                  <span className="flex items-center gap-0.5 text-[11px] font-black tracking-[0.06em] shrink-0" style={{ color: 'var(--accent)' }}>
                     Change <ChevronLeft className="h-3.5 w-3.5 rotate-180" />
-                  </button>
+                  </span>
                 </div>
-              </div>
+              </button>
 
               {/* Quick stats row */}
               <div className="grid grid-cols-3">
@@ -851,10 +853,10 @@ export const ActiveRun: React.FC = () => {
                     hl: streak > 0,
                   },
                 ].map((s, i) => (
-                  <div key={i} className="flex flex-col items-center gap-0.5 py-1.5"
+                  <div key={i} className="flex flex-col items-center gap-1.5 py-3"
                     style={{ borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-                    <span className="text-[8px] font-black uppercase tracking-[0.16em]"
-                      style={{ color: s.hl ? 'var(--accent)' : 'rgba(255,255,255,0.35)' }}>
+                    <span className="text-[9px] font-black uppercase tracking-[0.14em]"
+                      style={{ color: s.hl ? 'var(--accent)' : 'rgba(255,255,255,0.42)' }}>
                       {s.label}
                     </span>
                     <span className="font-victory text-[22px] font-black leading-none"
