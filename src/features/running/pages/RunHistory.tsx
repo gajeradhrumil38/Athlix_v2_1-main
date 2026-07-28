@@ -79,6 +79,29 @@ const useDistanceUnit = (): 'km' | 'mi' => {
   catch { return 'km'; }
 };
 
+// ── Static map tile backdrop for a route thumbnail ────────────────────────────
+// A single static CARTO dark tile centered on the route, not a live Leaflet
+// instance — this list can hold 100+ runs, and mounting a full interactive
+// map per row would mean that many simultaneous tile-loading map instances.
+// A plain lazy-loaded <img> gives the same "traced path over a real map"
+// look at a fraction of the cost.
+const latLngToTile = (lat: number, lng: number, zoom: number): { x: number; y: number } => {
+  const latRad = (lat * Math.PI) / 180;
+  const n = 2 ** zoom;
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
+  return { x, y };
+};
+
+const routeTileUrl = (path: GpsPoint[]): string | null => {
+  if (path.length === 0) return null;
+  const zoom = 14;
+  const centerLat = path.reduce((s, p) => s + p.lat, 0) / path.length;
+  const centerLng = path.reduce((s, p) => s + p.lng, 0) / path.length;
+  const { x, y } = latLngToTile(centerLat, centerLng, zoom);
+  return `https://a.basemaps.cartocdn.com/dark_all/${zoom}/${x}/${y}.png`;
+};
+
 // ── Mini route SVG thumbnail ──────────────────────────────────────────────────
 const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size = 68 }) => {
   if (path.length < 2) return (
@@ -115,12 +138,23 @@ const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size =
   const polyline = pts.map(p => `${toX(p.lng).toFixed(1)},${toY(p.lat).toFixed(1)}`).join(' ');
   const sx = toX(pts[0].lng), sy = toY(pts[0].lat);
   const ex = toX(pts[pts.length - 1].lng), ey = toY(pts[pts.length - 1].lat);
+  const tileUrl = routeTileUrl(path);
 
   return (
     <div style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden',
       background: 'rgba(13,15,20,0.9)', border: '1px solid rgba(200,255,0,0.18)',
-      flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
+      flexShrink: 0, position: 'relative' }}>
+      {tileUrl && (
+        <img
+          src={tileUrl}
+          alt=""
+          loading="lazy"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      )}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,12,16,0.4)' }} />
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block', position: 'relative' }}>
         {/* Subtle glow under route */}
         <polyline points={polyline} fill="none" stroke="#C8FF00" strokeWidth="5" strokeLinecap="round"
           strokeLinejoin="round" opacity="0.07" />
