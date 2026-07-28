@@ -158,6 +158,10 @@ const PACE_OPTIONS    = ['4:00','4:30','5:00','5:30','6:00','6:30','7:00','7:30'
 // really granted) rather than a real run, so it doesn't get saved as one.
 const MIN_VALID_RUN_KM = 0.05;
 
+// Same qualification RunHistory.tsx uses for its "Personal Best" badge — a
+// short fast burst isn't a comparable effort to a real run.
+const MIN_PR_ELIGIBLE_KM = 1;
+
 /* ── Goal value chip picker ───────────────────────────────────────
    Was a custom scroll-snap "drum roll": onScroll computed the selected
    index from raw scrollTop/ITEM_H, rounded. That only ever matches
@@ -261,8 +265,8 @@ export const ActiveRun: React.FC = () => {
   } = useRunTracking();
 
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>(() => {
-    try { const s = localStorage.getItem('athlix_distance_unit'); return s === 'mi' ? 'mi' : 'km'; }
-    catch { return 'km'; }
+    try { const s = localStorage.getItem('athlix_distance_unit'); return s === 'km' ? 'km' : 'mi'; }
+    catch { return 'mi'; }
   });
 
   const toggleUnit = () => {
@@ -307,7 +311,16 @@ export const ActiveRun: React.FC = () => {
     return () => { cancelled = true; };
   }, [user]);
 
-  const lastRun = allRuns.length > 0 ? allRuns[allRuns.length - 1] : null;
+  // Order-independent on purpose: getRuns() (local storage) sorts oldest
+  // first, but mergeRuns() (fired once cloud history loads, see effect
+  // above) re-sorts newest first — indexing allRuns[length-1] silently
+  // flipped from "most recent run" to "oldest run" the moment the cloud
+  // merge landed, which is exactly why this showed a stale/wrong distance
+  // instead of the actual last run.
+  const lastRun = allRuns.reduce<typeof allRuns[number] | null>(
+    (latest, r) => (!latest || r.timestamp > latest.timestamp) ? r : latest,
+    null,
+  );
   const weekStats = useMemo(() => {
     const now = Date.now();
     const weekMs = 7 * 24 * 60 * 60 * 1000;
@@ -559,10 +572,14 @@ export const ActiveRun: React.FC = () => {
       : finished.pace < 7 ? 2
       : 1;
 
-    // Check if this is a PR (best pace among all saved runs)
+    // Check if this is a PR (best pace among all saved runs, same
+    // MIN_PR_ELIGIBLE_KM qualification RunHistory.tsx uses — a short fast
+    // burst isn't a comparable effort to a real run, so it shouldn't be
+    // able to claim "Personal Best" here but not there).
+    const finishedDistanceKm = finished.unit === 'mi' ? finished.distance / 0.621371 : finished.distance;
     const allRuns = getRuns();
-    const validPaces = allRuns.map((r) => r.pace).filter((p) => p > 0);
-    const isPR = validPaces.length > 0 && finished.rawPace > 0 &&
+    const validPaces = allRuns.filter((r) => r.distance >= MIN_PR_ELIGIBLE_KM).map((r) => r.pace).filter((p) => p > 0);
+    const isPR = validPaces.length > 0 && finished.rawPace > 0 && finishedDistanceKm >= MIN_PR_ELIGIBLE_KM &&
       finished.rawPace <= Math.min(...validPaces);
 
     return (
@@ -629,82 +646,88 @@ export const ActiveRun: React.FC = () => {
           className="relative z-10 flex flex-1 flex-col items-center justify-end gap-3 px-5"
           style={{ paddingBottom: 'max(28px, env(safe-area-inset-bottom))' }}
         >
-          {/* Hero distance */}
+          {/* Hero distance — same vertical-stack layout as the history detail
+              screen (Run Detail Screen.dc.html) so a run looks the same
+              whether you're seeing it right after finishing or later from
+              history, instead of two different layouts for the same data. */}
           <motion.div
             initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 220, damping: 20 }}
             className="flex items-baseline gap-2"
           >
-            <span className="font-victory text-[88px] font-black leading-none tabular-nums text-white" style={{ letterSpacing: '-0.02em' }}>
+            <span className="font-victory text-[96px] font-black leading-none tabular-nums text-white" style={{ letterSpacing: '-0.02em' }}>
               {finished.distance.toFixed(2)}
             </span>
-            <span className="font-victory text-[28px] font-black" style={{ color: 'var(--accent)' }}>{finished.unit.toUpperCase()}</span>
+            <span className="font-victory text-[28px] font-black" style={{ color: isPR ? '#fac775' : 'var(--accent)' }}>{finished.unit.toUpperCase()}</span>
           </motion.div>
 
-          {/* 4-stat horizontal card */}
+          {/* Vertical stat rows — centered, label above value */}
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-            className="w-full flex"
-            style={{ ...glassCardStyle, padding: '16px 4px' }}
+            className="w-full"
           >
             {[
-              { label: 'TIME', value: formatDuration(finished.duration), sub: null },
-              { label: 'PACE', value: finished.pace > 0 ? formatPace(finished.pace) : '--:--', sub: `/${finished.unit}` },
-              { label: 'CAL', value: String(cal), sub: 'kcal' },
+              { label: 'PACE', value: finished.pace > 0 ? formatPace(finished.pace) : '--:--', sub: `/${finished.unit}`, accent: true },
+              { label: 'TIME', value: formatDuration(finished.duration), sub: 'elapsed', accent: false },
+              { label: 'CALORIES', value: String(cal), sub: 'kcal', accent: false },
               ...(finished.elevationGain > 0
-                ? [{ label: 'ELEV', value: String(Math.round(finished.elevationGain)), sub: 'm gain' }]
+                ? [{ label: 'ELEV', value: String(Math.round(finished.elevationGain)), sub: 'm gain', accent: false }]
                 : []),
-              { label: 'EFFORT', value: null, sub: '/5', effort },
             ].map((s, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center justify-center gap-1 py-3"
-                style={{ borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
-                <span className="text-[8px] font-black uppercase tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</span>
-                {s.value !== null ? (
-                  <>
-                    <span className="font-victory text-[24px] font-black tabular-nums leading-none text-white">{s.value}</span>
-                    {s.sub && <span className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>{s.sub}</span>}
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-1.5">
-                    <EffortBars effort={s.effort!} />
-                    <span className="text-[10px] font-black" style={{ color: 'rgba(255,255,255,0.4)' }}>{s.effort}/5</span>
-                  </div>
-                )}
+              <div key={i} className="flex flex-col items-center px-6 py-3.5"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                <span className="text-[11px] font-black uppercase tracking-[0.2em] mb-1.5" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                  {s.label}
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-victory text-[36px] font-black tabular-nums leading-none"
+                    style={{ color: s.accent ? '#C8FF00' : 'white' }}>
+                    {s.value}
+                  </span>
+                  <span className="text-[13px] font-semibold"
+                    style={{ color: s.accent ? 'rgba(200,255,0,0.55)' : 'rgba(255,255,255,0.38)' }}>
+                    {s.sub}
+                  </span>
+                </div>
               </div>
             ))}
+
+            {/* Effort row */}
+            <div className="flex flex-col items-center px-6 py-3.5" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+              <span className="text-[11px] font-black uppercase tracking-[0.2em] mb-1.5" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                EFFORT
+              </span>
+              <div className="flex items-center gap-2.5">
+                <EffortBars effort={effort} />
+                <span className="font-victory text-[28px] font-black leading-none text-white">
+                  {effort}<span className="text-[14px] font-semibold" style={{ color: 'rgba(255,255,255,0.38)' }}>/5</span>
+                </span>
+              </div>
+            </div>
           </motion.div>
 
-          {/* Splits list */}
+          {/* Splits — secondary, minimal, no bars (matches history detail) */}
           {finished.splits && finished.splits.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
-              className="w-full"
-              style={{ ...glassCardStyle, padding: 16 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}
+              className="w-full px-6 py-3"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
             >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/40">SPLITS · /{finished.unit}</span>
-              </div>
-              <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.22em] block text-center" style={{ color: 'rgba(255,255,255,0.26)' }}>
+                SPLITS · /{finished.unit}
+              </span>
+              <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 mt-2">
                 {(() => {
                   const paces = finished.splits!.map((s) => s.pace);
-                  const bestPace = Math.min(...paces);
+                  const bestP = Math.min(...paces);
                   return finished.splits!.map((split, idx) => {
-                    const barPct = bestPace > 0 ? Math.min(1, bestPace / split.pace) : 0.5;
-                    const isBest = split.pace === bestPace;
+                    const isBest = split.pace === bestP;
                     return (
-                      <div key={idx} className="flex items-center gap-3">
-                        <span className="w-6 text-right text-[11px] font-black text-white/30">{idx + 1}</span>
-                        <div className="flex-1 h-[6px] rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${barPct * 100}%`,
-                              background: isBest ? 'var(--accent)' : 'rgba(200,255,0,0.45)',
-                              boxShadow: isBest ? '0 0 8px rgba(200,255,0,0.5)' : 'none',
-                            }}
-                          />
-                        </div>
-                        <span className="text-[12px] font-black tabular-nums text-white">
+                      <div key={idx} className="flex items-baseline gap-1">
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontWeight: 700 }}>{idx + 1}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
+                        <span className="font-victory tabular-nums leading-none"
+                          style={{ fontSize: 16, color: isBest ? 'var(--accent)' : 'white', fontWeight: 900 }}>
                           {formatPace(distanceUnit === 'mi' ? split.pace * 1.609344 : split.pace)}
                         </span>
                       </div>
@@ -939,8 +962,8 @@ export const ActiveRun: React.FC = () => {
               {/* View history */}
               <button
                 onClick={() => navigate('/run/history')}
-                className="w-full py-3 flex items-center justify-center gap-2 text-[12px] font-black tracking-[0.12em] transition-opacity active:opacity-60"
-                style={{ color: 'rgba(255,255,255,0.38)', letterSpacing: '0.08em' }}
+                className="w-full py-3 flex items-center justify-center gap-2 text-[12px] font-black tracking-[0.12em] transition-all active:opacity-60"
+                style={{ color: 'var(--accent)', letterSpacing: '0.08em' }}
               >
                 <History className="h-3.5 w-3.5" />
                 VIEW RUN HISTORY ›

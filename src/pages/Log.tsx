@@ -176,9 +176,9 @@ export const Log: React.FC = () => {
   const saveInFlightRef = useRef(false);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>(() => {
-    if (typeof window === 'undefined') return 'km';
+    if (typeof window === 'undefined') return 'mi';
     const stored = localStorage.getItem('athlix_distance_unit');
-    return stored === 'mi' ? 'mi' : 'km';
+    return stored === 'km' ? 'km' : 'mi';
   });
 
   useEffect(() => {

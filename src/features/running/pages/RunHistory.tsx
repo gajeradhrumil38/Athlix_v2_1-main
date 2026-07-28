@@ -55,6 +55,10 @@ const DEMO_PATH_3MI = [
   { lat: 41.9628, lng: -91.6350 },
 ];
 
+// Minimum distance (km) for a run to be eligible for the "Personal Best"
+// pace comparison — keeps a short fast burst from out-pacing real runs.
+const MIN_PR_ELIGIBLE_KM = 1;
+
 const NOW = Date.now();
 const DEMO_RUNS: SavedRun[] = [
   {
@@ -75,8 +79,8 @@ const DEMO_RUNS: SavedRun[] = [
 
 // ── Distance unit ─────────────────────────────────────────────────────────────
 const useDistanceUnit = (): 'km' | 'mi' => {
-  try { const s = localStorage.getItem('athlix_distance_unit'); return s === 'mi' ? 'mi' : 'km'; }
-  catch { return 'km'; }
+  try { const s = localStorage.getItem('athlix_distance_unit'); return s === 'km' ? 'km' : 'mi'; }
+  catch { return 'mi'; }
 };
 
 // ── Static map tile backdrop for a route thumbnail ────────────────────────────
@@ -578,11 +582,15 @@ export const RunHistory: React.FC = () => {
     return map;
   }, [allRuns]);
 
+  // A short fast burst (e.g. a 0.1 mi sprint) isn't a comparable effort to
+  // a normal run — without a minimum distance it could out-pace every real
+  // run in your history and steal the "Personal Best" badge.
+  const isPrEligible = (r: SavedRun) => r.distance >= MIN_PR_ELIGIBLE_KM && r.pace > 0;
   const bestPace = useMemo(() => {
-    const validPaces = allRuns.map((r) => r.pace).filter((p) => p > 0);
+    const validPaces = allRuns.filter(isPrEligible).map((r) => r.pace);
     return validPaces.length > 0 ? Math.min(...validPaces) : null;
   }, [allRuns]);
-  const isPR = (run: SavedRun) => bestPace !== null && run.pace > 0 && run.pace === bestPace;
+  const isPR = (run: SavedRun) => bestPace !== null && isPrEligible(run) && run.pace === bestPace;
 
   const dist = (km: number) => (distanceUnit === 'mi' ? km * 0.621371 : km);
   const paceDisplay = (paceKm: number) => (distanceUnit === 'mi' ? paceKm * 1.609344 : paceKm);
