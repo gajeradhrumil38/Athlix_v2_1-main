@@ -2,15 +2,15 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronLeft, ChevronRight, Footprints, Trash2, Calendar,
-  Share2, X, Cloud, RefreshCw,
+  ChevronLeft, ChevronRight, ChevronDown, Footprints, Trash2, Calendar,
+  Share2, X, Cloud, RefreshCw, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, subMonths, addMonths, subDays } from 'date-fns';
 import { getRuns, deleteRun, loadRunsFromCloud, deleteRunFromCloud, mergeRuns } from '../utils/storage';
 import type { SavedRun } from '../utils/storage';
 import { RunRouteBackground } from '../components/RunRouteBackground';
-import { formatDuration, formatPace } from '../utils/gpsCalculations';
+import { formatDuration, formatPace, calculateDistance } from '../utils/gpsCalculations';
 import type { GpsPoint } from '../utils/gpsCalculations';
 import { useAuth } from '../../../contexts/AuthContext';
 import { whoopService } from '../../whoop/services/whoopService';
@@ -111,6 +111,10 @@ const routeTileUrl = (path: GpsPoint[]): string | null => {
 // content-driven and not known ahead of time in CSS.
 const MAP_PANEL_WIDTH = 130;
 const MAP_VIEWPORT_H = 200;
+// The mask fades the map to fully transparent by the panel's left edge, so
+// the stats grid only needs to keep clear of the panel's opaque (55%) zone,
+// not its full width — reserving the full width starves the grid of room.
+const STATS_SPACER_WIDTH = 100;
 
 const RunCardMapPanel: React.FC<{ path: GpsPoint[] }> = ({ path }) => {
   if (path.length < 2) return null;
@@ -141,6 +145,35 @@ const RunCardMapPanel: React.FC<{ path: GpsPoint[] }> = ({ path }) => {
   const sx = toX(pts[0].lng), sy = toY(pts[0].lat);
   const ex = toX(pts[pts.length - 1].lng), ey = toY(pts[pts.length - 1].lat);
   const tileUrl = routeTileUrl(path);
+
+  // Color each stretch of the route by how fast it was run relative to the
+  // rest of THIS run (not an absolute pace scale — a 5:00/km stretch reads
+  // "fast" on a slow run and "slow" on a fast one). Segments without both
+  // endpoint timestamps (older saved runs, demo data) fall back to a fixed
+  // neutral tone rather than guessing.
+  const FAST_RGB = [200, 255, 0];
+  const SLOW_RGB = [250, 199, 117];
+  const rawSegPaces: (number | null)[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (typeof a.timestamp === 'number' && typeof b.timestamp === 'number') {
+      const dtMin = (b.timestamp - a.timestamp) / 60000;
+      const dKm = calculateDistance(a, b);
+      rawSegPaces.push(dtMin > 0 && dKm > 0 ? dtMin / dKm : null);
+    } else {
+      rawSegPaces.push(null);
+    }
+  }
+  const validSegPaces = rawSegPaces.filter((v): v is number => v !== null);
+  const minSegPace = validSegPaces.length ? Math.min(...validSegPaces) : 0;
+  const paceSpread = validSegPaces.length ? Math.max(...validSegPaces) - minSegPace : 0;
+  const segments = pts.slice(0, -1).map((pt, i) => {
+    const next = pts[i + 1];
+    const raw = rawSegPaces[i];
+    const t = raw !== null && paceSpread > 0 ? Math.min(1, Math.max(0, (raw - minSegPace) / paceSpread)) : 0.3;
+    const rgb = FAST_RGB.map((v, ci) => Math.round(v + (SLOW_RGB[ci] - v) * t));
+    return { x1: toX(pt.lng), y1: toY(pt.lat), x2: toX(next.lng), y2: toY(next.lat), color: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` };
+  });
 
   return (
     <div style={{
@@ -173,8 +206,10 @@ const RunCardMapPanel: React.FC<{ path: GpsPoint[] }> = ({ path }) => {
         style={{ display: 'block', position: 'relative' }}>
         <polyline points={polyline} fill="none" stroke="#C8FF00" strokeWidth="5" strokeLinecap="round"
           strokeLinejoin="round" opacity="0.07" />
-        <polyline points={polyline} fill="none" stroke="#C8FF00" strokeWidth="1.8" strokeLinecap="round"
-          strokeLinejoin="round" opacity="0.88" />
+        {segments.map((s, i) => (
+          <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={s.color}
+            strokeWidth="1.8" strokeLinecap="round" opacity="0.9" />
+        ))}
         <circle cx={sx} cy={sy} r={2.5} fill="#C8FF00" opacity="0.6" />
         <circle cx={ex} cy={ey} r={3} fill="#C8FF00" />
         <circle cx={ex} cy={ey} r={5.5} fill="#C8FF00" opacity="0.15" />
@@ -492,6 +527,7 @@ export const RunHistory: React.FC = () => {
   const [runTab, setRunTab] = useState<RunTab>('all');
   const [showCalendar, setShowCalendar] = useState(false);
   const [calFilterDate, setCalFilterDate] = useState<Date | null>(null);
+  const [expandedRunIds, setExpandedRunIds] = useState<Set<number>>(new Set());
   const distanceUnit = useDistanceUnit();
   const [whoopWorkouts, setWhoopWorkouts] = useState<WhoopWorkout[]>([]);
 
@@ -532,6 +568,16 @@ export const RunHistory: React.FC = () => {
 
   const isDemo = (run: SavedRun) => run.id < 0;
 
+  // Maps a run's id to the run immediately before it chronologically (allRuns
+  // is sorted newest-first), used for the "vs last run" pace delta chip.
+  // Built from the full unfiltered list, not filteredRuns, so the comparison
+  // still means "the run before this one" even while a tab/day filter is active.
+  const prevRunMap = useMemo(() => {
+    const map = new Map<number, SavedRun>();
+    for (let i = 0; i < allRuns.length - 1; i++) map.set(allRuns[i].id, allRuns[i + 1]);
+    return map;
+  }, [allRuns]);
+
   const bestPace = useMemo(() => {
     const validPaces = allRuns.map((r) => r.pace).filter((p) => p > 0);
     return validPaces.length > 0 ? Math.min(...validPaces) : null;
@@ -551,6 +597,14 @@ export const RunHistory: React.FC = () => {
   }, [allRuns, runTab, calFilterDate]);
 
   const maxDist = useMemo(() => Math.max(...allRuns.map((r) => r.distance), 1), [allRuns]);
+
+  const toggleRunExpanded = (id: number) => {
+    setExpandedRunIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // Weekly stats
   const weeklyStats = useMemo(() => {
@@ -765,6 +819,11 @@ export const RunHistory: React.FC = () => {
               const p = paceDisplay(run.pace);
               const demo = isDemo(run);
               const pr = isPR(run);
+              const prevRun = prevRunMap.get(run.id);
+              const paceDeltaSec = (p > 0 && prevRun && prevRun.pace > 0)
+                ? Math.round((p - paceDisplay(prevRun.pace)) * 60)
+                : null;
+              const expanded = expandedRunIds.has(run.id);
               return (
                 <motion.div
                   key={run.id}
@@ -825,23 +884,23 @@ export const RunHistory: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={(e) => { e.stopPropagation(); setConfirmDelete(run); }}
                           aria-label="Delete run"
-                          className="flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-90"
-                          style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)' }}>
-                          <Trash2 className="h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.55)' }} />
+                          className="flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-90"
+                          style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)' }}>
+                          <Trash2 className="h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.6)' }} />
                         </button>
-                        <ChevronRight className="h-4 w-4 shrink-0" style={{ color: 'rgba(255,255,255,0.45)' }} />
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full"
+                          style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)' }}>
+                          <ChevronRight className="h-4 w-4 shrink-0" style={{ color: 'rgba(255,255,255,0.6)' }} />
+                        </div>
                       </div>
                     </div>
 
-                    {/* Divider */}
-                    <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', marginLeft: 16, marginRight: 16 }} />
-
                     {/* Body: ring + stats (map panel sits behind, full card height) */}
-                    <div className="flex items-center gap-4 px-4 py-3.5">
+                    <div className="flex items-start gap-4 px-4 pt-1 pb-3.5">
                       {/* Ring */}
                       <MiniRingMetric
                         pct={run.distance / maxDist}
@@ -850,53 +909,89 @@ export const RunHistory: React.FC = () => {
                         pr={pr}
                       />
 
-                      {/* Stats grid */}
-                      <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3">
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>TIME</span>
-                          <p className="font-victory text-[20px] font-black leading-none text-white tabular-nums mt-1">
-                            {formatDuration(run.duration)}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>PACE</span>
-                          <div className="flex items-baseline gap-1.5 mt-1">
-                            <span className="font-victory text-[20px] font-black leading-none text-white tabular-nums">
-                              {p > 0 ? formatPace(p) : '--:--'}
-                            </span>
-                            <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>/{distanceUnit}</span>
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>CAL</span>
-                          <div className="flex items-baseline gap-1.5 mt-1">
-                            <span className="font-victory text-[20px] font-black leading-none text-white tabular-nums">
-                              {Math.round(run.distance * 65)}
-                            </span>
-                            <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>kcal</span>
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>SPLITS</span>
-                          <p className="font-victory text-[20px] font-black leading-none text-white tabular-nums mt-1">
-                            {run.splits?.length ?? 0}
-                          </p>
-                        </div>
-                        {!!run.elevationGain && run.elevationGain > 0 && (
+                      <div className="flex-1 min-w-0">
+                        {/* Primary stats: always visible */}
+                        <div className="grid grid-cols-2 gap-x-5 gap-y-3.5">
                           <div>
-                            <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>ELEV</span>
-                            <div className="flex items-baseline gap-1.5 mt-1">
-                              <span className="font-victory text-[20px] font-black leading-none text-white tabular-nums">
-                                {Math.round(run.elevationGain)}
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>TIME</span>
+                            <p className="font-victory text-[21px] font-black leading-none text-white tabular-nums mt-1.5" style={{ letterSpacing: '0.015em' }}>
+                              {formatDuration(run.duration)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>PACE</span>
+                            <div className="flex items-baseline gap-1.5 mt-1.5 flex-wrap">
+                              <span className="font-victory text-[21px] font-black leading-none text-white tabular-nums" style={{ letterSpacing: '0.015em' }}>
+                                {p > 0 ? formatPace(p) : '--:--'}
                               </span>
-                              <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>m gain</span>
+                              <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>/{distanceUnit}</span>
+                              {paceDeltaSec !== null && paceDeltaSec !== 0 && (
+                                <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-[1px] text-[9px] font-black"
+                                  style={{
+                                    background: paceDeltaSec < 0 ? 'rgba(200,255,0,0.14)' : 'rgba(250,199,117,0.14)',
+                                    color: paceDeltaSec < 0 ? '#C8FF00' : '#fac775',
+                                  }}>
+                                  {paceDeltaSec < 0
+                                    ? <TrendingDown className="h-2.5 w-2.5" />
+                                    : <TrendingUp className="h-2.5 w-2.5" />}
+                                  {Math.abs(paceDeltaSec)}s
+                                </span>
+                              )}
                             </div>
                           </div>
-                        )}
+                        </div>
+
+                        {/* Secondary stats: tucked behind a toggle */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleRunExpanded(run.id); }}
+                          className="mt-2.5 flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.1em] transition-all active:scale-95"
+                          style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          {expanded ? 'Less' : 'More'}
+                          <ChevronDown className="h-3 w-3 transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'none' }} />
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {expanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden">
+                              <div className="grid grid-cols-2 gap-x-5 gap-y-3.5 mt-3">
+                                <div>
+                                  <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>CAL</span>
+                                  <div className="flex items-baseline gap-1.5 mt-1.5">
+                                    <span className="font-victory text-[21px] font-black leading-none text-white tabular-nums" style={{ letterSpacing: '0.015em' }}>
+                                      {Math.round(run.distance * 65)}
+                                    </span>
+                                    <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>kcal</span>
+                                  </div>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>SPLITS</span>
+                                  <p className="font-victory text-[21px] font-black leading-none text-white tabular-nums mt-1.5" style={{ letterSpacing: '0.015em' }}>
+                                    {run.splits?.length ?? 0}
+                                  </p>
+                                </div>
+                                {!!run.elevationGain && run.elevationGain > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>ELEV</span>
+                                    <div className="flex items-baseline gap-1.5 mt-1.5">
+                                      <span className="font-victory text-[21px] font-black leading-none text-white tabular-nums" style={{ letterSpacing: '0.015em' }}>
+                                        {Math.round(run.elevationGain)}
+                                      </span>
+                                      <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>m gain</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
 
-                      {/* Spacer reserving room for the map panel so stats text doesn't run under it */}
-                      <div style={{ width: MAP_PANEL_WIDTH, flexShrink: 0 }} aria-hidden="true" />
+                      {/* Spacer keeping stats text clear of the map panel's opaque zone */}
+                      <div style={{ width: STATS_SPACER_WIDTH, flexShrink: 0 }} aria-hidden="true" />
                     </div>
                   </div>
                 </motion.div>
