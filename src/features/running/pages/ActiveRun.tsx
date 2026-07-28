@@ -588,9 +588,20 @@ export const ActiveRun: React.FC = () => {
       <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: '#0d0f14' }}>
         <RunRouteBackground path={finished.path} />
 
+        {/* Two layers: the vertical fade keeps content legible over the
+            map, and the radial "spotlight" gives guaranteed contrast right
+            behind the hero distance + PACE numbers specifically — the
+            brightness boost on the map tiles (needed to make the map
+            visible at all) means a bright patch of street or a lime route
+            segment can land right behind big white/lime text otherwise. */}
         <div
           className="absolute inset-0"
-          style={{ background: 'linear-gradient(to bottom, rgba(13,15,20,0.55) 0%, rgba(13,15,20,0.7) 40%, rgba(13,15,20,0.96) 70%, #0d0f14 85%)' }}
+          style={{
+            background: `
+              radial-gradient(65% 42% at 50% 66%, rgba(13,15,20,0.62) 0%, rgba(13,15,20,0.22) 60%, transparent 85%),
+              linear-gradient(to bottom, rgba(13,15,20,0.55) 0%, rgba(13,15,20,0.7) 40%, rgba(13,15,20,0.96) 70%, #0d0f14 85%)
+            `,
+          }}
         />
 
         {/* Top bar */}
@@ -657,10 +668,10 @@ export const ActiveRun: React.FC = () => {
             transition={{ delay: 0.2, type: 'spring', stiffness: 220, damping: 20 }}
             className="flex items-baseline gap-2"
           >
-            <span className="font-victory text-[96px] font-black leading-none tabular-nums text-white" style={{ letterSpacing: '-0.02em', lineHeight: 0.95 }}>
+            <span className="font-victory font-black tabular-nums text-white" style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
               {finished.distance.toFixed(2)}
             </span>
-            <span className="font-victory text-[28px] font-black" style={{ color: isPR ? '#fac775' : 'var(--accent)' }}>{finished.unit.toUpperCase()}</span>
+            <span className="font-black uppercase" style={{ fontSize: 22, letterSpacing: '0.16em', color: isPR ? '#fac775' : 'var(--accent)' }}>{finished.unit}</span>
           </motion.div>
 
           {/* Vertical stat stack — plain gap spacing, no row dividers,
@@ -681,16 +692,15 @@ export const ActiveRun: React.FC = () => {
                 : []),
             ].map((s, i) => (
               <div key={i} className="flex flex-col items-center" style={{ gap: 6 }}>
-                <span className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                   {s.label}
                 </span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-victory font-black tabular-nums leading-none"
+                <div className="flex items-center gap-1.5">
+                  <span className="font-victory tabular-nums leading-none"
                     style={{ fontSize: s.size, color: s.accent ? '#C8FF00' : 'white' }}>
                     {s.value}
                   </span>
-                  <span className="text-[13px] font-semibold"
-                    style={{ color: s.accent ? 'rgba(200,255,0,0.55)' : 'rgba(255,255,255,0.38)' }}>
+                  <span className="text-[15px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>
                     {s.sub}
                   </span>
                 </div>
@@ -700,7 +710,7 @@ export const ActiveRun: React.FC = () => {
             {/* Effort row — not part of the original design, kept at the
                 same visual weight as TIME/CALORIES */}
             <div className="flex flex-col items-center" style={{ gap: 6 }}>
-              <span className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 EFFORT
               </span>
               <div className="flex items-center gap-2.5">
@@ -716,31 +726,34 @@ export const ActiveRun: React.FC = () => {
           {finished.splits && finished.splits.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}
-              className="w-full px-6 py-3"
-              style={{ marginTop: 4 }}
+              className="w-full px-6 py-3 flex flex-col items-center"
+              style={{ marginTop: 4, gap: 8 }}
             >
-              <span className="text-[10px] font-black uppercase tracking-[0.22em] block text-center" style={{ color: 'rgba(255,255,255,0.26)' }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 SPLITS · /{finished.unit}
               </span>
-              <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 mt-2">
-                {(() => {
-                  const paces = finished.splits!.map((s) => s.pace);
-                  const bestP = Math.min(...paces);
-                  return finished.splits!.map((split, idx) => {
-                    const isBest = split.pace === bestP;
-                    return (
-                      <div key={idx} className="flex items-baseline gap-1">
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontWeight: 700 }}>{idx + 1}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
+              {(() => {
+                const paces = finished.splits!.map((s) => s.pace);
+                const bestP = Math.min(...paces);
+                const splits = finished.splits!;
+                return splits.map((split, idx) => {
+                  const isBest = split.pace === bestP;
+                  const isLast = idx === splits.length - 1;
+                  return (
+                    <div key={idx} className="flex flex-col items-center">
+                      <div className="flex items-center justify-center" style={{ gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.45)' }}>{idx + 1}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.26)' }}>—</span>
                         <span className="font-victory tabular-nums leading-none"
-                          style={{ fontSize: 16, color: isBest ? 'var(--accent)' : 'white', fontWeight: 900 }}>
+                          style={{ fontSize: 26, color: isBest ? 'var(--accent)' : 'white' }}>
                           {formatPace(distanceUnit === 'mi' ? split.pace * 1.609344 : split.pace)}
                         </span>
                       </div>
-                    );
-                  });
-                })()}
-              </div>
+                      {!isLast && <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.18)', opacity: 0.6 }} />}
+                    </div>
+                  );
+                });
+              })()}
             </motion.div>
           )}
 

@@ -1096,8 +1096,21 @@ export const RunHistory: React.FC = () => {
             >
               <RunRouteBackground path={selected.path} />
 
+              {/* Two layers: the vertical fade keeps the top bar area
+                  legible over the map, and the radial "spotlight" gives
+                  guaranteed contrast right behind the hero distance + PACE
+                  numbers specifically — the brightness boost on the map
+                  tiles (needed to make the map visible at all) means a
+                  bright patch of street or a lime route segment can land
+                  right behind big white/lime text otherwise, and the
+                  single top-to-bottom fade alone doesn't blend left-right. */}
               <div className="absolute inset-0"
-                style={{ background: 'linear-gradient(to bottom, rgba(13,15,20,0) 0%, rgba(13,15,20,0.05) 20%, rgba(13,15,20,0.55) 44%, rgba(13,15,20,0.95) 60%, #0d0f14 72%)' }} />
+                style={{
+                  background: `
+                    radial-gradient(65% 42% at 50% 58%, rgba(13,15,20,0.62) 0%, rgba(13,15,20,0.22) 60%, transparent 85%),
+                    linear-gradient(to bottom, rgba(13,15,20,0) 0%, rgba(13,15,20,0.05) 20%, rgba(13,15,20,0.55) 44%, rgba(13,15,20,0.95) 60%, #0d0f14 72%)
+                  `,
+                }} />
 
               {/* Top bar */}
               <div className="absolute left-0 right-0 top-0 flex items-center justify-between px-4"
@@ -1158,22 +1171,23 @@ export const RunHistory: React.FC = () => {
                     WebkitOverflowScrolling: 'touch',
                   }}
                 >
-                  {/* Distance hero — mt-8 + lineHeight 0.95 (not 0.88): at
-                      96px, a tighter line-box than the glyph's own rendered
-                      height pushes the ascender above the line box, which
-                      with only mt-4 of clearance was getting clipped by
-                      this container's own overflow-y: auto. */}
+                  {/* Distance hero — 108px, lineHeight 1.05 (matches the
+                      Run Detail Screen reference exactly). A line-height
+                      above 1 leaves the line box taller than the glyph
+                      needs, unlike the compressed 0.88 this used to carry —
+                      that's what was pushing the ascender past this
+                      container's own overflow-y: auto edge and clipping it. */}
                   <motion.div
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.12, type: 'spring', stiffness: 240, damping: 22 }}
                     className="flex items-baseline justify-center gap-2 mt-8 mb-1 px-6"
                   >
-                    <span className="font-victory font-black leading-none tabular-nums text-white"
-                      style={{ fontSize: 96, letterSpacing: '-0.02em', lineHeight: 0.95 }}>
+                    <span className="font-victory font-black tabular-nums text-white"
+                      style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
                       {dist(selected.distance).toFixed(2)}
                     </span>
-                    <span className="font-victory font-black" style={{ fontSize: 28, color: pr ? '#fac775' : '#C8FF00', lineHeight: 1 }}>
-                      {distanceUnit.toUpperCase()}
+                    <span className="font-black uppercase" style={{ fontSize: 22, letterSpacing: '0.16em', color: pr ? '#fac775' : '#C8FF00' }}>
+                      {distanceUnit}
                     </span>
                   </motion.div>
 
@@ -1199,18 +1213,17 @@ export const RunHistory: React.FC = () => {
                       { label: 'CALORIES', value: String(cal), sub: 'kcal', accent: false, size: 40 },
                     ].map((s, i) => (
                       <div key={i} className="flex flex-col items-center" style={{ gap: 6 }}>
-                        <span className="text-[11px] font-black uppercase tracking-[0.2em]"
-                          style={{ color: 'rgba(255,255,255,0.38)' }}>
+                        <span className="text-[11px] font-bold uppercase tracking-[0.16em]"
+                          style={{ color: 'rgba(255,255,255,0.45)' }}>
                           {s.label}
                         </span>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="font-victory font-black tabular-nums leading-none"
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-victory tabular-nums leading-none"
                             style={{ fontSize: s.size, color: s.accent ? '#C8FF00' : 'white' }}>
                             {s.value}
                           </span>
                           {s.sub && (
-                            <span className="text-[13px] font-semibold"
-                              style={{ color: s.accent ? 'rgba(200,255,0,0.55)' : 'rgba(255,255,255,0.38)' }}>
+                            <span className="text-[15px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>
                               {s.sub}
                             </span>
                           )}
@@ -1234,35 +1247,40 @@ export const RunHistory: React.FC = () => {
                     </div>
                   </motion.div>
 
-                  {/* Splits — secondary, minimal, no bars */}
+                  {/* Splits — vertical centered list with a thin connector
+                      between rows, matching the Run Detail Screen reference
+                      exactly instead of a horizontal wrapped list. */}
                   {selected.splits && selected.splits.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.32 }}
-                      className="w-full px-6 py-3"
-                      style={{ marginTop: 12 }}
+                      className="w-full px-6 py-3 flex flex-col items-center"
+                      style={{ marginTop: 12, gap: 8 }}
                     >
-                      <span className="text-[10px] font-black uppercase tracking-[0.22em] block text-center"
-                        style={{ color: 'rgba(255,255,255,0.26)' }}>
+                      <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                         SPLITS · /{distanceUnit}
                       </span>
-                      <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 mt-2">
-                        {(() => {
-                          const paces = selected.splits!.map((s) => s.pace);
-                          const bestP = Math.min(...paces);
-                          return selected.splits!.map((split, idx) => {
-                            const isBest = split.pace === bestP;
-                            return (
-                              <div key={idx} className="flex items-baseline gap-1">
-                                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontWeight: 700 }}>{idx + 1}</span>
-                                <span className="font-victory tabular-nums font-black"
-                                  style={{ fontSize: 14, color: isBest ? '#C8FF00' : 'rgba(255,255,255,0.52)' }}>
+                      {(() => {
+                        const paces = selected.splits!.map((s) => s.pace);
+                        const bestP = Math.min(...paces);
+                        const splits = selected.splits!;
+                        return splits.map((split, idx) => {
+                          const isBest = split.pace === bestP;
+                          const isLast = idx === splits.length - 1;
+                          return (
+                            <div key={idx} className="flex flex-col items-center">
+                              <div className="flex items-center justify-center" style={{ gap: 8 }}>
+                                <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.45)' }}>{idx + 1}</span>
+                                <span style={{ color: 'rgba(255,255,255,0.26)' }}>—</span>
+                                <span className="font-victory tabular-nums leading-none"
+                                  style={{ fontSize: 26, color: isBest ? '#C8FF00' : 'white' }}>
                                   {formatPace(paceDisplay(split.pace))}
                                 </span>
                               </div>
-                            );
-                          });
-                        })()}
-                      </div>
+                              {!isLast && <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.18)', opacity: 0.6 }} />}
+                            </div>
+                          );
+                        });
+                      })()}
                     </motion.div>
                   )}
 
