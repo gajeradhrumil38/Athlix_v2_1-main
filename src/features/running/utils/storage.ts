@@ -168,8 +168,11 @@ export async function saveRunToCloud(userId: string, run: SavedRun): Promise<num
 
 export async function linkRunToWorkout(runId: number, workoutId: string): Promise<void> {
   try {
-    await supabase.from('runs').update({ workout_id: workoutId }).eq('id', runId);
-  } catch { /* best-effort — a failed link just means this run won't cascade-delete its workout later */ }
+    const { error } = await supabase.from('runs').update({ workout_id: workoutId }).eq('id', runId);
+    if (error) console.warn('linkRunToWorkout failed:', error.message);
+  } catch (e) {
+    console.warn('linkRunToWorkout threw:', e);
+  }
 }
 
 export async function loadRunsFromCloud(userId: string): Promise<SavedRun[]> {
