@@ -63,28 +63,30 @@ const RingMetric: React.FC<{
   goalDisplay: string;
   dimmed?: boolean;
 }> = ({ pct, distDisplay, distUnit, goalDisplay, dimmed }) => {
-  const S = 164, R = 68, C = 2 * Math.PI * R;
+  const S = 138, R = 62, C = 2 * Math.PI * R;
   return (
     <div style={{ position: 'relative', width: S, height: S, flexShrink: 0, opacity: dimmed ? 0.88 : 1 }}>
       <svg width={S} height={S} viewBox={`0 0 ${S} ${S}`}
         style={{ transform: 'rotate(-90deg)', overflow: 'visible' }}>
-        <circle cx={S / 2} cy={S / 2} r={R} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
-        <circle cx={S / 2} cy={S / 2} r={R} fill="none" stroke="var(--accent)" strokeWidth="8" strokeLinecap="round"
+        <circle cx={S / 2} cy={S / 2} r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+        <circle cx={S / 2} cy={S / 2} r={R} fill="none" stroke="var(--accent)" strokeWidth="7" strokeLinecap="round"
           strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(1, Math.max(0, pct)))}
-          style={{ filter: 'drop-shadow(0 0 7px rgba(200,255,0,0.55))', transition: 'stroke-dashoffset 0.8s ease' }} />
+          style={{ filter: 'drop-shadow(0 0 8px rgba(200,255,0,0.35))', transition: 'stroke-dashoffset 1s ease-out' }} />
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 3 }}>
-        <span className="font-victory tabular-nums" style={{ fontSize: 40, lineHeight: 0.84, color: '#ffffff' }}>
-          {distDisplay}
-        </span>
-        <span className="font-victory" style={{ fontSize: 13, color: 'var(--accent)', letterSpacing: '0.14em', lineHeight: 1 }}>
-          {distUnit.toUpperCase()}
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 6 }}>
+        <span className="flex items-baseline" style={{ gap: 4 }}>
+          <span className="font-victory tabular-nums" style={{ fontSize: 40, lineHeight: 0.84, color: '#ffffff' }}>
+            {distDisplay}
+          </span>
+          <span className="font-victory" style={{ fontSize: 13, color: '#ffffff', letterSpacing: '0.14em', lineHeight: 1 }}>
+            {distUnit.toUpperCase()}
+          </span>
         </span>
         {goalDisplay && (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 5 }}>
-            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Goal</span>
-            <span className="font-victory" style={{ fontSize: 13, color: 'var(--accent)' }}>{goalDisplay}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.38)' }}>Goal</span>
+            <span className="font-victory" style={{ fontSize: 13, color: 'var(--accent)', lineHeight: 1 }}>{goalDisplay}</span>
           </div>
         )}
       </div>
@@ -991,11 +993,32 @@ export const ActiveRun: React.FC = () => {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center"
             >
-              {/* Ring + stat grid — stays mounted across pause/resume, just
-                  dims slightly to signal paused. No card box around it — it
-                  sits directly on the bottom panel's own gradient so the map
-                  reads through instead of a boxed tile. */}
-              <div className="flex w-full items-center gap-4" style={{ padding: '6px 4px 18px' }}>
+              {/* Metrics band — TIME/ELEV left, goal ring centered,
+                  PACE/CAL right. Sits directly on the bottom panel's own
+                  gradient (no card box) so the map reads through. */}
+              <div className="flex w-full items-center justify-between gap-3"
+                style={{ padding: '6px 4px 18px', opacity: isPaused ? 0.88 : 1, transition: 'opacity 0.3s ease' }}>
+                <div className="flex flex-col items-start flex-1 min-w-0" style={{ gap: 22 }}>
+                  {[
+                    { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', accent: false },
+                    { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', accent: false },
+                  ].map((s, i) => (
+                    <div key={i} className="flex flex-col items-start" style={{ gap: 4 }}>
+                      <span className="text-[10px] font-black uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                        {s.label}
+                      </span>
+                      <div className="flex items-baseline" style={{ gap: 5 }}>
+                        <span className="font-victory tabular-nums leading-none" style={{ fontSize: 28, color: s.accent ? 'var(--accent)' : '#ffffff' }}>
+                          {s.value}
+                        </span>
+                        <span className="text-[10px] font-semibold whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.32)' }}>
+                          {s.unit}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <RingMetric
                   pct={goalProgress}
                   distDisplay={displayDistance.toFixed(2)}
@@ -1008,27 +1031,22 @@ export const ActiveRun: React.FC = () => {
                   }
                   dimmed={isPaused}
                 />
-                <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-4"
-                  style={{ opacity: isPaused ? 0.88 : 1, transition: 'opacity 0.3s ease' }}>
+
+                <div className="flex flex-col items-end flex-1 min-w-0" style={{ gap: 22 }}>
                   {[
-                    { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
-                    { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
-                    { label: 'CAL', value: String(Math.round(totalDistance * 65)), unit: 'kcal', hl: false },
-                    { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', hl: false },
-                  ].map((row, i) => (
-                    <div key={i}>
-                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] mb-1"
-                        style={{ color: row.hl ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}>
-                        {row.label}
+                    { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, accent: true },
+                    { label: 'CAL', value: String(Math.round(totalDistance * 65)), unit: 'kcal', accent: false },
+                  ].map((s, i) => (
+                    <div key={i} className="flex flex-col items-start" style={{ gap: 4 }}>
+                      <span className="text-[10px] font-black uppercase tracking-[0.14em]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                        {s.label}
                       </span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-victory tabular-nums leading-none"
-                          style={{ fontSize: 27, color: row.hl ? 'var(--accent)' : '#ffffff' }}>
-                          {row.value}
+                      <div className="flex items-baseline" style={{ gap: 5 }}>
+                        <span className="font-victory tabular-nums leading-none" style={{ fontSize: 28, color: s.accent ? 'var(--accent)' : '#ffffff' }}>
+                          {s.value}
                         </span>
-                        <span className="text-[10px] font-semibold whitespace-nowrap"
-                          style={{ color: 'rgba(255,255,255,0.38)' }}>
-                          {row.unit}
+                        <span className="text-[10px] font-semibold whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.32)' }}>
+                          {s.unit}
                         </span>
                       </div>
                     </div>
