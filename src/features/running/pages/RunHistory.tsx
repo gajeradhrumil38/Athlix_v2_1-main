@@ -1166,11 +1166,31 @@ export const RunHistory: React.FC = () => {
                 <div
                   className="overflow-y-auto flex flex-col items-center"
                   style={{
+                    position: 'relative',
                     maxHeight: '74vh',
                     paddingBottom: 'max(28px, env(safe-area-inset-bottom))',
                     WebkitOverflowScrolling: 'touch',
+                    // Forces this scroll container onto its own GPU layer —
+                    // the same fix already used for the header nav bar
+                    // earlier this session, for the same underlying reason:
+                    // WebKit can visibly tear/ghost text during active
+                    // scroll on a layer it's still compositing on the fly.
+                    transform: 'translateZ(0)',
+                    willChange: 'transform',
                   }}
                 >
+                  {/* Dark backdrop that scrolls WITH the hero/PACE/TIME
+                      text instead of staying fixed to the viewport like
+                      the radial spotlight above — that one stops
+                      protecting the text the moment you scroll it past
+                      the spotlight's fixed screen position, which is
+                      exactly when a bright map tile or lime route segment
+                      could end up right behind it with nothing to blend it. */}
+                  <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, height: 460, zIndex: 0, pointerEvents: 'none',
+                    background: 'radial-gradient(85% 100% at 50% 0%, rgba(13,15,20,0.88) 0%, rgba(13,15,20,0.6) 55%, transparent 100%)',
+                  }} />
+
                   {/* Distance hero — 108px, lineHeight 1.05 (matches the
                       Run Detail Screen reference exactly). A line-height
                       above 1 leaves the line box taller than the glyph
