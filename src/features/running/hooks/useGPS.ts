@@ -48,6 +48,11 @@ export const useGPS = (): UseGPSReturn => {
             lng: pos.coords.longitude,
             accuracy: pos.coords.accuracy,
             timestamp: pos.timestamp,
+            // Altitude is nullable even when the device supports it (GPS
+            // needs a moment to acquire a 3D fix) — omit rather than store
+            // null, so downstream elevation-gain accumulation can treat
+            // "missing" and "not supported" the same way.
+            ...(typeof pos.coords.altitude === 'number' ? { altitude: pos.coords.altitude } : {}),
           };
 
           const lastPoint = lastPointRef.current;

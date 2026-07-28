@@ -15,6 +15,7 @@ export interface SavedRun {
   pace: number;
   timestamp: number;
   splits?: { km: number; pace: number }[];
+  elevationGain?: number;
   fromCloud?: boolean;
 }
 
@@ -69,6 +70,10 @@ const sanitizeRun = (run: unknown): SavedRun | null => {
     );
   }
 
+  if (isFiniteNumber(maybeRun.elevationGain) && maybeRun.elevationGain >= 0) {
+    result.elevationGain = maybeRun.elevationGain;
+  }
+
   return result;
 };
 
@@ -100,6 +105,7 @@ export const saveRun = (runData: Omit<SavedRun, 'id'>): SavedRun => {
     pace: Number.isFinite(runData.pace) && runData.pace > 0 ? runData.pace : 0,
     timestamp: Number.isFinite(runData.timestamp) && runData.timestamp > 0 ? runData.timestamp : Date.now(),
     splits: runData.splits,
+    elevationGain: Number.isFinite(runData.elevationGain) && (runData.elevationGain ?? 0) > 0 ? runData.elevationGain : 0,
   };
 
   runs.push(saved);
@@ -144,6 +150,7 @@ export async function saveRunToCloud(userId: string, run: SavedRun): Promise<num
         pace: run.pace,
         path: run.path,
         splits: run.splits ?? [],
+        elevation_gain: run.elevationGain ?? 0,
       })
       .select('id')
       .single();
@@ -158,7 +165,7 @@ export async function loadRunsFromCloud(userId: string): Promise<SavedRun[]> {
   try {
     const { data, error } = await supabase
       .from('runs')
-      .select('id, run_ts, distance, duration, pace, path, splits')
+      .select('id, run_ts, distance, duration, pace, path, splits, elevation_gain')
       .eq('user_id', userId)
       .order('run_ts', { ascending: false })
       .limit(120);
@@ -172,6 +179,7 @@ export async function loadRunsFromCloud(userId: string): Promise<SavedRun[]> {
       pace: Number(r.pace),
       path: (Array.isArray(r.path) ? r.path : []) as GpsPoint[],
       splits: (Array.isArray(r.splits) ? r.splits : []) as { km: number; pace: number }[],
+      elevationGain: Number(r.elevation_gain ?? 0),
       fromCloud: true,
     }));
   } catch {

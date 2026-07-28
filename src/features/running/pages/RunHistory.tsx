@@ -822,6 +822,17 @@ export const RunHistory: React.FC = () => {
                             {run.splits?.length ?? 0}
                           </p>
                         </div>
+                        {!!run.elevationGain && run.elevationGain > 0 && (
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>ELEV</span>
+                            <div className="flex items-baseline gap-1.5 mt-1">
+                              <span className="font-victory text-[20px] font-black leading-none text-white tabular-nums">
+                                {Math.round(run.elevationGain)}
+                              </span>
+                              <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>m gain</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Mini route */}

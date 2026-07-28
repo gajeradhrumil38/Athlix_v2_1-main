@@ -3,6 +3,7 @@ export interface GpsPoint {
   lng: number;
   accuracy?: number;
   timestamp?: number;
+  altitude?: number;
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -262,8 +262,8 @@ export const ActiveRun: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    isRunning, isPaused, path, currentPosition,
-    totalDistance, elapsedTime, pace, error, errorCode,
+    isRunning, isPaused, isAutoPaused, path, currentPosition,
+    totalDistance, elapsedTime, pace, splits, elevationGain, error, errorCode,
     startRun, pauseRun, resumeRun, stopRun,
   } = useRunTracking();
 
@@ -340,6 +340,7 @@ export const ActiveRun: React.FC = () => {
     unit: 'km' | 'mi';
     path: GpsPoint[];
     splits: { km: number; pace: number }[];
+    elevationGain: number;
     timestamp: number;
   } | null>(null);
 
@@ -365,10 +366,44 @@ export const ActiveRun: React.FC = () => {
     : activeGoal === 'pace' ? `PACE GOAL`
     : 'OPEN RUN';
 
+  // Voice cues — Web Speech API (built into the browser, no dependency).
+  // The two moments a runner most needs audio feedback: a new split just
+  // completed, and auto-pause kicking in/releasing (which happens without
+  // any tap, so there's otherwise no way to know it happened without
+  // looking at the screen).
+  const speak = useCallback((text: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel(); // don't stack overlapping cues
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      window.speechSynthesis.speak(utterance);
+    } catch { /* speech synthesis unavailable/blocked — fail silent */ }
+  }, []);
+
+  const announcedSplitsRef = useRef(0);
+  useEffect(() => {
+    if (splits.length === 0 || splits.length <= announcedSplitsRef.current) return;
+    announcedSplitsRef.current = splits.length;
+    const latest = splits[splits.length - 1];
+    speak(`Kilometer ${Math.round(latest.km)}. Pace ${formatPace(latest.pace)} per kilometer.`);
+  }, [splits, speak]);
+
+  const prevAutoPausedRef = useRef(false);
+  useEffect(() => {
+    if (isAutoPaused && !prevAutoPausedRef.current) {
+      speak('Paused. No movement detected.');
+    } else if (!isAutoPaused && prevAutoPausedRef.current) {
+      speak('Resumed.');
+    }
+    prevAutoPausedRef.current = isAutoPaused;
+  }, [isAutoPaused, speak]);
+
   const handleStop = async () => {
     const summary = stopRun();
     const displayDist = distanceUnit === 'mi' ? summary.distance * 0.621371 : summary.distance;
     const displayPaceVal = distanceUnit === 'mi' ? summary.pace * 1.609344 : summary.pace;
+    speak(`Run complete. ${displayDist.toFixed(2)} ${distanceUnit}, in ${formatDuration(summary.duration)}.`);
     const saved = saveRun(summary);
     setAllRuns((prev) => [...prev, saved]);
     if (user) {
@@ -407,6 +442,7 @@ export const ActiveRun: React.FC = () => {
       unit: distanceUnit,
       path: summary.path,
       splits: summary.splits,
+      elevationGain: summary.elevationGain,
       timestamp: summary.timestamp,
     });
   };
@@ -569,6 +605,9 @@ export const ActiveRun: React.FC = () => {
               { label: 'TIME', value: formatDuration(finished.duration), sub: null },
               { label: 'PACE', value: finished.pace > 0 ? formatPace(finished.pace) : '--:--', sub: `/${finished.unit}` },
               { label: 'CAL', value: String(cal), sub: 'kcal' },
+              ...(finished.elevationGain > 0
+                ? [{ label: 'ELEV', value: String(Math.round(finished.elevationGain)), sub: 'm gain' }]
+                : []),
               { label: 'EFFORT', value: null, sub: '/5', effort },
             ].map((s, i) => (
               <div key={i} className="flex-1 flex flex-col items-center justify-center gap-1 py-3"
@@ -726,7 +765,9 @@ export const ActiveRun: React.FC = () => {
               <span style={{ width: 3, height: 11, borderRadius: 2, background: 'var(--accent)' }} />
               <span style={{ width: 3, height: 11, borderRadius: 2, background: 'var(--accent)' }} />
             </span>
-            <span className="text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: 'var(--accent)' }}>PAUSED</span>
+            <span className="text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: 'var(--accent)' }}>
+              {isAutoPaused ? 'AUTO-PAUSED · STOPPED MOVING' : 'PAUSED'}
+            </span>
           </div>
         )}
 
@@ -889,6 +930,7 @@ export const ActiveRun: React.FC = () => {
                   { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
                   { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
                   { label: 'CAL', value: String(Math.round(totalDistance * 65)), unit: 'kcal', hl: false },
+                  { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', hl: false },
                 ].map((row, i) => (
                   <div key={i} className="flex flex-col items-center text-center"
                     style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
@@ -970,6 +1012,7 @@ export const ActiveRun: React.FC = () => {
                   { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
                   { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
                   { label: 'CAL', value: String(Math.round(totalDistance * 65)), unit: 'kcal', hl: false },
+                  { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', hl: false },
                 ].map((row, i) => (
                   <div key={i} className="flex flex-col items-center text-center"
                     style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
