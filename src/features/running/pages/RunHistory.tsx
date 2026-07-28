@@ -102,15 +102,18 @@ const routeTileUrl = (path: GpsPoint[]): string | null => {
   return `https://a.basemaps.cartocdn.com/dark_all/${zoom}/${x}/${y}.png`;
 };
 
-// ── Mini route SVG thumbnail ──────────────────────────────────────────────────
-const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size = 68 }) => {
-  if (path.length < 2) return (
-    <div style={{ width: size, height: size, borderRadius: 12,
-      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Footprints style={{ width: 20, height: 20, color: 'rgba(200,255,0,0.2)' }} />
-    </div>
-  );
+// ── Full-height map panel (right edge of the run card) ───────────────────────
+// Matches the original imported design's treatment: the map spans the card's
+// full height (not a small square), masked so it's fully visible near the
+// right edge and fades toward the text content on the left. The viewBox uses
+// a fixed reference height and stretches via preserveAspectRatio="none" to
+// fill whatever height the card actually renders at — the card's height is
+// content-driven and not known ahead of time in CSS.
+const MAP_PANEL_WIDTH = 130;
+const MAP_VIEWPORT_H = 200;
+
+const RunCardMapPanel: React.FC<{ path: GpsPoint[] }> = ({ path }) => {
+  if (path.length < 2) return null;
 
   const lats = path.map(p => p.lat);
   const lngs = path.map(p => p.lng);
@@ -119,21 +122,20 @@ const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size =
   const latRange = maxLat - minLat || 0.001;
   const lngRange = maxLng - minLng || 0.001;
 
-  // Preserve aspect ratio inside the square
+  const W = MAP_PANEL_WIDTH, H = MAP_VIEWPORT_H;
+  const pad = 16;
   const aspect = lngRange / latRange;
-  const pad = 7;
-  const innerSize = size - pad * 2;
+  const innerW = W - pad * 2, innerH = H - pad * 2;
   let drawW: number, drawH: number;
-  if (aspect >= 1) { drawW = innerSize; drawH = innerSize / aspect; }
-  else              { drawH = innerSize; drawW = innerSize * aspect; }
-  const offX = (innerSize - drawW) / 2 + pad;
-  const offY = (innerSize - drawH) / 2 + pad;
+  if (aspect >= innerW / innerH) { drawW = innerW; drawH = innerW / aspect; }
+  else                           { drawH = innerH; drawW = innerH * aspect; }
+  const offX = (innerW - drawW) / 2 + pad;
+  const offY = (innerH - drawH) / 2 + pad;
 
   const toX = (lng: number) => offX + ((lng - minLng) / lngRange) * drawW;
   const toY = (lat: number) => offY + ((maxLat - lat) / latRange) * drawH;
 
-  // Subsample to ≤50 points for thumbnail
-  const step = Math.max(1, Math.floor(path.length / 50));
+  const step = Math.max(1, Math.floor(path.length / 60));
   const pts = path.filter((_, i) => i % step === 0 || i === path.length - 1);
   const polyline = pts.map(p => `${toX(p.lng).toFixed(1)},${toY(p.lat).toFixed(1)}`).join(' ');
   const sx = toX(pts[0].lng), sy = toY(pts[0].lat);
@@ -141,9 +143,12 @@ const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size =
   const tileUrl = routeTileUrl(path);
 
   return (
-    <div style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden',
-      background: 'rgba(13,15,20,0.9)', border: '1px solid rgba(200,255,0,0.18)',
-      flexShrink: 0, position: 'relative' }}>
+    <div style={{
+      position: 'absolute', top: 0, right: 0, bottom: 0, width: MAP_PANEL_WIDTH,
+      overflow: 'hidden', pointerEvents: 'none',
+      WebkitMaskImage: 'linear-gradient(to left, black 55%, transparent)',
+      maskImage: 'linear-gradient(to left, black 55%, transparent)',
+    }}>
       {tileUrl && (
         <img
           src={tileUrl}
@@ -151,12 +156,10 @@ const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size =
           loading="lazy"
           // CARTO's dark_all tiles measure ~11/255 average brightness with a
           // ~68/255 ceiling even on their brightest (road-line) pixels —
-          // confirmed by sampling an actual tile. At the previous opacity
-          // and dark overlay, that's indistinguishable from zero content:
-          // the tile was loading correctly, it just couldn't be seen. This
-          // boosts road-line contrast into visible range while keeping the
-          // tile's own tone dark, instead of stacking more darkness on top
-          // of already-near-black source pixels.
+          // confirmed by sampling an actual tile. This boosts road-line
+          // contrast into visible range while keeping the tile's own tone
+          // dark, instead of stacking more darkness on already-near-black
+          // source pixels.
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
             filter: 'brightness(2.6) contrast(1.4)',
@@ -164,17 +167,15 @@ const MiniRoute: React.FC<{ path: GpsPoint[]; size?: number }> = ({ path, size =
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
       )}
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,12,16,0.15)' }} />
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block', position: 'relative' }}>
-        {/* Subtle glow under route */}
+      {/* Dark fade, left-to-right: strongest near the text content, lightest at the map's visible right edge */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to left, rgba(10,12,16,0.15), rgba(10,12,16,0.75))' }} />
+      <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+        style={{ display: 'block', position: 'relative' }}>
         <polyline points={polyline} fill="none" stroke="#C8FF00" strokeWidth="5" strokeLinecap="round"
           strokeLinejoin="round" opacity="0.07" />
-        {/* Route line */}
         <polyline points={polyline} fill="none" stroke="#C8FF00" strokeWidth="1.8" strokeLinecap="round"
           strokeLinejoin="round" opacity="0.88" />
-        {/* Start dot */}
         <circle cx={sx} cy={sy} r={2.5} fill="#C8FF00" opacity="0.6" />
-        {/* End dot */}
         <circle cx={ex} cy={ey} r={3} fill="#C8FF00" />
         <circle cx={ex} cy={ey} r={5.5} fill="#C8FF00" opacity="0.15" />
       </svg>
@@ -771,8 +772,9 @@ export const RunHistory: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ delay: Math.min(idx * 0.04, 0.3) }}
-                  className="overflow-visible"
+                  className="overflow-hidden"
                   style={{
+                    position: 'relative',
                     background: 'rgba(16,18,24,0.55)',
                     backdropFilter: 'blur(18px) saturate(150%)',
                     WebkitBackdropFilter: 'blur(18px) saturate(150%)',
@@ -783,10 +785,14 @@ export const RunHistory: React.FC = () => {
                       : '0 10px 34px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.05) inset',
                   }}
                 >
-                  <button onClick={() => setSelected(run)}
-                    className="w-full text-left transition-all active:scale-[0.98]">
+                  <RunCardMapPanel path={run.path} />
 
-                    {/* Header row: date · time · badges */}
+                  <div role="button" tabIndex={0}
+                    onClick={() => setSelected(run)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(run); } }}
+                    className="relative w-full text-left transition-all active:scale-[0.98] cursor-pointer">
+
+                    {/* Header row: date · time · badges · delete · chevron */}
                     <div className="flex items-center gap-2 px-4 pt-4 pb-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2.5 flex-wrap">
@@ -819,13 +825,22 @@ export const RunHistory: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 shrink-0" style={{ color: 'rgba(255,255,255,0.32)' }} />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(run); }}
+                          aria-label="Delete run"
+                          className="flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-90"
+                          style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)' }}>
+                          <Trash2 className="h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.55)' }} />
+                        </button>
+                        <ChevronRight className="h-4 w-4 shrink-0" style={{ color: 'rgba(255,255,255,0.45)' }} />
+                      </div>
                     </div>
 
                     {/* Divider */}
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', marginLeft: 16, marginRight: 16 }} />
 
-                    {/* Body: ring + stats + route */}
+                    {/* Body: ring + stats (map panel sits behind, full card height) */}
                     <div className="flex items-center gap-4 px-4 py-3.5">
                       {/* Ring */}
                       <MiniRingMetric
@@ -880,22 +895,9 @@ export const RunHistory: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Mini route */}
-                      <MiniRoute path={run.path} size={64} />
+                      {/* Spacer reserving room for the map panel so stats text doesn't run under it */}
+                      <div style={{ width: MAP_PANEL_WIDTH, flexShrink: 0 }} aria-hidden="true" />
                     </div>
-                  </button>
-
-                  {/* Delete strip */}
-                  <div className="flex items-center justify-end px-4 pb-3.5"
-                    style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                    <button onClick={() => setConfirmDelete(run)}
-                      className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg transition-all active:scale-95 group"
-                      aria-label="Delete run">
-                      <Trash2 className="h-3.5 w-3.5 transition-colors" style={{ color: 'rgba(255,255,255,0.28)' }} />
-                      <span className="text-[11px] font-semibold transition-colors" style={{ color: 'rgba(255,255,255,0.28)' }}>
-                        Delete
-                      </span>
-                    </button>
                   </div>
                 </motion.div>
               );
