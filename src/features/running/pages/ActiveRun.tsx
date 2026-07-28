@@ -63,7 +63,7 @@ const RingMetric: React.FC<{
   goalDisplay: string;
   dimmed?: boolean;
 }> = ({ pct, distDisplay, distUnit, goalDisplay, dimmed }) => {
-  const S = 148, R = 62, C = 2 * Math.PI * R;
+  const S = 164, R = 68, C = 2 * Math.PI * R;
   return (
     <div style={{ position: 'relative', width: S, height: S, flexShrink: 0, opacity: dimmed ? 0.88 : 1 }}>
       <svg width={S} height={S} viewBox={`0 0 ${S} ${S}`}
@@ -74,17 +74,17 @@ const RingMetric: React.FC<{
           style={{ filter: 'drop-shadow(0 0 7px rgba(200,255,0,0.55))', transition: 'stroke-dashoffset 0.8s ease' }} />
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 2 }}>
-        <span className="font-victory tabular-nums" style={{ fontSize: 34, lineHeight: 0.84, color: '#f3f5f7' }}>
+        alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 3 }}>
+        <span className="font-victory tabular-nums" style={{ fontSize: 40, lineHeight: 0.84, color: '#ffffff' }}>
           {distDisplay}
         </span>
-        <span className="font-victory" style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: '0.14em', lineHeight: 1 }}>
+        <span className="font-victory" style={{ fontSize: 13, color: 'var(--accent)', letterSpacing: '0.14em', lineHeight: 1 }}>
           {distUnit.toUpperCase()}
         </span>
         {goalDisplay && (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 3 }}>
-            <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.42)' }}>Goal</span>
-            <span className="font-victory" style={{ fontSize: 11, color: 'var(--accent)' }}>{goalDisplay}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 5 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Goal</span>
+            <span className="font-victory" style={{ fontSize: 13, color: 'var(--accent)' }}>{goalDisplay}</span>
           </div>
         )}
       </div>
@@ -900,8 +900,10 @@ export const ActiveRun: React.FC = () => {
               className="flex flex-col items-center"
             >
               {/* Ring + stat grid, side by side — keeps the panel short so the
-                  live map underneath stays visible while running */}
-              <div className="flex w-full items-center gap-4" style={{ ...glassCardStyle, padding: 14, marginBottom: 10 }}>
+                  live map underneath stays visible while running. No card
+                  box around it — it sits directly on the bottom panel's own
+                  gradient so the map reads through instead of a boxed tile. */}
+              <div className="flex w-full items-center gap-4" style={{ padding: '6px 4px 18px' }}>
                 <RingMetric
                   pct={goalProgress}
                   distDisplay={displayDistance.toFixed(2)}
@@ -913,7 +915,7 @@ export const ActiveRun: React.FC = () => {
                     : 'OPEN'
                   }
                 />
-                <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-3">
+                <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-4">
                   {[
                     { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
                     { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
@@ -921,17 +923,17 @@ export const ActiveRun: React.FC = () => {
                     { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', hl: false },
                   ].map((row, i) => (
                     <div key={i}>
-                      <span className="block text-[8px] font-black uppercase tracking-[0.16em] mb-0.5"
-                        style={{ color: row.hl ? 'var(--accent)' : 'rgba(255,255,255,0.42)' }}>
+                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] mb-1"
+                        style={{ color: row.hl ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}>
                         {row.label}
                       </span>
-                      <div className="flex items-baseline gap-1">
+                      <div className="flex items-baseline gap-1.5">
                         <span className="font-victory tabular-nums leading-none"
-                          style={{ fontSize: 21, color: row.hl ? 'var(--accent)' : '#f3f5f7' }}>
+                          style={{ fontSize: 27, color: row.hl ? 'var(--accent)' : '#ffffff' }}>
                           {row.value}
                         </span>
-                        <span className="text-[9px] font-semibold whitespace-nowrap"
-                          style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        <span className="text-[10px] font-semibold whitespace-nowrap"
+                          style={{ color: 'rgba(255,255,255,0.38)' }}>
                           {row.unit}
                         </span>
                       </div>
@@ -978,8 +980,9 @@ export const ActiveRun: React.FC = () => {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center"
             >
-              {/* Ring + stat grid, dimmed to signal paused */}
-              <div className="flex w-full items-center gap-4" style={{ ...glassCardStyle, padding: 14, marginBottom: 10 }}>
+              {/* Ring + stat grid, dimmed to signal paused. No card box —
+                  sits directly on the bottom panel's own gradient. */}
+              <div className="flex w-full items-center gap-4" style={{ padding: '6px 4px 18px' }}>
                 <RingMetric
                   pct={goalProgress}
                   distDisplay={displayDistance.toFixed(2)}
@@ -992,7 +995,7 @@ export const ActiveRun: React.FC = () => {
                   }
                   dimmed
                 />
-                <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-3" style={{ opacity: 0.88 }}>
+                <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-4" style={{ opacity: 0.88 }}>
                   {[
                     { label: 'PACE', value: displayPace > 0 ? formatPace(displayPace) : '--:--', unit: `/${distanceUnit}`, hl: true },
                     { label: 'TIME', value: formatDuration(elapsedTime), unit: 'elapsed', hl: false },
@@ -1000,17 +1003,17 @@ export const ActiveRun: React.FC = () => {
                     { label: 'ELEV', value: String(Math.round(elevationGain)), unit: 'm gain', hl: false },
                   ].map((row, i) => (
                     <div key={i}>
-                      <span className="block text-[8px] font-black uppercase tracking-[0.16em] mb-0.5"
-                        style={{ color: row.hl ? 'var(--accent)' : 'rgba(255,255,255,0.42)' }}>
+                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] mb-1"
+                        style={{ color: row.hl ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}>
                         {row.label}
                       </span>
-                      <div className="flex items-baseline gap-1">
+                      <div className="flex items-baseline gap-1.5">
                         <span className="font-victory tabular-nums leading-none"
-                          style={{ fontSize: 21, color: row.hl ? 'var(--accent)' : '#f3f5f7' }}>
+                          style={{ fontSize: 27, color: row.hl ? 'var(--accent)' : '#ffffff' }}>
                           {row.value}
                         </span>
-                        <span className="text-[9px] font-semibold whitespace-nowrap"
-                          style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        <span className="text-[10px] font-semibold whitespace-nowrap"
+                          style={{ color: 'rgba(255,255,255,0.38)' }}>
                           {row.unit}
                         </span>
                       </div>

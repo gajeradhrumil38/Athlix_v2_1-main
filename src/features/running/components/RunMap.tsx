@@ -171,14 +171,19 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
             <Scan className="h-4 w-4" style={{ color: 'rgba(255,255,255,0.85)' }} />
           </button>
         )}
-        {!followMode && currentPosition && (
+        {/* Always visible, like Google Maps' locate button — filled accent
+            while off-follow (tap to jump back), muted while already
+            following since there's nothing to do */}
+        {currentPosition && (
           <button
             onClick={handleRecenter}
             aria-label="Recenter on my location"
             className="flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90"
-            style={{ background: 'var(--accent)', boxShadow: '0 0 0 4px rgba(200,255,0,0.14), 0 6px 18px rgba(0,0,0,0.4)' }}
+            style={followMode
+              ? { background: 'rgba(13,15,20,0.8)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(10px)' }
+              : { background: 'var(--accent)', boxShadow: '0 0 0 4px rgba(200,255,0,0.14), 0 6px 18px rgba(0,0,0,0.4)' }}
           >
-            <LocateFixed className="h-4 w-4" style={{ color: '#0d0f14' }} />
+            <LocateFixed className="h-4 w-4" style={{ color: followMode ? 'var(--accent)' : '#0d0f14' }} />
           </button>
         )}
       </div>
