@@ -153,6 +153,11 @@ const DIST_OPTIONS_KM = [1, 2, 3, 5, 6, 8, 10, 15, 21.1, 42.2];
 const TIME_OPTIONS    = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 75, 90, 120];
 const PACE_OPTIONS    = ['4:00','4:30','5:00','5:30','6:00','6:30','7:00','7:30','8:00','8:30','9:00','9:30','10:00','11:00','12:00'];
 
+// Below this, GPS drift alone can produce it — treat it as "never actually
+// went anywhere" (accidental Start Run tap, indoor test, permission never
+// really granted) rather than a real run, so it doesn't get saved as one.
+const MIN_VALID_RUN_KM = 0.05;
+
 /* ── Goal value chip picker ───────────────────────────────────────
    Was a custom scroll-snap "drum roll": onScroll computed the selected
    index from raw scrollTop/ITEM_H, rounded. That only ever matches
@@ -330,6 +335,7 @@ export const ActiveRun: React.FC = () => {
     splits: { km: number; pace: number }[];
     elevationGain: number;
     timestamp: number;
+    noRunDetected: boolean;
   } | null>(null);
 
   const needsInternet = typeof navigator !== 'undefined' && !navigator.onLine;
@@ -387,10 +393,37 @@ export const ActiveRun: React.FC = () => {
     prevAutoPausedRef.current = isAutoPaused;
   }, [isAutoPaused, speak]);
 
+  // Guards against a double-submit: the STOP/FINISH button stays mounted
+  // (and tappable) until `setFinished` re-renders past it, and that render
+  // is asynchronous relative to a fast double-tap — without this, two
+  // taps in quick succession could fire handleStop twice concurrently and
+  // save the same run twice (locally, in the cloud, and as a workout).
+  const isStoppingRef = useRef(false);
+
   const handleStop = async () => {
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
+
     const summary = stopRun();
     const displayDist = distanceUnit === 'mi' ? summary.distance * 0.621371 : summary.distance;
     const displayPaceVal = distanceUnit === 'mi' ? summary.pace * 1.609344 : summary.pace;
+    const noRunDetected = summary.distance < MIN_VALID_RUN_KM;
+
+    if (noRunDetected) {
+      // Never moved far enough for this to be a real run — most likely an
+      // accidental Start Run tap, an indoor test, or GPS that never
+      // actually acquired. Don't let it into local storage, the cloud, or
+      // workout history as a fake 0.00 entry.
+      speak('No run detected.');
+      setFinished({
+        distance: displayDist, duration: summary.duration, pace: displayPaceVal,
+        rawPace: summary.pace, unit: distanceUnit, path: summary.path,
+        splits: summary.splits, elevationGain: summary.elevationGain,
+        timestamp: summary.timestamp, noRunDetected: true,
+      });
+      return;
+    }
+
     speak(`Run complete. ${displayDist.toFixed(2)} ${distanceUnit}, in ${formatDuration(summary.duration)}.`);
     const saved = saveRun(summary);
     setAllRuns((prev) => [...prev, saved]);
@@ -432,6 +465,7 @@ export const ActiveRun: React.FC = () => {
       splits: summary.splits,
       elevationGain: summary.elevationGain,
       timestamp: summary.timestamp,
+      noRunDetected: false,
     });
   };
 
@@ -487,6 +521,30 @@ export const ActiveRun: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  /* ── No run detected — nothing was saved, see handleStop ─────── */
+  if (finished?.noRunDetected) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 px-6 text-center" style={{ background: '#0d0f14' }}>
+        <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <LocateOff className="h-7 w-7" style={{ color: 'rgba(255,255,255,0.4)' }} />
+        </div>
+        <div>
+          <p className="text-[18px] font-black text-white">No run detected</p>
+          <p className="mt-1.5 text-[13px] font-semibold text-white/45" style={{ maxWidth: 280 }}>
+            You didn't move far enough for this to count as a run, so nothing was saved.
+          </p>
+        </div>
+        <button
+          onClick={() => setFinished(null)}
+          className="h-12 rounded-full px-8 text-[13px] font-black tracking-[0.1em] text-black transition-all active:scale-[0.97]"
+          style={{ background: 'var(--accent)' }}
+        >
+          DONE
+        </button>
       </div>
     );
   }
@@ -1100,7 +1158,7 @@ export const ActiveRun: React.FC = () => {
                   CANCEL
                 </button>
                 <button
-                  onClick={() => { setShowStartConfirm(false); startRun(); }}
+                  onClick={() => { setShowStartConfirm(false); isStoppingRef.current = false; startRun(); }}
                   className="flex-1 h-12 rounded-full text-[14px] font-black tracking-[0.12em] text-black transition-all active:scale-[0.97] flex items-center justify-center gap-2"
                   style={{ background: 'var(--accent)' }}
                 >

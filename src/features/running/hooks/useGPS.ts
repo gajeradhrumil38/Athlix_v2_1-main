@@ -53,6 +53,12 @@ export const useGPS = (): UseGPSReturn => {
             // null, so downstream elevation-gain accumulation can treat
             // "missing" and "not supported" the same way.
             ...(typeof pos.coords.altitude === 'number' ? { altitude: pos.coords.altitude } : {}),
+            // Heading is null whenever the device isn't confident in it
+            // (most report it only above a walking speed) — the map falls
+            // back to computing a bearing from recent points when this is
+            // missing, so omit rather than store null/NaN.
+            ...(typeof pos.coords.heading === 'number' && Number.isFinite(pos.coords.heading)
+              ? { heading: pos.coords.heading } : {}),
           };
 
           const lastPoint = lastPointRef.current;

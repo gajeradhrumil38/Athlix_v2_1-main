@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet
 import L from 'leaflet';
 import { LocateFixed, Scan } from 'lucide-react';
 import type { GpsPoint } from '../utils/gpsCalculations';
-import { douglasPeucker, catmullRomPath } from '../utils/gpsCalculations';
+import { douglasPeucker, catmullRomPath, calculateBearing, calculateDistance } from '../utils/gpsCalculations';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -16,6 +16,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
+// Plain dot — shown until we have any sense of direction (no device
+// heading yet and not enough recent movement to infer a bearing).
 const currentPositionIcon = L.divIcon({
   className: '',
   html: `<div style="
@@ -28,6 +30,31 @@ const currentPositionIcon = L.divIcon({
   iconSize: [18, 18],
   iconAnchor: [9, 9],
 });
+
+// Directional arrow — once a heading/bearing is known, replaces the dot so
+// you can see which way you're facing/moving, like Google Maps' nav arrow.
+// Built once (static HTML/CSS) and rotated imperatively via the marker's
+// own DOM node (see the `bearing` effect below) instead of being rebuilt
+// per-update, so the turn animates smoothly via the CSS transition below
+// rather than the icon element being replaced every GPS tick.
+const headingArrowIcon = L.divIcon({
+  className: '',
+  html: `<div class="heading-arrow" style="
+    width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+    transition:transform 0.25s ease;transform:rotate(0deg);
+  ">
+    <svg width="26" height="26" viewBox="0 0 26 26">
+      <path d="M13 2 L21 23 L13 18 L5 23 Z"
+        style="fill:#0d0f14;stroke:var(--accent,#C8FF00);stroke-width:2.5;" stroke-linejoin="round" />
+    </svg>
+  </div>`,
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
+});
+
+// Below this speed, a bearing computed from two consecutive GPS points is
+// mostly measurement noise, not real direction of travel.
+const MIN_BEARING_SEGMENT_METERS = 3;
 
 // Auto-recenters on the runner's position while `followMode` is on. A real
 // user drag or pinch always fires Leaflet's 'dragstart'/'zoomstart' events —
@@ -106,6 +133,27 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
     setFollowMode(true);
   };
 
+  // Prefer the device's own compass heading; fall back to the bearing
+  // between the last two tracked points once they're far enough apart that
+  // it reflects real movement rather than GPS jitter. Null means "we don't
+  // know" — stays the plain dot rather than pointing an arrow at a guess.
+  const bearing = useMemo(() => {
+    if (typeof currentPosition?.heading === 'number') return currentPosition.heading;
+    if (path.length >= 2) {
+      const a = path[path.length - 2];
+      const b = path[path.length - 1];
+      if (calculateDistance(a, b) * 1000 >= MIN_BEARING_SEGMENT_METERS) return calculateBearing(a, b);
+    }
+    return null;
+  }, [currentPosition, path]);
+
+  const markerRef = useRef<L.Marker | null>(null);
+  useEffect(() => {
+    if (bearing === null) return;
+    const arrow = markerRef.current?.getElement()?.querySelector<HTMLElement>('.heading-arrow');
+    if (arrow) arrow.style.transform = `rotate(${bearing}deg)`;
+  }, [bearing]);
+
   const handleFitRoute = () => {
     if (path.length < 2 || !mapRef.current) return;
     const bounds = L.latLngBounds(path.map((p) => [p.lat, p.lng] as [number, number]));
@@ -151,8 +199,9 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
 
         {currentPosition && (
           <Marker
+            ref={markerRef}
             position={[currentPosition.lat, currentPosition.lng]}
-            icon={currentPositionIcon}
+            icon={bearing !== null ? headingArrowIcon : currentPositionIcon}
           />
         )}
       </MapContainer>

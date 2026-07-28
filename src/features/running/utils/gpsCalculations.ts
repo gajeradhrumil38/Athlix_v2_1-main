@@ -4,9 +4,25 @@ export interface GpsPoint {
   accuracy?: number;
   timestamp?: number;
   altitude?: number;
+  // Compass heading in degrees (0-360, 0 = north), from the device's own
+  // sensor. Often null — most devices only report it while moving at a
+  // meaningful speed, never while stationary.
+  heading?: number;
 }
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+// Initial bearing from a to b, in degrees (0-360, 0 = north) — used as a
+// fallback direction indicator when the device doesn't report a heading.
+export const calculateBearing = (a: GpsPoint, b: GpsPoint): number => {
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  const deg = (Math.atan2(y, x) * 180) / Math.PI;
+  return (deg + 360) % 360;
+};
 
 // ─── Kalman Filter ────────────────────────────────────────────────────────────
 // Applied per-axis (lat, lng) to smooth out GPS measurement noise in real time.
