@@ -12,7 +12,7 @@ import { saveWorkout } from '../../../lib/supabaseData';
 import { useRunTracking } from '../hooks/useRunTracking';
 import { RunMap } from '../components/RunMap';
 import { RunRouteBackground } from '../components/RunRouteBackground';
-import { saveRun, getRuns, saveRunToCloud, loadRunsFromCloud, mergeRuns } from '../utils/storage';
+import { saveRun, getRuns, saveRunToCloud, loadRunsFromCloud, mergeRuns, linkRunToWorkout } from '../utils/storage';
 import { formatDuration, formatPace } from '../utils/gpsCalculations';
 import type { GpsPoint } from '../utils/gpsCalculations';
 
@@ -442,19 +442,20 @@ export const ActiveRun: React.FC = () => {
     speak(`Run complete. ${displayDist.toFixed(2)} ${distanceUnit}, in ${formatDuration(summary.duration)}.`);
     const saved = saveRun(summary);
     setAllRuns((prev) => [...prev, saved]);
+    let cloudRunId: number | null = null;
     if (user) {
       // Awaited (not fire-and-forget) so a failure surfaces instead of
-      // silently losing the dedicated run record (path/splits/pace) even
-      // though the workout-history entry below still saves successfully.
-      saveRunToCloud(user.id, saved).then((cloudId) => {
-        if (cloudId == null) toast.error('Run saved on this device, but cloud sync failed.');
-      });
+      // silently losing the dedicated run record (path/splits/pace), and
+      // so its id is available below to link this run to its workout log
+      // entry once that's saved too.
+      cloudRunId = await saveRunToCloud(user.id, saved);
+      if (cloudRunId == null) toast.error('Run saved on this device, but cloud sync failed.');
     }
     if (user) {
       const durationMinutes = Math.max(1, Math.round(summary.duration / 60000));
       const roundedDist = Math.max(0, Number(displayDist.toFixed(2)));
       try {
-        await saveWorkout(user.id, {
+        const workoutRow = await saveWorkout(user.id, {
           title: 'Outdoor Run',
           date: format(new Date(summary.timestamp), 'yyyy-MM-dd'),
           duration_minutes: durationMinutes,
@@ -465,6 +466,12 @@ export const ActiveRun: React.FC = () => {
           }],
         });
         toast.success('Run synced to workout history');
+        if (cloudRunId != null) {
+          // Best-effort: if this fails, the run and workout both still
+          // exist and saved correctly — it just won't cascade-delete
+          // later, same as a run that predates this feature entirely.
+          void linkRunToWorkout(cloudRunId, workoutRow.id);
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Run saved locally, sync failed.';
         toast.error(msg);
