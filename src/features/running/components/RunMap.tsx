@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
+import { motion } from 'framer-motion';
 import L from 'leaflet';
 import { LocateFixed, Scan } from 'lucide-react';
 import type { GpsPoint } from '../utils/gpsCalculations';
@@ -208,32 +209,51 @@ const RunMapView: React.FC<RunMapProps> = ({ path, currentPosition }) => {
 
       {/* Free-look controls: pinch/drag drops out of follow mode (see
           MapFollowController) so the runner can freely explore the traced
-          route without it snapping back every 1-2s; these bring it back. */}
-      <div className="absolute flex flex-col gap-2" style={{ top: 108, right: 14, zIndex: 30 }}>
+          route without it snapping back every 1-2s; these bring it back.
+
+          `isolation: isolate` + a z-index above Leaflet's own internal max
+          (Leaflet's marker/tooltip/popup panes and its control container go
+          up to z-index 1000 inside .leaflet-container) guarantees these
+          sit on their own top layer regardless of what Leaflet is doing
+          internally — without it, .leaflet-container doesn't establish its
+          own stacking context, so its high-z-index panes could paint over
+          a plain sibling at a much lower z-index like the old value here. */}
+      <div className="absolute flex flex-col gap-2" style={{ top: 108, right: 14, zIndex: 2000, isolation: 'isolate' }}>
         {path.length > 1 && (
-          <button
+          <motion.button
             onClick={handleFitRoute}
             aria-label="Fit whole route on screen"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90"
+            whileTap={{ scale: 0.86 }}
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
+            className="flex h-10 w-10 items-center justify-center rounded-full"
             style={{ background: 'rgba(13,15,20,0.8)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(10px)' }}
           >
             <Scan className="h-4 w-4" style={{ color: 'rgba(255,255,255,0.85)' }} />
-          </button>
+          </motion.button>
         )}
         {/* Always visible, like Google Maps' locate button — filled accent
             while off-follow (tap to jump back), muted while already
             following since there's nothing to do */}
         {currentPosition && (
-          <button
+          <motion.button
             onClick={handleRecenter}
             aria-label="Recenter on my location"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-90"
-            style={followMode
-              ? { background: 'rgba(13,15,20,0.8)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(10px)' }
-              : { background: 'var(--accent)', boxShadow: '0 0 0 4px rgba(200,255,0,0.14), 0 6px 18px rgba(0,0,0,0.4)' }}
+            whileTap={{ scale: 0.86 }}
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.6 }}
+            animate={followMode
+              ? { background: 'rgba(13,15,20,0.8)', boxShadow: '0 0 0 0px rgba(200,255,0,0)' }
+              // Framer Motion interpolates color props numerically, so it
+              // needs the resolved hex/rgb value — a literal 'var(--accent)'
+              // string isn't something it can parse as a color to animate
+              // toward (same class of issue as Leaflet's SVG stroke earlier).
+              : { background: accentColor, boxShadow: '0 0 0 4px rgba(200,255,0,0.14)' }}
+            className="flex h-10 w-10 items-center justify-center rounded-full"
+            style={{ border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(10px)' }}
           >
-            <LocateFixed className="h-4 w-4" style={{ color: followMode ? 'var(--accent)' : '#0d0f14' }} />
-          </button>
+            <LocateFixed className="h-4 w-4" style={{ color: followMode ? accentColor : '#0d0f14', transition: 'color 0.2s ease' }} />
+          </motion.button>
         )}
       </div>
     </div>
