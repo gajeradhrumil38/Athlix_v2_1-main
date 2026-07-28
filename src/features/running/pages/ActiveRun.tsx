@@ -543,23 +543,33 @@ export const ActiveRun: React.FC = () => {
   /* ── No run detected — nothing was saved, see handleStop ─────── */
   if (finished?.noRunDetected) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-5 px-6 text-center" style={{ background: '#0d0f14' }}>
-        <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <LocateOff className="h-7 w-7" style={{ color: 'rgba(255,255,255,0.4)' }} />
+      <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: '#0d0f14' }}>
+        <RunRouteBackground path={finished.path} />
+        <div className="absolute inset-0"
+          style={{ background: 'linear-gradient(to bottom, rgba(13,15,20,0.55) 0%, rgba(13,15,20,0.75) 45%, rgba(13,15,20,0.97) 75%, #0d0f14 90%)' }} />
+
+        <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <LocateOff className="h-7 w-7" style={{ color: 'rgba(255,255,255,0.4)' }} />
+          </div>
+          <div>
+            <p className="text-[18px] font-black text-white">No run detected</p>
+            <p className="mt-1.5 text-[13px] font-semibold text-white/45" style={{ maxWidth: 280 }}>
+              You didn't move far enough for this to count as a run, so nothing was saved.
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-[18px] font-black text-white">No run detected</p>
-          <p className="mt-1.5 text-[13px] font-semibold text-white/45" style={{ maxWidth: 280 }}>
-            You didn't move far enough for this to count as a run, so nothing was saved.
-          </p>
+
+        {/* DONE pinned to the bottom, matching the finish/history screens */}
+        <div className="relative z-10 px-5" style={{ paddingBottom: 'max(28px, env(safe-area-inset-bottom))' }}>
+          <button
+            onClick={() => setFinished(null)}
+            className="h-[60px] w-full rounded-full font-victory text-[17px] font-black tracking-[0.22em] text-black transition-all active:scale-[0.97]"
+            style={{ background: 'var(--accent)', boxShadow: '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.32)' }}
+          >
+            DONE
+          </button>
         </div>
-        <button
-          onClick={() => setFinished(null)}
-          className="h-12 rounded-full px-8 text-[13px] font-black tracking-[0.1em] text-black transition-all active:scale-[0.97]"
-          style={{ background: 'var(--accent)' }}
-        >
-          DONE
-        </button>
       </div>
     );
   }
