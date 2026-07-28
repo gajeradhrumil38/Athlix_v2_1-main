@@ -1,6 +1,6 @@
 # Run ↔ Workout Link + Delete Cascade, and Full-Flow Audit Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deleting a run from Run History also deletes its corresponding workout log entry (which clears it from the Exercise Log and Calendar too, since Calendar reads the same `workouts` table), and a full code-level audit of the running feature's start-to-end flow to fix leftover inconsistencies from tonight's rounds of design changes.
 
@@ -15,7 +15,7 @@
 **Files:**
 - Create: `supabase/migrations/20260728000001_runs_workout_id.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 -- Links a run to the workout log entry created alongside it (only happens
@@ -28,11 +28,11 @@ ALTER TABLE public.runs
   ADD COLUMN IF NOT EXISTS workout_id UUID REFERENCES public.workouts(id) ON DELETE SET NULL;
 ```
 
-- [ ] **Step 2: Apply the migration to the live database**
+- [x] **Step 2: Apply the migration to the live database**
 
 Use the `mcp__claude_ai_Supabase__apply_migration` tool with `project_id` for "AthlixV2" (`mrntwydykqsdawpklumf`), `name: "runs_workout_id"`, and the SQL above as `query`. This applies it live AND records it in Supabase's own migration history — the file in `supabase/migrations/` is the git-tracked mirror of that, not a separate step that needs a separate apply.
 
-- [ ] **Step 3: Verify the column exists**
+- [x] **Step 3: Verify the column exists**
 
 Use `mcp__claude_ai_Supabase__execute_sql` with:
 ```sql
@@ -42,7 +42,7 @@ where table_name = 'runs' and column_name = 'workout_id';
 ```
 Expected: one row, `workout_id`, `uuid`, `YES`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add supabase/migrations/20260728000001_runs_workout_id.sql
@@ -64,7 +64,7 @@ EOF
 **Files:**
 - Modify: `src/features/running/utils/storage.ts`
 
-- [ ] **Step 1: Add `workoutId` to the `SavedRun` interface**
+- [x] **Step 1: Add `workoutId` to the `SavedRun` interface**
 
 In the interface near the top of the file (currently has `id`, `cloudId?`, `path`, `distance`, `duration`, `pace`, `timestamp`, `splits?`, `elevationGain?`, `fromCloud?`), add:
 
@@ -76,7 +76,7 @@ In the interface near the top of the file (currently has `id`, `cloudId?`, `path
   workoutId?: string;
 ```
 
-- [ ] **Step 2: Add a `linkRunToWorkout` function**
+- [x] **Step 2: Add a `linkRunToWorkout` function**
 
 Add this new exported function right after `saveRunToCloud` (which already exists at line ~141):
 
@@ -88,7 +88,7 @@ export async function linkRunToWorkout(runId: number, workoutId: string): Promis
 }
 ```
 
-- [ ] **Step 3: Read `workout_id` back in `loadRunsFromCloud`**
+- [x] **Step 3: Read `workout_id` back in `loadRunsFromCloud`**
 
 Find the existing `loadRunsFromCloud` function. Change its `select(...)` call from:
 
@@ -108,14 +108,14 @@ And in the `.map((r) => ({ ... }))` below it, add one more field to the returned
       workoutId: (r.workout_id as string | null) ?? undefined,
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 npx tsc -p src/tsconfig.json --noEmit 2>&1 | wc -l
 ```
 Expected: `21` (unchanged baseline).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/features/running/utils/storage.ts
@@ -138,7 +138,7 @@ EOF
 **Files:**
 - Modify: `src/features/running/pages/ActiveRun.tsx:418-485` (the `handleStop` function)
 
-- [ ] **Step 1: Import `linkRunToWorkout`**
+- [x] **Step 1: Import `linkRunToWorkout`**
 
 Find the existing import from `../utils/storage` (currently `import { saveRun, getRuns, saveRunToCloud, loadRunsFromCloud, mergeRuns } from '../utils/storage';`) and add `linkRunToWorkout` to it:
 
@@ -146,7 +146,7 @@ Find the existing import from `../utils/storage` (currently `import { saveRun, g
 import { saveRun, getRuns, saveRunToCloud, loadRunsFromCloud, mergeRuns, linkRunToWorkout } from '../utils/storage';
 ```
 
-- [ ] **Step 2: Replace the cloud-save and workout-save blocks**
+- [x] **Step 2: Replace the cloud-save and workout-save blocks**
 
 Replace this exact block (the two `if (user) { ... }` blocks after `setAllRuns((prev) => [...prev, saved]);`):
 
@@ -221,7 +221,7 @@ with:
     }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 ```bash
 npx tsc -p src/tsconfig.json --noEmit 2>&1 | wc -l
@@ -229,7 +229,7 @@ npm run build 2>&1 | grep -iE "error|✓ built|Compiled successfully"
 ```
 Expected: `21`, then `✓ built` and `✓ Compiled successfully` with no `error` lines.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/features/running/pages/ActiveRun.tsx
@@ -252,7 +252,7 @@ EOF
 **Files:**
 - Modify: `src/features/running/pages/RunHistory.tsx:638-656` (the `handleDelete` function)
 
-- [ ] **Step 1: Import `deleteWorkout`**
+- [x] **Step 1: Import `deleteWorkout`**
 
 Add this new import line near the other imports (after the `useAuth` import):
 
@@ -260,7 +260,7 @@ Add this new import line near the other imports (after the `useAuth` import):
 import { deleteWorkout } from '../../../lib/supabaseData';
 ```
 
-- [ ] **Step 2: Add the cascade delete**
+- [x] **Step 2: Add the cascade delete**
 
 Replace this exact block:
 
@@ -315,7 +315,7 @@ with:
   };
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 ```bash
 npx tsc -p src/tsconfig.json --noEmit 2>&1 | wc -l
@@ -323,7 +323,7 @@ npm run build 2>&1 | grep -iE "error|✓ built|Compiled successfully"
 ```
 Expected: `21`, then `✓ built` and `✓ Compiled successfully` with no `error` lines.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/features/running/pages/RunHistory.tsx
@@ -356,31 +356,31 @@ EOF
 
 This task is a read-and-fix pass, not new architecture — there's no single "test" for it. Work through it as a checklist:
 
-- [ ] **Step 1: Read `ActiveRun.tsx` top to bottom**
+- [x] **Step 1: Read `ActiveRun.tsx` top to bottom**
 
 Confirm, specifically: the idle screen's Goal card and stats row styling still matches what was landed on (chip picker, lime "VIEW RUN HISTORY", ring+glow Goal icon); the running/paused merged "active" block (single `key="active"` motion.div, `layout`-animated Pause/Resume and Stop/Finish buttons) still reads as one coherent block, not a leftover split; the finish screen and no-run-detected screen both have the `RunRouteBackground` + spotlight-gradient + scroll-following backdrop treatment; `MIN_VALID_RUN_KM` and `MIN_PR_ELIGIBLE_KM` are both still defined and used exactly once each; no orphaned `isStoppingRef`-adjacent dead code from the double-submit fix.
 
-- [ ] **Step 2: Read `RunHistory.tsx` top to bottom**
+- [x] **Step 2: Read `RunHistory.tsx` top to bottom**
 
 Confirm: `MiniRoute`/`RunCardMapPanel`-equivalent map thumbnail on the list cards still uses the `brightness(2.6) contrast(1.3)` tile boost; the list card's delete icon (moved into the header this session) and the detail overlay's cascade-delete (Task 4 above) don't conflict — both should be reachable and both should fire the same `handleDelete`; the detail overlay's hero/stat-row/splits styling matches Task 3/4's sibling changes in `ActiveRun.tsx` exactly (108px hero, `lineHeight: 1.05`, plain 15px stat units, vertical splits with connectors); `bestPace`/`isPR` still apply the `MIN_PR_ELIGIBLE_KM` qualification.
 
-- [ ] **Step 3: Read `RunMap.tsx` top to bottom**
+- [x] **Step 3: Read `RunMap.tsx` top to bottom**
 
 Confirm: the directional heading-arrow marker and its dot fallback are both still wired correctly (`bearing !== null` branch); the Scan/Locate buttons still have `isolation: isolate` + the elevated z-index (2000) and spring-based `whileTap`/`whileHover`; `MapFollowController`'s `dragstart`/`zoomstart` listeners are still attached/detached correctly in its `useEffect` cleanup.
 
-- [ ] **Step 4: Read `RunRouteBackground.tsx` top to bottom**
+- [x] **Step 4: Read `RunRouteBackground.tsx` top to bottom**
 
 Confirm: the `.rrbg .leaflet-tile` brightness/contrast boost is present and the outer wrapper's `filter` no longer includes a `brightness()` reduction (must stay blur+saturate only, per the earlier fix — reintroducing a brightness reduction here would silently re-break map visibility).
 
-- [ ] **Step 5: Read `useRunTracking.ts` and `useGPS.ts` top to bottom**
+- [x] **Step 5: Read `useRunTracking.ts` and `useGPS.ts` top to bottom**
 
 Confirm: auto-pause (`AUTO_PAUSE_STATIONARY_MS`), elevation-gain accumulation (`MIN_ELEVATION_DELTA_METERS`), and heading capture (`pos.coords.heading`) are each implemented exactly once, with no duplicate/conflicting logic from earlier iterations.
 
-- [ ] **Step 6: Read `storage.ts` and `gpsCalculations.ts` top to bottom**
+- [x] **Step 6: Read `storage.ts` and `gpsCalculations.ts` top to bottom**
 
 Confirm: `SavedRun`'s optional fields (`cloudId`, `elevationGain`, `workoutId` from Task 2) are all actually optional everywhere they're read — no `run.workoutId!` or similar non-null assertions that would throw on an old run that predates a field; `calculateBearing`/`calculateDistance` are only defined once each (not duplicated between this file and `RunMap.tsx`).
 
-- [ ] **Step 7: Fix anything found, verify, and commit**
+- [x] **Step 7: Fix anything found, verify, and commit**
 
 For each concrete issue found in Steps 1-6 (not stylistic nitpicks — actual bugs, dead code, or inconsistencies), fix it, then run:
 
