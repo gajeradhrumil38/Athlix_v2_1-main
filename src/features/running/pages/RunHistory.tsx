@@ -1197,14 +1197,26 @@ export const RunHistory: React.FC = () => {
                   <motion.div
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.12, type: 'spring', stiffness: 240, damping: 22 }}
-                    className="flex items-baseline justify-center gap-2 mb-1 px-6"
+                    className="flex justify-center mb-1 px-6"
                   >
-                    <span className="font-victory font-black tabular-nums text-white"
-                      style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
-                      {dist(selected.distance).toFixed(2)}
-                    </span>
-                    <span className="font-black uppercase" style={{ fontSize: 22, letterSpacing: '0.16em', color: pr ? '#fac775' : '#C8FF00' }}>
-                      {distanceUnit}
+                    {/* The unit is absolutely positioned so it doesn't add to
+                        this wrapper's width — otherwise centering the
+                        number+unit pair as one block shifts the NUMBER off
+                        true center (the wider the unit text, the further
+                        left the number sits). This keeps the number itself
+                        dead-center on the page; the unit just tucks next to
+                        whichever edge it ends up on. */}
+                    <span style={{ position: 'relative', display: 'inline-block' }}>
+                      <span className="font-victory font-black tabular-nums text-white"
+                        style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
+                        {dist(selected.distance).toFixed(2)}
+                      </span>
+                      <span className="font-black uppercase" style={{
+                        position: 'absolute', left: '100%', bottom: 14, marginLeft: 6, whiteSpace: 'nowrap',
+                        fontSize: 22, letterSpacing: '0.16em', color: pr ? '#fac775' : '#C8FF00',
+                      }}>
+                        {distanceUnit}
+                      </span>
                     </span>
                   </motion.div>
 
@@ -1234,17 +1246,24 @@ export const RunHistory: React.FC = () => {
                           style={{ color: 'rgba(255,255,255,0.45)' }}>
                           {s.label}
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        {/* Unit absolutely positioned (see hero above for
+                            why) so the value itself stays centered under
+                            its label instead of the value+unit pair as a
+                            block shifting the number off-center. */}
+                        <span style={{ position: 'relative', display: 'inline-block' }}>
                           <span className="font-victory tabular-nums leading-none"
                             style={{ fontSize: s.size, color: s.accent ? '#C8FF00' : 'white' }}>
                             {s.value}
                           </span>
                           {s.sub && (
-                            <span className="text-[15px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                            <span className="text-[15px] font-medium" style={{
+                              position: 'absolute', left: '100%', bottom: 2, marginLeft: 6, whiteSpace: 'nowrap',
+                              color: 'rgba(255,255,255,0.45)',
+                            }}>
                               {s.sub}
                             </span>
                           )}
-                        </div>
+                        </span>
                       </div>
                     ))}
 

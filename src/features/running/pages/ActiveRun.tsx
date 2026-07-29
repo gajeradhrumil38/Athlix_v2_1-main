@@ -681,12 +681,22 @@ export const ActiveRun: React.FC = () => {
           <motion.div
             initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 220, damping: 20 }}
-            className="flex items-baseline gap-2"
+            className="flex justify-center"
           >
-            <span className="font-victory font-black tabular-nums text-white" style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
-              {finished.distance.toFixed(2)}
+            {/* The unit is absolutely positioned so it doesn't add to this
+                wrapper's width — otherwise centering the number+unit pair
+                as one block shifts the NUMBER off true center. This keeps
+                the number itself dead-center on the page; the unit just
+                tucks next to whichever edge it ends up on. */}
+            <span style={{ position: 'relative', display: 'inline-block' }}>
+              <span className="font-victory font-black tabular-nums text-white" style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
+                {finished.distance.toFixed(2)}
+              </span>
+              <span className="font-black uppercase" style={{
+                position: 'absolute', left: '100%', bottom: 14, marginLeft: 6, whiteSpace: 'nowrap',
+                fontSize: 22, letterSpacing: '0.16em', color: isPR ? '#fac775' : 'var(--accent)',
+              }}>{finished.unit}</span>
             </span>
-            <span className="font-black uppercase" style={{ fontSize: 22, letterSpacing: '0.16em', color: isPR ? '#fac775' : 'var(--accent)' }}>{finished.unit}</span>
           </motion.div>
 
           {/* Vertical stat stack — plain gap spacing, no row dividers,
@@ -710,15 +720,20 @@ export const ActiveRun: React.FC = () => {
                 <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                   {s.label}
                 </span>
-                <div className="flex items-center gap-1.5">
+                {/* Unit absolutely positioned (see hero above for why) so
+                    the value itself stays centered under its label. */}
+                <span style={{ position: 'relative', display: 'inline-block' }}>
                   <span className="font-victory tabular-nums leading-none"
                     style={{ fontSize: s.size, color: s.accent ? '#C8FF00' : 'white' }}>
                     {s.value}
                   </span>
-                  <span className="text-[15px] font-medium" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  <span className="text-[15px] font-medium" style={{
+                    position: 'absolute', left: '100%', bottom: 2, marginLeft: 6, whiteSpace: 'nowrap',
+                    color: 'rgba(255,255,255,0.45)',
+                  }}>
                     {s.sub}
                   </span>
-                </div>
+                </span>
               </div>
             ))}
 
