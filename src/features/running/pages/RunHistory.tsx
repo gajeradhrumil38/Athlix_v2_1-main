@@ -1116,9 +1116,14 @@ export const RunHistory: React.FC = () => {
                   single top-to-bottom fade alone doesn't blend left-right. */}
               <div className="absolute inset-0"
                 style={{
+                  // Linear fade now starts dark at the very top instead of
+                  // fully transparent — it used to leave the map fully
+                  // bright behind the header/date, only starting to darken
+                  // ~20% of the way down. Ramps up through the hero
+                  // distance zone, then into the same lower stops as before.
                   background: `
                     radial-gradient(65% 42% at 50% 58%, rgba(13,15,20,0.62) 0%, rgba(13,15,20,0.22) 60%, transparent 85%),
-                    linear-gradient(to bottom, rgba(13,15,20,0) 0%, rgba(13,15,20,0.05) 20%, rgba(13,15,20,0.55) 44%, rgba(13,15,20,0.95) 60%, #0d0f14 72%)
+                    linear-gradient(to bottom, rgba(13,15,20,0.42) 0%, rgba(13,15,20,0.5) 25%, rgba(13,15,20,0.68) 45%, rgba(13,15,20,0.95) 60%, #0d0f14 72%)
                   `,
                 }} />
 
