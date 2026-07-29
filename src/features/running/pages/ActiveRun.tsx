@@ -1001,11 +1001,11 @@ export const ActiveRun: React.FC = () => {
               {/* Start run button */}
               <button
                 onClick={() => setShowStartConfirm(true)}
-                className="w-full h-[60px] rounded-full font-victory text-[17px] font-black tracking-[0.22em] text-black transition-all active:scale-[0.97] flex items-center justify-center gap-3"
+                className="w-full h-[60px] rounded-full font-victory text-[18px] font-black text-black transition-all active:scale-[0.97] flex items-center justify-center gap-3"
                 style={{ background: 'var(--accent)', boxShadow: '0 0 0 6px rgba(200,255,0,0.12), 0 12px 34px rgba(200,255,0,0.36)' }}
               >
                 <Play className="h-5 w-5 fill-black" />
-                START RUN
+                Start Run
               </button>
 
               {/* View history */}
@@ -1106,11 +1106,16 @@ export const ActiveRun: React.FC = () => {
               )}
 
               {/* Controls row — same two buttons throughout; layout animates
-                  the pill<->circle morph instead of swapping elements */}
+                  the pill<->circle morph instead of swapping elements.
+                  Softened from the original 500/34 spring — that read as a
+                  hard snap on a size change this big (full pill down to a
+                  72px circle); slightly lower stiffness + added mass reads
+                  as a real physical object settling instead of teleporting
+                  to its new spot the instant you tap. */}
               <div className="flex w-full items-center gap-3">
                 <motion.button
                   layout
-                  transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.9 }}
                   onClick={isPaused ? resumeRun : pauseRun}
                   className="flex flex-1 items-center justify-center gap-2.5 rounded-full active:scale-[0.96]"
                   style={{
@@ -1124,15 +1129,19 @@ export const ActiveRun: React.FC = () => {
                     {isPaused
                       ? <Play className="h-5 w-5 fill-black" />
                       : <Pause className="h-5 w-5 fill-white text-white" />}
-                    <span className="font-victory text-[15px] font-black tracking-[0.18em] uppercase"
+                    {/* Normal case, not the small-caps-label treatment GOAL/
+                        CAL use elsewhere — this is a primary action, not a
+                        stat label, so it reads as a bigger, bolder word
+                        instead of tracked-out letters. */}
+                    <span className="font-victory text-[17px] font-black"
                       style={{ color: isPaused ? '#000' : '#fff' }}>
-                      {isPaused ? 'RESUME' : 'PAUSE'}
+                      {isPaused ? 'Resume' : 'Pause'}
                     </span>
                   </motion.span>
                 </motion.button>
                 <motion.button
                   layout
-                  transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.9 }}
                   onClick={isPaused ? () => { void handleStop(); } : () => setShowStopConfirm(true)}
                   className="flex shrink-0 items-center justify-center rounded-full active:scale-95"
                   style={{
@@ -1144,13 +1153,36 @@ export const ActiveRun: React.FC = () => {
                     boxShadow: isPaused ? 'none' : '0 0 0 6px rgba(239,68,68,0.16), 0 10px 28px rgba(239,68,68,0.4)',
                   }}
                 >
-                  <Square className={isPaused ? 'h-4 w-4 fill-white' : 'h-6 w-6 fill-white text-white'} />
-                  {isPaused && (
-                    <motion.span layout="position"
-                      className="font-victory text-[15px] font-black tracking-[0.18em] text-white uppercase">
-                      FINISH
-                    </motion.span>
-                  )}
+                  {/* Icon size used to hard-swap classNames (h-4 <-> h-6),
+                      snapping instantly while the button around it was
+                      still mid-animation — one part of the button arriving
+                      before the rest is exactly what read as jarring.
+                      Scaling a fixed-size icon smoothly instead keeps the
+                      icon in step with the button's own shape change. */}
+                  <motion.div layout="position"
+                    animate={{ scale: isPaused ? 0.67 : 1 }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.9 }}
+                  >
+                    <Square className="h-6 w-6 fill-white text-white" />
+                  </motion.div>
+                  {/* "Finish" fades in on a short delay rather than popping
+                      in the instant isPaused flips — it now only appears
+                      once the button has had a moment to grow toward its
+                      final pill width, instead of racing ahead of the
+                      shape it's supposed to be labeling. */}
+                  <AnimatePresence>
+                    {isPaused && (
+                      <motion.span
+                        key="finish-label"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1, transition: { delay: 0.14, duration: 0.15 } }}
+                        exit={{ opacity: 0, transition: { duration: 0.08 } }}
+                        className="font-victory text-[17px] font-black text-white"
+                      >
+                        Finish
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </motion.button>
               </div>
             </motion.div>
@@ -1213,11 +1245,11 @@ export const ActiveRun: React.FC = () => {
                 </button>
                 <button
                   onClick={() => { setShowStartConfirm(false); isStoppingRef.current = false; startRun(); }}
-                  className="flex-1 h-12 rounded-full text-[14px] font-black tracking-[0.12em] text-black transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+                  className="flex-1 h-12 rounded-full font-victory text-[16px] font-black text-black transition-all active:scale-[0.97] flex items-center justify-center gap-2"
                   style={{ background: 'var(--accent)' }}
                 >
                   <Play className="h-4 w-4 fill-black" />
-                  LET'S GO
+                  Let's Go
                 </button>
               </div>
             </motion.div>
