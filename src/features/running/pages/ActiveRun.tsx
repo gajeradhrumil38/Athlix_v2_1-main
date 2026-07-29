@@ -164,6 +164,30 @@ const MIN_VALID_RUN_KM = 0.05;
 // short fast burst isn't a comparable effort to a real run.
 const MIN_PR_ELIGIBLE_KM = 1;
 
+// Material Design 3 motion tokens (see .claude/skills/material-motion) —
+// used for the Pause/Resume/Stop/Finish controls' content-slide animation.
+//
+// The sliding icon+label is spatial motion (position change) on a routine
+// control, which M3's own decision tree says should be a spring, not a
+// duration+ease tween — standardSpatialDefault (damping ratio 0.9,
+// stiffness 700), not the bouncier "expressive" tier, since this isn't a
+// hero moment. Framer Motion's `damping` is an absolute value, not M3's
+// 0-1 ratio, so it's converted via the standard critically-damped-spring
+// relationship: criticalDamping = 2 * sqrt(stiffness * mass), then
+// damping = ratio * criticalDamping.
+const M3_SPATIAL_DEFAULT_STIFFNESS = 700;
+const M3_SPATIAL_DEFAULT_DAMPING = 0.9 * 2 * Math.sqrt(M3_SPATIAL_DEFAULT_STIFFNESS);
+const controlsSlideTransition = {
+  type: 'spring' as const,
+  stiffness: M3_SPATIAL_DEFAULT_STIFFNESS,
+  damping: M3_SPATIAL_DEFAULT_DAMPING,
+};
+// The button's own background/border is a property-only change (no
+// movement) — M3's "Effects" case, which stays on duration+easing rather
+// than a spring. `standard` curve, short-tier duration (200ms is the top
+// of that tier — this is a full color crossfade, not a micro flash).
+const controlsColorTransition = { duration: 0.2, ease: [0.2, 0, 0, 1] as const };
+
 /* ── Goal value chip picker ───────────────────────────────────────
    Was a custom scroll-snap "drum roll": onScroll computed the selected
    index from raw scrollTop/ITEM_H, rounded. That only ever matches
@@ -1105,23 +1129,25 @@ export const ActiveRun: React.FC = () => {
                 </div>
               )}
 
-              {/* Controls row — redesigned around a different, simpler
-                  pattern than the previous shape-morph: both buttons now
-                  stay a CONSTANT size/shape in both states. Only their
-                  icon+label content slides out one side and the new
-                  content slides in from the other, via the documented
-                  Framer Motion pattern for this (AnimatePresence,
-                  mode="wait" so the old content fully exits before the
-                  new one enters, content positioned absolute inside a
-                  fixed-height/overflow-hidden button so it can't affect
-                  the button's own box). Since the button itself never
-                  resizes or repositions, this sidesteps every layout-morph
-                  artifact from the earlier approach (sliding sideways,
-                  siblings desyncing, snapping) by construction rather than
-                  chasing them with springs/curves — there's no layout
-                  animation left to go wrong. Kept under 300ms per the
-                  same source's guidance for interactive controls (buttons/
-                  toggles/tabs shouldn't feel sluggish to respond to). */}
+              {/* Controls row — both buttons stay a CONSTANT size/shape in
+                  both states; only their icon+label content slides out one
+                  side and the new content slides in from the other
+                  (AnimatePresence, mode="wait" so the old content fully
+                  exits before the new one enters; content is positioned
+                  absolute inside a fixed-height/overflow-hidden button so
+                  it can't affect the button's own box). Since the button
+                  itself never resizes or repositions, this sidesteps every
+                  layout-morph artifact the previous shape-morphing version
+                  had (sliding sideways, siblings desyncing, snapping) by
+                  construction — there's no layout animation left to go
+                  wrong.
+
+                  Transitions follow Material Design 3's motion system (see
+                  .claude/skills/material-motion): the slide is spatial
+                  motion on a routine control, which M3 spends on a spring
+                  (standardSpatialDefault), not a duration+ease tween — the
+                  color crossfade is property-only motion, which M3 keeps
+                  on duration+easing (`standard` curve, short tier). */}
               <div className="flex w-full items-center gap-3">
                 <motion.button
                   onClick={isPaused ? resumeRun : pauseRun}
@@ -1129,7 +1155,7 @@ export const ActiveRun: React.FC = () => {
                     backgroundColor: isPaused ? 'rgba(200,255,0,1)' : 'rgba(255,255,255,0.07)',
                     borderColor: isPaused ? 'rgba(200,255,0,0)' : 'rgba(255,255,255,0.16)',
                   }}
-                  transition={{ duration: 0.22, ease: 'easeOut' }}
+                  transition={controlsColorTransition}
                   className="relative flex-1 overflow-hidden rounded-full active:scale-[0.96]"
                   style={{
                     height: 62,
@@ -1143,7 +1169,7 @@ export const ActiveRun: React.FC = () => {
                       initial={{ x: isPaused ? 18 : -18, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
                       exit={{ x: isPaused ? -18 : 18, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      transition={controlsSlideTransition}
                       className="absolute inset-0 flex items-center justify-center gap-2.5"
                     >
                       {isPaused
@@ -1171,7 +1197,7 @@ export const ActiveRun: React.FC = () => {
                       initial={{ x: isPaused ? 18 : -18, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
                       exit={{ x: isPaused ? -18 : 18, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      transition={controlsSlideTransition}
                       className="absolute inset-0 flex items-center justify-center gap-2"
                     >
                       <Square className="h-4 w-4 fill-white text-white" />
