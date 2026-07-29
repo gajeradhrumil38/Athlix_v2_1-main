@@ -713,7 +713,7 @@ export const ActiveRun: React.FC = () => {
                 the number itself dead-center on the page; the unit just
                 tucks next to whichever edge it ends up on. */}
             <span style={{ position: 'relative', display: 'inline-block' }}>
-              <span className="font-victory font-black tabular-nums text-white" style={{ fontSize: 108, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
+              <span className="font-victory font-black tabular-nums text-white" style={{ fontSize: 108, letterSpacing: '0.01em', lineHeight: 1.05 }}>
                 {finished.distance.toFixed(2)}
               </span>
               <span className="font-black uppercase" style={{
