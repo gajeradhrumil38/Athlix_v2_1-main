@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Square, MapPin, AlertCircle, ChevronLeft, LocateOff, Play, Pause,
   Home, History, Target, Share2, Pencil,
@@ -1105,47 +1105,47 @@ export const ActiveRun: React.FC = () => {
                 </div>
               )}
 
-              {/* Controls row — same two buttons throughout; layout animates
-                  the pill<->circle morph instead of swapping elements.
-
-                  Two fixes for the "slides sideways instead of morphing
-                  smoothly" feel:
-                  1. Switched from a spring to a tween using Material
-                     Design's own "emphasized decelerate" curve
-                     (cubic-bezier(0.2, 0, 0, 1)) — this is the specific,
-                     named curve Material's motion spec prescribes for a
-                     "container transform" (one shape morphing into a
-                     differently-sized/positioned one), which is exactly
-                     this pattern. A spring re-accelerates/overshoots
-                     slightly by nature; a deliberate deceleration curve
-                     reads as one continuous glide instead. Slowed to
-                     420ms (was ~150-250ms effective) per "slow the speed."
-                  2. Wrapped both buttons in a LayoutGroup. Two flex
-                     siblings whose widths both change at once (one
-                     growing, one shrinking, each independently measuring
-                     its own before/after rect) can drift out of sync
-                     frame-to-frame — that desync is what read as the
-                     button moving sideways rather than resizing in place.
-                     LayoutGroup makes Framer Motion coordinate their
-                     layout animations as one group instead of two
-                     independent ones. */}
-              <LayoutGroup id="run-controls">
-                <div className="flex w-full items-center gap-3">
-                  <motion.button
-                    layout
-                    transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
-                    onClick={isPaused ? resumeRun : pauseRun}
-                    className="flex flex-1 items-center justify-center gap-2.5 rounded-full active:scale-[0.96]"
-                    style={{
-                      height: isPaused ? 62 : 60,
-                      background: isPaused ? 'var(--accent)' : 'rgba(255,255,255,0.07)',
-                      border: isPaused ? 'none' : '1.5px solid rgba(255,255,255,0.16)',
-                      boxShadow: isPaused ? '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' : 'none',
-                    }}
-                  >
-                    <motion.span layout="position"
-                      transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
-                      className="flex items-center gap-2.5">
+              {/* Controls row — redesigned around a different, simpler
+                  pattern than the previous shape-morph: both buttons now
+                  stay a CONSTANT size/shape in both states. Only their
+                  icon+label content slides out one side and the new
+                  content slides in from the other, via the documented
+                  Framer Motion pattern for this (AnimatePresence,
+                  mode="wait" so the old content fully exits before the
+                  new one enters, content positioned absolute inside a
+                  fixed-height/overflow-hidden button so it can't affect
+                  the button's own box). Since the button itself never
+                  resizes or repositions, this sidesteps every layout-morph
+                  artifact from the earlier approach (sliding sideways,
+                  siblings desyncing, snapping) by construction rather than
+                  chasing them with springs/curves — there's no layout
+                  animation left to go wrong. Kept under 300ms per the
+                  same source's guidance for interactive controls (buttons/
+                  toggles/tabs shouldn't feel sluggish to respond to). */}
+              <div className="flex w-full items-center gap-3">
+                <motion.button
+                  onClick={isPaused ? resumeRun : pauseRun}
+                  animate={{
+                    backgroundColor: isPaused ? 'rgba(200,255,0,1)' : 'rgba(255,255,255,0.07)',
+                    borderColor: isPaused ? 'rgba(200,255,0,0)' : 'rgba(255,255,255,0.16)',
+                  }}
+                  transition={{ duration: 0.22, ease: 'easeOut' }}
+                  className="relative flex-1 overflow-hidden rounded-full active:scale-[0.96]"
+                  style={{
+                    height: 62,
+                    borderWidth: 1.5, borderStyle: 'solid',
+                    boxShadow: isPaused ? '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' : 'none',
+                  }}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={isPaused ? 'resume' : 'pause'}
+                      initial={{ x: isPaused ? 18 : -18, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: isPaused ? -18 : 18, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      className="absolute inset-0 flex items-center justify-center gap-2.5"
+                    >
                       {isPaused
                         ? <Play className="h-5 w-5 fill-black" />
                         : <Pause className="h-5 w-5 fill-white text-white" />}
@@ -1158,54 +1158,30 @@ export const ActiveRun: React.FC = () => {
                         {isPaused ? 'Resume' : 'Pause'}
                       </span>
                     </motion.span>
-                  </motion.button>
-                  <motion.button
-                    layout
-                    transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
-                    onClick={isPaused ? () => { void handleStop(); } : () => setShowStopConfirm(true)}
-                    className="flex shrink-0 items-center justify-center rounded-full active:scale-95"
-                    style={{
-                      height: isPaused ? 62 : 72,
-                      width: isPaused ? undefined : 72,
-                      flex: isPaused ? 1 : '0 0 auto',
-                      gap: isPaused ? 10 : 0,
-                      background: isPaused ? 'rgba(239,68,68,0.9)' : '#ef4444',
-                      boxShadow: isPaused ? 'none' : '0 0 0 6px rgba(239,68,68,0.16), 0 10px 28px rgba(239,68,68,0.4)',
-                    }}
-                  >
-                    {/* Icon size used to hard-swap classNames (h-4 <-> h-6),
-                        snapping instantly while the button around it was
-                        still mid-animation — one part of the button arriving
-                        before the rest is exactly what read as jarring.
-                        Scaling a fixed-size icon smoothly instead keeps the
-                        icon in step with the button's own shape change. */}
-                    <motion.div layout="position"
-                      animate={{ scale: isPaused ? 0.67 : 1 }}
-                      transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
+                  </AnimatePresence>
+                </motion.button>
+                <button
+                  onClick={isPaused ? () => { void handleStop(); } : () => setShowStopConfirm(true)}
+                  className="relative flex-1 overflow-hidden rounded-full active:scale-95"
+                  style={{ height: 62, background: 'rgba(239,68,68,0.9)', boxShadow: '0 8px 22px rgba(239,68,68,0.3)' }}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={isPaused ? 'finish' : 'stop'}
+                      initial={{ x: isPaused ? 18 : -18, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: isPaused ? -18 : 18, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      className="absolute inset-0 flex items-center justify-center gap-2"
                     >
-                      <Square className="h-6 w-6 fill-white text-white" />
-                    </motion.div>
-                    {/* "Finish" fades in once the button's had time to grow
-                        toward its final pill width, instead of racing
-                        ahead of the shape it's supposed to be labeling —
-                        delay is ~60% of the button's own transition so it
-                        lands after most of the growth has happened. */}
-                    <AnimatePresence>
-                      {isPaused && (
-                        <motion.span
-                          key="finish-label"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1, transition: { delay: 0.24, duration: 0.18 } }}
-                          exit={{ opacity: 0, transition: { duration: 0.1 } }}
-                          className="font-victory text-[17px] font-black text-white"
-                        >
-                          Finish
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </motion.button>
-                </div>
-              </LayoutGroup>
+                      <Square className="h-4 w-4 fill-white text-white" />
+                      <span className="font-victory text-[17px] font-black text-white">
+                        {isPaused ? 'Finish' : 'Stop'}
+                      </span>
+                    </motion.span>
+                  </AnimatePresence>
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
