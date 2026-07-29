@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import {
   Square, MapPin, AlertCircle, ChevronLeft, LocateOff, Play, Pause,
   Home, History, Target, Share2, Pencil,
@@ -1107,84 +1107,105 @@ export const ActiveRun: React.FC = () => {
 
               {/* Controls row — same two buttons throughout; layout animates
                   the pill<->circle morph instead of swapping elements.
-                  Softened from the original 500/34 spring — that read as a
-                  hard snap on a size change this big (full pill down to a
-                  72px circle); slightly lower stiffness + added mass reads
-                  as a real physical object settling instead of teleporting
-                  to its new spot the instant you tap. */}
-              <div className="flex w-full items-center gap-3">
-                <motion.button
-                  layout
-                  transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.9 }}
-                  onClick={isPaused ? resumeRun : pauseRun}
-                  className="flex flex-1 items-center justify-center gap-2.5 rounded-full active:scale-[0.96]"
-                  style={{
-                    height: isPaused ? 62 : 60,
-                    background: isPaused ? 'var(--accent)' : 'rgba(255,255,255,0.07)',
-                    border: isPaused ? 'none' : '1.5px solid rgba(255,255,255,0.16)',
-                    boxShadow: isPaused ? '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' : 'none',
-                  }}
-                >
-                  <motion.span layout="position" className="flex items-center gap-2.5">
-                    {isPaused
-                      ? <Play className="h-5 w-5 fill-black" />
-                      : <Pause className="h-5 w-5 fill-white text-white" />}
-                    {/* Normal case, not the small-caps-label treatment GOAL/
-                        CAL use elsewhere — this is a primary action, not a
-                        stat label, so it reads as a bigger, bolder word
-                        instead of tracked-out letters. */}
-                    <span className="font-victory text-[17px] font-black"
-                      style={{ color: isPaused ? '#000' : '#fff' }}>
-                      {isPaused ? 'Resume' : 'Pause'}
-                    </span>
-                  </motion.span>
-                </motion.button>
-                <motion.button
-                  layout
-                  transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.9 }}
-                  onClick={isPaused ? () => { void handleStop(); } : () => setShowStopConfirm(true)}
-                  className="flex shrink-0 items-center justify-center rounded-full active:scale-95"
-                  style={{
-                    height: isPaused ? 62 : 72,
-                    width: isPaused ? undefined : 72,
-                    flex: isPaused ? 1 : '0 0 auto',
-                    gap: isPaused ? 10 : 0,
-                    background: isPaused ? 'rgba(239,68,68,0.9)' : '#ef4444',
-                    boxShadow: isPaused ? 'none' : '0 0 0 6px rgba(239,68,68,0.16), 0 10px 28px rgba(239,68,68,0.4)',
-                  }}
-                >
-                  {/* Icon size used to hard-swap classNames (h-4 <-> h-6),
-                      snapping instantly while the button around it was
-                      still mid-animation — one part of the button arriving
-                      before the rest is exactly what read as jarring.
-                      Scaling a fixed-size icon smoothly instead keeps the
-                      icon in step with the button's own shape change. */}
-                  <motion.div layout="position"
-                    animate={{ scale: isPaused ? 0.67 : 1 }}
-                    transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.9 }}
+
+                  Two fixes for the "slides sideways instead of morphing
+                  smoothly" feel:
+                  1. Switched from a spring to a tween using Material
+                     Design's own "emphasized decelerate" curve
+                     (cubic-bezier(0.2, 0, 0, 1)) — this is the specific,
+                     named curve Material's motion spec prescribes for a
+                     "container transform" (one shape morphing into a
+                     differently-sized/positioned one), which is exactly
+                     this pattern. A spring re-accelerates/overshoots
+                     slightly by nature; a deliberate deceleration curve
+                     reads as one continuous glide instead. Slowed to
+                     420ms (was ~150-250ms effective) per "slow the speed."
+                  2. Wrapped both buttons in a LayoutGroup. Two flex
+                     siblings whose widths both change at once (one
+                     growing, one shrinking, each independently measuring
+                     its own before/after rect) can drift out of sync
+                     frame-to-frame — that desync is what read as the
+                     button moving sideways rather than resizing in place.
+                     LayoutGroup makes Framer Motion coordinate their
+                     layout animations as one group instead of two
+                     independent ones. */}
+              <LayoutGroup id="run-controls">
+                <div className="flex w-full items-center gap-3">
+                  <motion.button
+                    layout
+                    transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
+                    onClick={isPaused ? resumeRun : pauseRun}
+                    className="flex flex-1 items-center justify-center gap-2.5 rounded-full active:scale-[0.96]"
+                    style={{
+                      height: isPaused ? 62 : 60,
+                      background: isPaused ? 'var(--accent)' : 'rgba(255,255,255,0.07)',
+                      border: isPaused ? 'none' : '1.5px solid rgba(255,255,255,0.16)',
+                      boxShadow: isPaused ? '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' : 'none',
+                    }}
                   >
-                    <Square className="h-6 w-6 fill-white text-white" />
-                  </motion.div>
-                  {/* "Finish" fades in on a short delay rather than popping
-                      in the instant isPaused flips — it now only appears
-                      once the button has had a moment to grow toward its
-                      final pill width, instead of racing ahead of the
-                      shape it's supposed to be labeling. */}
-                  <AnimatePresence>
-                    {isPaused && (
-                      <motion.span
-                        key="finish-label"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1, transition: { delay: 0.14, duration: 0.15 } }}
-                        exit={{ opacity: 0, transition: { duration: 0.08 } }}
-                        className="font-victory text-[17px] font-black text-white"
-                      >
-                        Finish
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
-              </div>
+                    <motion.span layout="position"
+                      transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
+                      className="flex items-center gap-2.5">
+                      {isPaused
+                        ? <Play className="h-5 w-5 fill-black" />
+                        : <Pause className="h-5 w-5 fill-white text-white" />}
+                      {/* Normal case, not the small-caps-label treatment GOAL/
+                          CAL use elsewhere — this is a primary action, not a
+                          stat label, so it reads as a bigger, bolder word
+                          instead of tracked-out letters. */}
+                      <span className="font-victory text-[17px] font-black"
+                        style={{ color: isPaused ? '#000' : '#fff' }}>
+                        {isPaused ? 'Resume' : 'Pause'}
+                      </span>
+                    </motion.span>
+                  </motion.button>
+                  <motion.button
+                    layout
+                    transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
+                    onClick={isPaused ? () => { void handleStop(); } : () => setShowStopConfirm(true)}
+                    className="flex shrink-0 items-center justify-center rounded-full active:scale-95"
+                    style={{
+                      height: isPaused ? 62 : 72,
+                      width: isPaused ? undefined : 72,
+                      flex: isPaused ? 1 : '0 0 auto',
+                      gap: isPaused ? 10 : 0,
+                      background: isPaused ? 'rgba(239,68,68,0.9)' : '#ef4444',
+                      boxShadow: isPaused ? 'none' : '0 0 0 6px rgba(239,68,68,0.16), 0 10px 28px rgba(239,68,68,0.4)',
+                    }}
+                  >
+                    {/* Icon size used to hard-swap classNames (h-4 <-> h-6),
+                        snapping instantly while the button around it was
+                        still mid-animation — one part of the button arriving
+                        before the rest is exactly what read as jarring.
+                        Scaling a fixed-size icon smoothly instead keeps the
+                        icon in step with the button's own shape change. */}
+                    <motion.div layout="position"
+                      animate={{ scale: isPaused ? 0.67 : 1 }}
+                      transition={{ type: 'tween', ease: [0.2, 0, 0, 1], duration: 0.42 }}
+                    >
+                      <Square className="h-6 w-6 fill-white text-white" />
+                    </motion.div>
+                    {/* "Finish" fades in once the button's had time to grow
+                        toward its final pill width, instead of racing
+                        ahead of the shape it's supposed to be labeling —
+                        delay is ~60% of the button's own transition so it
+                        lands after most of the growth has happened. */}
+                    <AnimatePresence>
+                      {isPaused && (
+                        <motion.span
+                          key="finish-label"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1, transition: { delay: 0.24, duration: 0.18 } }}
+                          exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                          className="font-victory text-[17px] font-black text-white"
+                        >
+                          Finish
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                </div>
+              </LayoutGroup>
             </motion.div>
           )}
         </AnimatePresence>
