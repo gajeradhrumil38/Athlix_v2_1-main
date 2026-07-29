@@ -1050,8 +1050,8 @@ export const ActiveRun: React.FC = () => {
               subtree and mounted a fresh one — a visible flash even though the
               underlying numbers barely changed. Now it's a single block; only
               `isPaused` toggles a few style props, and the two buttons below
-              use Framer Motion's `layout` prop so a shape/position change
-              (pill <-> circle) animates as a smooth morph instead of a swap. */}
+              keep a constant size while their icon+label content cross-slides
+              on state change (see the controls-row comment). */}
           {isRunning && (
             <motion.div
               key="active"
@@ -1130,17 +1130,23 @@ export const ActiveRun: React.FC = () => {
               )}
 
               {/* Controls row — both buttons stay a CONSTANT size/shape in
-                  both states; only their icon+label content slides out one
-                  side and the new content slides in from the other
-                  (AnimatePresence, mode="wait" so the old content fully
-                  exits before the new one enters; content is positioned
-                  absolute inside a fixed-height/overflow-hidden button so
-                  it can't affect the button's own box). Since the button
-                  itself never resizes or repositions, this sidesteps every
-                  layout-morph artifact the previous shape-morphing version
-                  had (sliding sideways, siblings desyncing, snapping) by
-                  construction — there's no layout animation left to go
-                  wrong.
+                  both states; only their icon+label content cross-slides
+                  on state change (outgoing slides out one side while the
+                  incoming slides in from the other, simultaneously). The
+                  content is positioned absolute inside a fixed-height/
+                  overflow-hidden button so it can't affect the button's
+                  own box — so the button never resizes or repositions, and
+                  every layout-morph artifact the earlier shape-morphing
+                  version had (sliding sideways, siblings desyncing,
+                  snapping) is gone by construction.
+
+                  NOTE: no mode="wait" here on purpose. mode="wait" holds
+                  the incoming label until the outgoing has fully finished
+                  its exit — with a spring's long settle tail that roughly
+                  doubles the swap time AND leaves a beat where the button
+                  shows neither label (an empty-middle flash). Letting them
+                  overlap (default AnimatePresence mode) is both faster and
+                  seamless, which is what a routine control should feel like.
 
                   Transitions follow Material Design 3's motion system (see
                   .claude/skills/material-motion): the slide is spatial
@@ -1163,7 +1169,7 @@ export const ActiveRun: React.FC = () => {
                     boxShadow: isPaused ? '0 0 0 5px rgba(200,255,0,0.12), 0 10px 28px rgba(200,255,0,0.34)' : 'none',
                   }}
                 >
-                  <AnimatePresence mode="wait" initial={false}>
+                  <AnimatePresence initial={false}>
                     <motion.span
                       key={isPaused ? 'resume' : 'pause'}
                       initial={{ x: isPaused ? 18 : -18, opacity: 0 }}
@@ -1191,7 +1197,7 @@ export const ActiveRun: React.FC = () => {
                   className="relative flex-1 overflow-hidden rounded-full active:scale-95"
                   style={{ height: 62, background: 'rgba(239,68,68,0.9)', boxShadow: '0 8px 22px rgba(239,68,68,0.3)' }}
                 >
-                  <AnimatePresence mode="wait" initial={false}>
+                  <AnimatePresence initial={false}>
                     <motion.span
                       key={isPaused ? 'finish' : 'stop'}
                       initial={{ x: isPaused ? 18 : -18, opacity: 0 }}
