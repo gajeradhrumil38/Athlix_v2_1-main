@@ -1288,40 +1288,43 @@ export const RunHistory: React.FC = () => {
                     </div>
                   </motion.div>
 
-                  {/* Splits — vertical centered list with a thin connector
-                      between rows, matching the Run Detail Screen reference
-                      exactly instead of a horizontal wrapped list. */}
+                  {/* Splits — a 3-column grid instead of one tall centered
+                      column, so a long run's many splits use the full width
+                      instead of running off the bottom of the screen.
+                      Filled row-by-row: split 1 → left, 2 → center, 3 →
+                      right, 4 → left (next row), and so on. Each column
+                      aligns to its own side (left / centre / right) so the
+                      outer splits hug the screen edges. */}
                   {selected.splits && selected.splits.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.32 }}
                       className="w-full px-6 py-2 flex flex-col items-center"
-                      style={{ marginTop: 8, gap: 6 }}
+                      style={{ marginTop: 8, gap: 10 }}
                     >
                       <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                         SPLITS · /{distanceUnit}
                       </span>
-                      {(() => {
-                        const paces = selected.splits!.map((s) => s.pace);
-                        const bestP = Math.min(...paces);
-                        const splits = selected.splits!;
-                        return splits.map((split, idx) => {
-                          const isBest = split.pace === bestP;
-                          const isLast = idx === splits.length - 1;
-                          return (
-                            <div key={idx} className="flex flex-col items-center">
-                              <div className="flex items-center justify-center" style={{ gap: 8 }}>
-                                <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.45)' }}>{idx + 1}</span>
-                                <span style={{ color: 'rgba(255,255,255,0.26)' }}>—</span>
+                      <div className="grid w-full" style={{ gridTemplateColumns: 'repeat(3, 1fr)', columnGap: 12, rowGap: 12 }}>
+                        {(() => {
+                          const splits = selected.splits!;
+                          const bestP = Math.min(...splits.map((s) => s.pace));
+                          return splits.map((split, idx) => {
+                            const isBest = split.pace === bestP;
+                            const col = idx % 3; // 0 left, 1 centre, 2 right
+                            const justify = col === 0 ? 'flex-start' : col === 1 ? 'center' : 'flex-end';
+                            return (
+                              <div key={idx} className="flex items-baseline" style={{ gap: 6, justifyContent: justify }}>
+                                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.4)' }}>{idx + 1}</span>
+                                <span style={{ color: 'rgba(255,255,255,0.24)' }}>—</span>
                                 <span className="font-victory tabular-nums leading-none"
-                                  style={{ fontSize: 26, color: isBest ? '#C8FF00' : 'white' }}>
+                                  style={{ fontSize: 24, color: isBest ? '#C8FF00' : 'white' }}>
                                   {formatPace(paceDisplay(split.pace))}
                                 </span>
                               </div>
-                              {!isLast && <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.18)', opacity: 0.6 }} />}
-                            </div>
-                          );
-                        });
-                      })()}
+                            );
+                          });
+                        })()}
+                      </div>
                     </motion.div>
                   )}
 

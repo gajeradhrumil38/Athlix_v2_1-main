@@ -781,33 +781,36 @@ export const ActiveRun: React.FC = () => {
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}
               className="w-full px-6 py-3 flex flex-col items-center"
-              style={{ marginTop: 4, gap: 8 }}
+              style={{ marginTop: 4, gap: 10 }}
             >
               <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 SPLITS · /{finished.unit}
               </span>
-              {(() => {
-                const paces = finished.splits!.map((s) => s.pace);
-                const bestP = Math.min(...paces);
-                const splits = finished.splits!;
-                return splits.map((split, idx) => {
-                  const isBest = split.pace === bestP;
-                  const isLast = idx === splits.length - 1;
-                  return (
-                    <div key={idx} className="flex flex-col items-center">
-                      <div className="flex items-center justify-center" style={{ gap: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.45)' }}>{idx + 1}</span>
-                        <span style={{ color: 'rgba(255,255,255,0.26)' }}>—</span>
+              {/* 3-column grid (see the history detail screen for the same
+                  treatment): split 1 → left, 2 → centre, 3 → right, 4 →
+                  left (next row)…, so a long run's splits use the full
+                  width instead of running off the bottom. */}
+              <div className="grid w-full" style={{ gridTemplateColumns: 'repeat(3, 1fr)', columnGap: 12, rowGap: 12 }}>
+                {(() => {
+                  const splits = finished.splits!;
+                  const bestP = Math.min(...splits.map((s) => s.pace));
+                  return splits.map((split, idx) => {
+                    const isBest = split.pace === bestP;
+                    const col = idx % 3; // 0 left, 1 centre, 2 right
+                    const justify = col === 0 ? 'flex-start' : col === 1 ? 'center' : 'flex-end';
+                    return (
+                      <div key={idx} className="flex items-baseline" style={{ gap: 6, justifyContent: justify }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.4)' }}>{idx + 1}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.24)' }}>—</span>
                         <span className="font-victory tabular-nums leading-none"
-                          style={{ fontSize: 26, color: isBest ? 'var(--accent)' : 'white' }}>
+                          style={{ fontSize: 24, color: isBest ? 'var(--accent)' : 'white' }}>
                           {formatPace(distanceUnit === 'mi' ? split.pace * 1.609344 : split.pace)}
                         </span>
                       </div>
-                      {!isLast && <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.18)', opacity: 0.6 }} />}
-                    </div>
-                  );
-                });
-              })()}
+                    );
+                  });
+                })()}
+              </div>
             </motion.div>
           )}
 
