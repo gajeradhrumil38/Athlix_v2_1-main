@@ -263,7 +263,15 @@ const WorkoutCard: React.FC<{
   // All distinct muscle groups the workout touched, not just the first —
   // a mixed session was mislabelled by whatever happened to be group[0]
   // (e.g. showing just "Core" for a workout that was mostly other groups).
-  const muscle    = Array.from(new Set((workout.muscle_groups || []).filter(Boolean))).join(' · ');
+  // Each is coloured by its OWN muscle colour when rendered, not the
+  // workout's single accent.
+  const muscleGroups = Array.from(new Set((workout.muscle_groups || []).filter(Boolean))) as string[];
+  // Per-exercise muscle colour (exercise name → its own group's colour), so
+  // the initial-badge chips aren't all painted the first group's colour.
+  const exerciseColor = (name: string): string => {
+    const ex = (workout.exercises || []).find((e: any) => e?.name === name);
+    return muscleColor(ex?.muscle_group ?? (workout.muscle_groups || [])[0]);
+  };
   const chips     = names.slice(0, 4);
   const extra     = names.length - chips.length;
   const hasDetail = (workout.exercises || []).length > 0;
@@ -441,7 +449,16 @@ const WorkoutCard: React.FC<{
             ) : (
               <p className="text-[15px] font-bold leading-snug truncate" style={{ color: 'var(--text-primary)' }}>{title}</p>
             )}
-            {muscle && <p className="text-[11px] font-medium mt-0.5 truncate" style={{ color: accent }}>{muscle}</p>}
+            {muscleGroups.length > 0 && (
+              <p className="text-[11px] font-medium mt-0.5 truncate">
+                {muscleGroups.map((g, i) => (
+                  <span key={g}>
+                    {i > 0 && <span style={{ color: 'var(--text-muted)' }}> · </span>}
+                    <span style={{ color: muscleColor(g) }}>{g}</span>
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0 mt-0.5" onClick={(e) => e.stopPropagation()}>
             <button
@@ -479,7 +496,7 @@ const WorkoutCard: React.FC<{
           </div>
           <div className="flex items-center gap-0.5">
             <div className="flex -space-x-1.5">
-              {chips.map((n) => <ExerciseChip key={n} name={n} color={accent} />)}
+              {chips.map((n) => <ExerciseChip key={n} name={n} color={exerciseColor(n)} />)}
             </div>
             {extra > 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>+{extra}</span>}
           </div>

@@ -37,12 +37,14 @@ export const getWorkoutDisplayTitle = (w: any): string => {
   // are represented by the exercises instead (see PLACEHOLDER_TITLES).
   if (title && !PLACEHOLDER_TITLES.has(title.toLowerCase())) return title;
 
-  // Unnamed workout → represent it by the exercises actually performed
-  // (an unnamed session should read as "what I did", not a made-up name).
-  // Distinct exercise names joined; the card truncates if there are many,
-  // and the full list is always in the expanded view.
+  // Unnamed workout → keep it separate rather than inventing a name.
+  // A single exercise IS its name; several exercises read cleanly as a
+  // count ("4 Exercises") — joining every name into the title ran off the
+  // card and looked bad. The individual exercises are still shown as
+  // colour-coded chips + the expandable list on the card itself.
   const names = getExerciseNames(w);
-  if (names.length > 0) return names.join(' · ');
+  if (names.length === 1) return names[0];
+  if (names.length > 1) return `${names.length} Exercises`;
 
   // No exercises either (empty/legacy row) → fall back to the muscle focus,
   // then the placeholder itself, then a flat label.
