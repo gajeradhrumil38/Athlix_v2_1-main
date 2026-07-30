@@ -48,6 +48,7 @@ import { fuzzyFilter } from '../lib/fuzzySearch';
 import { OPENTRAINING_EXERCISES } from '../data/opentrainingCatalog';
 import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
+import { getWorkoutDisplayTitle } from '../lib/workoutTitle';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -100,16 +101,10 @@ const isGenericTitle = (t?: string | null) => {
   );
 };
 
-const getDisplayTitle = (w: any) => {
-  // Prefer the actual exercise performed over the workout's title — for a
-  // plan-started workout that title is the plan's name (e.g. "Push Day"),
-  // not something derived from what was logged, so leading with it hid the
-  // exercise entirely instead of just supplementing it (see `planLabel`
-  // below, which surfaces the title as a secondary badge instead).
-  const names = getExerciseNames(w);
-  if (names.length > 0) return names[0];
-  return w.title || 'Workout';
-};
+// Shared with Timeline via src/lib/workoutTitle.ts — see there for why the
+// old "promote exercises[0].name" behaviour was wrong. Aliased so the many
+// call sites below stay unchanged.
+const getDisplayTitle = getWorkoutDisplayTitle;
 
 const matchesFilter = (w: any, f: string | null) => {
   if (!f || f === 'All') return true;
@@ -268,7 +263,6 @@ const WorkoutCard: React.FC<{
   const muscle    = (workout.muscle_groups || [])[0];
   const chips     = names.slice(0, 4);
   const extra     = names.length - chips.length;
-  const planLabel = workout.title && workout.title !== title ? workout.title : null;
   const hasDetail = (workout.exercises || []).length > 0;
 
   const beginEdit = () => { setGroups(groupExerciseSets(workout, unit)); setEditing(true); setExpanded(true); };
@@ -479,12 +473,6 @@ const WorkoutCard: React.FC<{
           <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
             <Clock3 className="h-3 w-3 shrink-0" />
             <span>{dur > 0 ? `${dur} min` : `${exCount} ex`}</span>
-            {planLabel && (
-              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold truncate max-w-[120px]"
-                style={{ background: 'var(--bg-surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                {planLabel}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-0.5">
             <div className="flex -space-x-1.5">

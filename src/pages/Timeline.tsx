@@ -11,6 +11,7 @@ import { deleteWorkout, getWorkouts } from '../lib/supabaseData';
 import { parseDateAtStartOfDay } from '../lib/dates';
 import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
+import { getWorkoutDisplayTitle } from '../lib/workoutTitle';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,18 +27,10 @@ const calcVolume = (exercises: any[], unit: WeightUnit): number =>
 
 const fmtNum = (v: number) => Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1);
 
-const getDisplayTitle = (workout: any): string => {
-  // Prefer the actual exercise performed over the workout's title — for a
-  // plan-started workout that title is the plan's name (e.g. "Push Day"),
-  // not something derived from what was logged, so leading with it hid the
-  // exercise entirely instead of just supplementing it (see `planLabel`
-  // below, which surfaces the title as a secondary badge instead).
-  const names: string[] = Array.from(
-    new Set((workout.exercises || []).map((e: any) => e.name as string).filter(Boolean))
-  );
-  if (names.length > 0) return names[0];
-  return workout.title || 'Workout';
-};
+// Shared with Calendar via src/lib/workoutTitle.ts — see there for why the
+// old "promote exercises[0].name" behaviour was wrong. Aliased so the call
+// sites below stay unchanged.
+const getDisplayTitle = getWorkoutDisplayTitle;
 
 // ── Timeline card ─────────────────────────────────────────────────────────────
 
@@ -57,7 +50,6 @@ const TimelineItem: React.FC<{
   const parsedDate  = parseDateAtStartOfDay(workout.date);
   const dateLabel   = parsedDate ? format(parsedDate, 'EEE, MMM d · yyyy') : '--';
   const displayTitle = getDisplayTitle(workout);
-  const planLabel    = workout.title && workout.title !== displayTitle ? workout.title : null;
   const PREVIEW_MAX = 4; // exercises shown collapsed
   const previewExs  = sortedExercises.slice(0, PREVIEW_MAX);
   const hiddenCount = sortedExercises.length - PREVIEW_MAX;
@@ -207,14 +199,6 @@ const TimelineItem: React.FC<{
             <span className="flex items-center gap-1.5">
               <Clock className="w-3 h-3" />
               {workout.duration_minutes ?? 0} min
-              {planLabel && (
-                <span
-                  className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold"
-                  style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-                >
-                  {planLabel}
-                </span>
-              )}
             </span>
             <span className="flex items-center gap-1">
               <Dumbbell className="w-3 h-3" />
