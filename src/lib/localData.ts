@@ -930,7 +930,10 @@ export const saveWorkout = async (
   const workout: LocalWorkout = {
     id: workoutId,
     user_id: userId,
-    title: input.title,
+    // Blank title is intentional (unnamed workouts show their exercises) —
+    // store a neutral placeholder the display layer treats as unnamed, to
+    // mirror the cloud path (see supabaseData.saveWorkout).
+    title: (input.title ?? '').trim() || 'Workout',
     date: input.date,
     duration_minutes: Math.max(0, input.duration_minutes),
     notes: input.notes || null,

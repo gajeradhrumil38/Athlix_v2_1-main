@@ -132,13 +132,13 @@ export const FinishSheet: React.FC<FinishSheetProps> = ({
           {/* Title & Notes */}
           <div className="space-y-4">
             <div>
-              <label className="block text-[9px] font-bold uppercase tracking-[1.5px] text-[var(--text-muted)] mb-2">Workout Title</label>
-              <input 
+              <label className="block text-[9px] font-bold uppercase tracking-[1.5px] text-[var(--text-muted)] mb-2">Workout Title (optional)</label>
+              <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-4 py-3 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl text-[14px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]/50 transition-colors"
-                placeholder="Morning Workout"
+                placeholder="Leave blank to name it by exercises"
               />
             </div>
             <div>

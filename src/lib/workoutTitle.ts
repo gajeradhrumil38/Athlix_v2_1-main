@@ -7,6 +7,15 @@
 const getExerciseNames = (w: any): string[] =>
   Array.from(new Set((w?.exercises || []).map((e: any) => e?.name as string).filter(Boolean)));
 
+// Titles that are placeholders, not names the user actually chose: the neutral
+// "Workout" the save RPC assigns when no title is given, and the old auto
+// "Morning/Afternoon/Evening Workout" defaults. These are treated as "unnamed"
+// so the card derives its label from the exercises instead of showing a
+// made-up session name. (An empty title is handled separately below.)
+const PLACEHOLDER_TITLES = new Set([
+  'workout', 'morning workout', 'afternoon workout', 'evening workout',
+]);
+
 /**
  * The name to show for a workout on a calendar/timeline card.
  *
@@ -24,14 +33,20 @@ const getExerciseNames = (w: any): string[] =>
  */
 export const getWorkoutDisplayTitle = (w: any): string => {
   const title = (w?.title ?? '').trim();
-  if (title) return title;
+  // A real, user-chosen name wins. Placeholder/auto titles fall through and
+  // are represented by the exercises instead (see PLACEHOLDER_TITLES).
+  if (title && !PLACEHOLDER_TITLES.has(title.toLowerCase())) return title;
 
-  // Genuinely untitled (defensive — the logger normally sets a generic
-  // title, so this is a fallback for legacy/imported rows): derive something
-  // meaningful rather than a bare exercise name or a flat "Workout".
+  // Unnamed workout → represent it by the exercises actually performed
+  // (an unnamed session should read as "what I did", not a made-up name).
+  // Distinct exercise names joined; the card truncates if there are many,
+  // and the full list is always in the expanded view.
   const names = getExerciseNames(w);
-  if (names.length === 1) return names[0]; // a true single-exercise session — its name IS informative
+  if (names.length > 0) return names.join(' · ');
+
+  // No exercises either (empty/legacy row) → fall back to the muscle focus,
+  // then the placeholder itself, then a flat label.
   const groups = Array.isArray(w?.muscle_groups) ? w.muscle_groups.filter(Boolean) : [];
-  if (groups.length === 1) return `${groups[0]} Workout`;
-  return 'Workout';
+  if (groups.length > 0) return `${groups.join(' · ')} Workout`;
+  return title || 'Workout';
 };

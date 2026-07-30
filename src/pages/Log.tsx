@@ -219,7 +219,11 @@ export const Log: React.FC = () => {
       : now;
     const localNow = toLocalDateTimeInput(baseDate);
     return {
-      title: title || (now.getHours() < 12 ? 'Morning Workout' : 'Evening Workout'),
+      // Empty by default (no auto "Morning/Evening Workout") — an unnamed
+      // workout is shown by its exercises in the calendar/timeline instead
+      // (see getWorkoutDisplayTitle). The user only gets a name here if they
+      // explicitly type one, or if one was passed in (e.g. a loaded plan).
+      title: title || '',
       startTime: baseDate.getTime(),
       startAt: localNow,
       endAt: localNow,

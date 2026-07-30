@@ -1660,8 +1660,15 @@ export const saveWorkout = async (
     throw new Error('Complete at least one set before saving.');
   }
 
+  // A blank title is intentional now — an unnamed workout is shown by its
+  // exercises (see getWorkoutDisplayTitle). But the save RPC requires a
+  // non-empty title, so substitute a neutral placeholder ("Workout") that
+  // the display layer treats as unnamed. Keeps the RPC's contract intact
+  // without forcing the user to name every workout.
+  const title = (input.title ?? '').trim() || 'Workout';
+
   const rpcPayload = {
-    p_title: input.title,
+    p_title: title,
     p_workout_date: input.date,
     p_duration_minutes: Math.max(0, input.duration_minutes),
     p_notes: input.notes || null,
@@ -1704,7 +1711,7 @@ export const saveWorkout = async (
   const workout: LocalWorkout = {
     id: fallbackWorkoutId,
     user_id: userId,
-    title: input.title,
+    title,
     date: input.date,
     duration_minutes: Math.max(0, input.duration_minutes),
     notes: input.notes || null,

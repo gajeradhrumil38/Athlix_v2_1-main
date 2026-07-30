@@ -236,7 +236,10 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       if (!prev) return prev;
       const existing = new Set(prev.exercises.map((e) => e.name.toLowerCase()));
       const toAdd = newEntries.filter((e) => !existing.has(e.name.toLowerCase()));
-      const isGeneric = GENERIC_TITLES.includes(prev.title.trim().toLowerCase());
+      // An empty title counts as "replaceable" too, now that a fresh
+      // workout starts unnamed — so loading a plan still names the workout
+      // after the plan rather than leaving it blank.
+      const isGeneric = prev.title.trim() === '' || GENERIC_TITLES.includes(prev.title.trim().toLowerCase());
       return { ...prev, title: isGeneric ? tmpl.title : prev.title, exercises: [...prev.exercises, ...toAdd] };
     });
     setShowExercisePicker(false);
@@ -857,6 +860,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
               <input
                 ref={titleInputRef}
                 value={workout.title}
+                placeholder="Name workout (optional)"
                 onChange={(e) => setWorkout((p) => p ? { ...p, title: e.target.value } : p)}
                 onBlur={() => setEditingTitle(false)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { setEditingTitle(false); } }}
@@ -870,8 +874,9 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                 onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.select(), 0); }}
                 className="w-full"
               >
-                <p className="text-[13px] font-semibold truncate leading-none" style={{ color: 'var(--text-primary)' }}>
-                  {workout.title}
+                <p className="text-[13px] font-semibold truncate leading-none"
+                  style={{ color: workout.title ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                  {workout.title || 'Name workout'}
                 </p>
                 {workout.exercises.length > 0 && (
                   <p className="text-[10px] mt-0.5 leading-none" style={{ color: 'var(--text-muted)' }}>
@@ -992,12 +997,10 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                   type="button"
                   onClick={() => {
                     if (window.confirm('Remove all exercises from this workout?')) {
-                      setWorkout((p) => {
-                        if (!p) return p;
-                        const hour = new Date().getHours();
-                        const genericTitle = hour < 12 ? 'Morning Workout' : 'Evening Workout';
-                        return { ...p, exercises: [], title: genericTitle };
-                      });
+                      // Clearing back to an empty workout also clears the
+                      // title back to empty (no auto generic name) — matches
+                      // the empty default a fresh workout starts with.
+                      setWorkout((p) => (p ? { ...p, exercises: [], title: '' } : p));
                     }
                   }}
                   className="text-[11px] font-medium transition-colors"
@@ -1301,7 +1304,10 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                 if (!prev) return prev;
                 const existing = new Set(prev.exercises.map((e) => e.name.toLowerCase()));
                 const toAdd = newEntries.filter((e) => !existing.has(e.name.toLowerCase()));
-                const isGeneric = GENERIC_TITLES.includes(prev.title.trim().toLowerCase());
+                // An empty title counts as "replaceable" too, now that a fresh
+                // workout starts unnamed — so loading a plan still names the
+                // workout after the plan rather than leaving it blank.
+                const isGeneric = prev.title.trim() === '' || GENERIC_TITLES.includes(prev.title.trim().toLowerCase());
                 const newTitle = (planTitle && isGeneric) ? planTitle : prev.title;
                 if (toAdd.length === 0 && newTitle === prev.title) return prev;
                 return { ...prev, title: newTitle, exercises: [...prev.exercises, ...toAdd] };

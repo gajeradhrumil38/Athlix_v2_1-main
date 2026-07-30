@@ -260,7 +260,10 @@ const WorkoutCard: React.FC<{
   const title     = getDisplayTitle(workout);
   const exCount   = getExerciseCount(workout);
   const dur       = Number(workout.duration_minutes || 0);
-  const muscle    = (workout.muscle_groups || [])[0];
+  // All distinct muscle groups the workout touched, not just the first —
+  // a mixed session was mislabelled by whatever happened to be group[0]
+  // (e.g. showing just "Core" for a workout that was mostly other groups).
+  const muscle    = Array.from(new Set((workout.muscle_groups || []).filter(Boolean))).join(' · ');
   const chips     = names.slice(0, 4);
   const extra     = names.length - chips.length;
   const hasDetail = (workout.exercises || []).length > 0;
@@ -438,7 +441,7 @@ const WorkoutCard: React.FC<{
             ) : (
               <p className="text-[15px] font-bold leading-snug truncate" style={{ color: 'var(--text-primary)' }}>{title}</p>
             )}
-            {muscle && <p className="text-[11px] font-medium mt-0.5" style={{ color: accent }}>{muscle}</p>}
+            {muscle && <p className="text-[11px] font-medium mt-0.5 truncate" style={{ color: accent }}>{muscle}</p>}
           </div>
           <div className="flex items-center gap-1.5 shrink-0 mt-0.5" onClick={(e) => e.stopPropagation()}>
             <button
