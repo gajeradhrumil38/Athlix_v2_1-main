@@ -48,7 +48,7 @@ import { fuzzyFilter } from '../lib/fuzzySearch';
 import { OPENTRAINING_EXERCISES } from '../data/opentrainingCatalog';
 import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
-import { getWorkoutDisplayTitle } from '../lib/workoutTitle';
+import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -240,7 +240,15 @@ const WorkoutCard: React.FC<{
   onExtracted: (newWorkout: any) => void;
   sameDayWorkouts: any[];
   onMerged: (sourceId: string, targetId: string, targetExercises: any[], targetMuscleGroups: string[]) => void;
-}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged }) => {
+  // When set, this card is one exercise of an unnamed workout, shown as its
+  // own card (see the split logic in renderWorkoutCard). Workout-level
+  // actions (rename/edit/merge) are hidden and Delete removes just this
+  // exercise from the real parent workout `splitParentId`.
+  splitParentId?: string;
+  splitName?: string;
+  onDeleteExercise?: (parentId: string, exerciseName: string) => void;
+}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise }) => {
+  const isSplit = !!splitParentId;
   const { user } = useAuth();
   const [expanded, setExpanded]         = useState(false);
   const [editing, setEditing]           = useState(false);
@@ -515,7 +523,8 @@ const WorkoutCard: React.FC<{
           >
             <div className="px-3 py-2 space-y-0.5">
 
-              {/* Rename */}
+              {/* Rename (whole-workout only) */}
+              {!isSplit && (
               <button
                 onClick={() => { setShowMenu(false); openTitleEdit(); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:bg-white/[0.04] transition-colors text-left"
@@ -528,9 +537,10 @@ const WorkoutCard: React.FC<{
                   <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Change the title of this session</p>
                 </div>
               </button>
+              )}
 
-              {/* Edit exercises */}
-              {hasDetail && (
+              {/* Edit exercises (whole-workout only) */}
+              {!isSplit && hasDetail && (
                 <button
                   onClick={() => { setShowMenu(false); beginEdit(); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:bg-white/[0.04] transition-colors text-left"
@@ -545,8 +555,8 @@ const WorkoutCard: React.FC<{
                 </button>
               )}
 
-              {/* Merge into same-day workouts */}
-              {sameDayWorkouts.map((target) => (
+              {/* Merge into same-day workouts (whole-workout only) */}
+              {!isSplit && sameDayWorkouts.map((target) => (
                 <button
                   key={target.id}
                   onClick={() => mergeInto(target)}
@@ -586,17 +596,25 @@ const WorkoutCard: React.FC<{
                 </div>
               </Link>
 
-              {/* Delete */}
+              {/* Delete — whole workout, or just this exercise for a split card */}
               <button
-                onClick={() => { setShowMenu(false); onDelete(workout.id, workout.title); }}
+                onClick={() => {
+                  setShowMenu(false);
+                  if (isSplit && splitName) onDeleteExercise?.(splitParentId!, splitName);
+                  else onDelete(workout.id, workout.title);
+                }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:bg-white/[0.04] transition-colors text-left"
               >
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(255,59,48,0.08)' }}>
                   <Trash2 className="w-3.5 h-3.5" style={{ color: 'rgba(255,80,65,0.85)' }} />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold" style={{ color: 'rgba(255,80,65,0.9)' }}>Delete workout</p>
-                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Permanently remove this session</p>
+                  <p className="text-[13px] font-semibold" style={{ color: 'rgba(255,80,65,0.9)' }}>
+                    {isSplit ? 'Delete exercise' : 'Delete workout'}
+                  </p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {isSplit ? 'Remove just this exercise' : 'Permanently remove this session'}
+                  </p>
                 </div>
               </button>
 
@@ -621,13 +639,14 @@ const WorkoutCard: React.FC<{
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
                   {viewGroups.length} exercise{viewGroups.length !== 1 ? 's' : ''}
                 </p>
-                {!editing ? (
+                {!editing && !isSplit && (
                   <button onClick={beginEdit}
                     className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold active:scale-95 transition-all"
                     style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                     <Pencil className="w-3 h-3" /> Edit
                   </button>
-                ) : (
+                )}
+                {editing && (
                   <div className="flex items-center gap-1.5">
                     <button onClick={cancelEdit}
                       className="h-7 px-2.5 rounded-lg text-[11px] font-semibold active:scale-95 transition-all"
@@ -1019,6 +1038,36 @@ export const Calendar: React.FC = () => {
     }
   };
 
+  // Remove a single exercise from an unnamed workout's parent (a "split"
+  // card deletes just its own exercise, not the whole session). If it was
+  // the last exercise, the workout itself is deleted.
+  const handleDeleteExercise = async (parentId: string, exerciseName: string) => {
+    if (!user) return;
+    const parent = workouts.find((w) => w.id === parentId);
+    if (!parent) return;
+    const remaining = groupExerciseSets(parent, unit).filter((g) => g.name !== exerciseName);
+    if (!window.confirm(`Remove "${exerciseName}" from this workout?`)) return;
+    try {
+      if (remaining.length === 0) {
+        await deleteWorkout(user.id, parentId);
+        setWorkouts((p) => p.filter((w) => w.id !== parentId));
+        toast.success('Exercise removed');
+        return;
+      }
+      const api = remaining.map((g) => ({
+        name: g.name,
+        muscle_group: g.muscle_group,
+        exercise_db_id: g.exercise_db_id,
+        completed_sets: g.sets.map((s) => ({ reps: Math.round(s.reps) || 0, weight: s.weight || 0, unit })),
+      }));
+      const res = await updateWorkoutSets(user.id, parentId, api);
+      handleSetsUpdated(parentId, res.exercises, res.muscle_groups);
+      toast.success('Exercise removed');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to remove exercise');
+    }
+  };
+
   // ── Render helpers ────────────────────────────────────────────────────────────
 
   // Apply an in-place set edit to the workouts state (keeps summaries/volume correct)
@@ -1046,19 +1095,60 @@ export const Calendar: React.FC = () => {
     );
   };
 
-  const renderWorkoutCard = (workout: any, allDayWorkouts: any[]) => (
-    <WorkoutCard
-      key={workout.id}
-      workout={workout}
-      unit={unit}
-      onDelete={handleDelete}
-      onSaved={handleSetsUpdated}
-      onRenamed={handleRenamed}
-      onExtracted={handleExtracted}
-      sameDayWorkouts={allDayWorkouts.filter((w) => w.id !== workout.id)}
-      onMerged={handleMerged}
-    />
-  );
+  const renderWorkoutCard = (workout: any, allDayWorkouts: any[]) => {
+    const distinctNames = Array.from(
+      new Set((workout.exercises || []).map((e: any) => e?.name as string).filter(Boolean)),
+    ) as string[];
+
+    // Named workouts, and unnamed ones with 0-1 exercises, render as a
+    // single card. Only an UNNAMED workout with 2+ exercises splits into a
+    // card per exercise (the user's chosen behaviour: unnamed = separate,
+    // named = grouped). The underlying data stays ONE workout row.
+    if (!isWorkoutUnnamed(workout) || distinctNames.length <= 1) {
+      return (
+        <WorkoutCard
+          key={workout.id}
+          workout={workout}
+          unit={unit}
+          onDelete={handleDelete}
+          onSaved={handleSetsUpdated}
+          onRenamed={handleRenamed}
+          onExtracted={handleExtracted}
+          sameDayWorkouts={allDayWorkouts.filter((w) => w.id !== workout.id)}
+          onMerged={handleMerged}
+        />
+      );
+    }
+
+    return distinctNames.map((name) => {
+      const rows = (workout.exercises || []).filter((e: any) => e?.name === name);
+      const group = rows[0]?.muscle_group ?? (workout.muscle_groups || [])[0];
+      const synthetic = {
+        ...workout,
+        id: `${workout.id}::${name}`,
+        title: '',                  // unnamed single-exercise view → titled by its exercise
+        exercises: rows,
+        muscle_groups: group ? [group] : [],
+        duration_minutes: 0,        // a per-exercise card doesn't own the session's duration
+      };
+      return (
+        <WorkoutCard
+          key={synthetic.id}
+          workout={synthetic}
+          unit={unit}
+          onDelete={handleDelete}
+          onSaved={handleSetsUpdated}
+          onRenamed={handleRenamed}
+          onExtracted={handleExtracted}
+          sameDayWorkouts={[]}
+          onMerged={handleMerged}
+          splitParentId={workout.id}
+          splitName={name}
+          onDeleteExercise={handleDeleteExercise}
+        />
+      );
+    });
+  };
 
   // 5-day focal strip for Today view — selected day centre, ±1 & ±2 fade out
   const renderTodayStrip = () => {

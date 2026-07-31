@@ -31,6 +31,14 @@ const PLACEHOLDER_TITLES = new Set([
  * ("Morning Workout" / "Evening Workout"), so that promotion was actively
  * hiding a perfectly good name behind an exercise name.
  */
+// True when the user never gave the workout a real name — either blank or one
+// of the placeholder/auto titles. Used to decide whether the calendar shows it
+// as one grouped card (named) or splits it into a card per exercise (unnamed).
+export const isWorkoutUnnamed = (w: any): boolean => {
+  const title = (w?.title ?? '').trim();
+  return title === '' || PLACEHOLDER_TITLES.has(title.toLowerCase());
+};
+
 export const getWorkoutDisplayTitle = (w: any): string => {
   const title = (w?.title ?? '').trim();
   // A real, user-chosen name wins. Placeholder/auto titles fall through and
