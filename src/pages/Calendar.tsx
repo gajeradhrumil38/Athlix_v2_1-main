@@ -113,6 +113,14 @@ const matchesFilter = (w: any, f: string | null) => {
   return g.includes(f);
 };
 
+// Same matching, but for one exercise's own muscle group — used to keep a
+// split (unnamed) workout's per-exercise cards to just the filtered muscle.
+const exerciseMatchesFilter = (mg: string | null | undefined, f: string | null) => {
+  if (!f || f === 'All') return true;
+  if (f === 'Arms') return mg === 'Arms' || mg === 'Biceps' || mg === 'Triceps';
+  return mg === f;
+};
+
 const weekStart = (d: Date) => startOfWeek(d, { weekStartsOn: 1 });
 const weekEnd   = (d: Date) => endOfWeek(d,   { weekStartsOn: 1 });
 const weekDaysOf = (d: Date): Date[] =>
@@ -141,7 +149,7 @@ const DayRing: React.FC<{ workouts: any[]; size: number; r: number; strokeWidth?
   const gapDeg = n === 1 ? 0 : Math.max(3, Math.min(10, 60 / n));
   const segDeg = n === 1 ? 359.9 : (360 - n * gapDeg) / n;
   const segLen = circ * segDeg / 360;
-
+ 
   return (
     <svg
       width={size}
@@ -965,6 +973,25 @@ export const Calendar: React.FC = () => {
 
   const selectedWorkouts = useMemo(() => getForDay(selectedDate), [selectedDate, workouts, activeFilter]);
 
+  // When a muscle filter is active, the day-detail panel is replaced by a
+  // list of ONLY the days that actually have a matching workout (most recent
+  // first) — so filtering by e.g. Legs shows every leg day at once, with no
+  // empty rest days to scroll past, instead of the single selected day
+  // (which was usually empty for that muscle and read as a rest day).
+  const filteredDays = useMemo(() => {
+    if (!activeFilter) return [] as { key: string; date: Date; workouts: any[] }[];
+    const byDay = new Map<string, { key: string; date: Date; workouts: any[] }>();
+    for (const w of workouts) {
+      if (!matchesFilter(w, activeFilter)) continue;
+      const d = parseStoredDate(w.date);
+      if (!d) continue;
+      const key = format(d, 'yyyy-MM-dd');
+      if (!byDay.has(key)) byDay.set(key, { key, date: d, workouts: [] });
+      byDay.get(key)!.workouts.push(w);
+    }
+    return Array.from(byDay.values()).sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [workouts, activeFilter]);
+
   const selectedSummary = useMemo(() => ({
     duration:  selectedWorkouts.reduce((s, w) => s + Number(w.duration_minutes || 0), 0),
     exercises: selectedWorkouts.reduce((s, w) => s + getExerciseCount(w), 0),
@@ -1104,7 +1131,7 @@ export const Calendar: React.FC = () => {
     );
   };
 
-  const renderWorkoutCard = (workout: any, allDayWorkouts: any[]) => {
+  const renderWorkoutCard = (workout: any, allDayWorkouts: any[], filterMuscle: string | null = null) => {
     const distinctNames = Array.from(
       new Set((workout.exercises || []).map((e: any) => e?.name as string).filter(Boolean)),
     ) as string[];
@@ -1129,7 +1156,18 @@ export const Calendar: React.FC = () => {
       );
     }
 
-    return distinctNames.map((name) => {
+    // In filter mode, only the exercises of the filtered muscle become cards
+    // (an unnamed workout that included Legs shows just its leg exercises).
+    const splitNames = filterMuscle
+      ? distinctNames.filter((name) =>
+          exerciseMatchesFilter(
+            (workout.exercises || []).find((e: any) => e?.name === name)?.muscle_group,
+            filterMuscle,
+          ),
+        )
+      : distinctNames;
+
+    return splitNames.map((name) => {
       const rows = (workout.exercises || []).filter((e: any) => e?.name === name);
       const group = rows[0]?.muscle_group ?? (workout.muscle_groups || [])[0];
       const synthetic = {
@@ -1329,7 +1367,7 @@ export const Calendar: React.FC = () => {
                       isTodayDay
                         ? { background: 'var(--accent)', color: '#000', borderRadius: '50%' }
                         : isSelected
-                        ? { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1.5px solid var(--accent)', borderRadius: 10, width: 34, height: 26 }
+                        ? { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1.5px solid var(--accent)', borderRadius: '50%' }
                         : { color: 'var(--text-secondary)', borderRadius: '50%' }
                     }
                   >
@@ -1349,6 +1387,9 @@ export const Calendar: React.FC = () => {
     <div className="space-y-4">
       {weekDays.map((day) => {
         const dayWorkouts = getForDay(day);
+        // With a muscle filter active, drop days that have no matching
+        // workout so the user isn't scrolling past empty rest days.
+        if (activeFilter && dayWorkouts.length === 0) return null;
         const isTodayDay  = dateFnsIsToday(day);
         const isSelected  = isSameDay(day, selectedDate);
 
@@ -1395,7 +1436,7 @@ export const Calendar: React.FC = () => {
             ) : dayWorkouts.length > 0 ? (
               <AnimatePresence initial={false}>
                 <div className="space-y-2">
-                  {dayWorkouts.map((w) => renderWorkoutCard(w, dayWorkouts))}
+                  {dayWorkouts.map((w) => renderWorkoutCard(w, dayWorkouts, activeFilter))}
                 </div>
               </AnimatePresence>
             ) : (
@@ -1669,7 +1710,51 @@ export const Calendar: React.FC = () => {
         {viewMode === 'week' && renderWeekList()}
 
         {/* ── Today / Month view: selected day panel ── */}
-        {(viewMode === 'today' || viewMode === 'month') && (
+        {/* Filter mode: list every matching day (no empty days to scroll) */}
+        {(viewMode === 'today' || viewMode === 'month') && activeFilter && (
+          <motion.div
+            key={`filtered-${activeFilter}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl overflow-hidden"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+          >
+            <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: muscleColor(activeFilter) }}>
+                {activeFilter}
+              </p>
+              <p className="text-[18px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                {filteredDays.length > 0
+                  ? `${filteredDays.length} day${filteredDays.length !== 1 ? 's' : ''}`
+                  : `No ${activeFilter} workouts`}
+              </p>
+            </div>
+            <div className="px-4 py-3 space-y-5">
+              {filteredDays.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <div className="h-11 w-11 rounded-2xl flex items-center justify-center"
+                    style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                    <Dumbbell className="h-5 w-5" style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                  <p className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    Nothing logged for {activeFilter} yet
+                  </p>
+                </div>
+              ) : (
+                filteredDays.map((d) => (
+                  <div key={d.key} className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                      {format(d.date, 'EEE, MMM d')}
+                    </p>
+                    {d.workouts.map((w) => renderWorkoutCard(w, d.workouts, activeFilter))}
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {(viewMode === 'today' || viewMode === 'month') && !activeFilter && (
           <AnimatePresence mode="wait">
             <motion.div
               key={`${viewMode}-${format(selectedDate, 'yyyy-MM-dd')}-${activeFilter || 'all'}`}
