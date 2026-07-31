@@ -124,10 +124,19 @@ const DayRing: React.FC<{ workouts: any[]; size: number; r: number; strokeWidth?
   workouts, size, r, strokeWidth = 2.5,
 }) => {
   if (workouts.length === 0) return null;
+  // One arc per distinct MUSCLE GROUP trained that day (across all the day's
+  // workouts), each coloured by its own group — not one arc per workout in
+  // just the workout's first group's colour, which showed e.g. only "Core"
+  // for a Core/Legs/Triceps session.
+  const groups = Array.from(new Set(
+    workouts.flatMap((w) => (Array.isArray(w.muscle_groups) ? w.muscle_groups : [])).filter(Boolean),
+  )) as string[];
+  const segColors = groups.length > 0 ? groups.map((g) => muscleColor(g)) : [getAccent(workouts[0])];
+
   const cx = size / 2;
   const cy = size / 2;
   const circ = 2 * Math.PI * r;
-  const n = workouts.length;
+  const n = segColors.length;
   // gap shrinks when many segments so they all fit
   const gapDeg = n === 1 ? 0 : Math.max(3, Math.min(10, 60 / n));
   const segDeg = n === 1 ? 359.9 : (360 - n * gapDeg) / n;
@@ -139,14 +148,14 @@ const DayRing: React.FC<{ workouts: any[]; size: number; r: number; strokeWidth?
       height={size}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none', transform: 'rotate(-90deg)' }}
     >
-      {workouts.map((w, i) => (
+      {segColors.map((color, i) => (
         <circle
-          key={w.id}
+          key={i}
           cx={cx}
           cy={cy}
           r={r}
           fill="none"
-          stroke={getAccent(w)}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={`${segLen} ${circ - segLen}`}
