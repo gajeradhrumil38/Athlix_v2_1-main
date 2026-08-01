@@ -267,7 +267,8 @@ const WorkoutCard: React.FC<{
   splitName?: string;
   onDeleteExercise?: (parentId: string, exerciseName: string) => void;
   onOpenProgress?: (exerciseName: string, muscle?: string | null) => void;
-}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress }) => {
+  onRepeat?: () => void;
+}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress, onRepeat }) => {
   const isSplit = !!splitParentId;
   const { user } = useAuth();
   const [expanded, setExpanded]         = useState(false);
@@ -653,6 +654,26 @@ const WorkoutCard: React.FC<{
                   <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Full workout history timeline</p>
                 </div>
               </Link>
+
+              {/* Repeat — seed a new session with these exercises */}
+              {onRepeat && (
+                <button
+                  onClick={() => { setShowMenu(false); onRepeat(); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:bg-white/[0.04] transition-colors text-left"
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(200,255,0,0.1)' }}>
+                    <Copy className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {isSplit ? 'Repeat exercise' : 'Repeat workout'}
+                    </p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Start a new session with {isSplit ? 'these sets' : 'these exercises'}
+                    </p>
+                  </div>
+                </button>
+              )}
 
               {/* Delete — whole workout, or just this exercise for a split card */}
               <button
@@ -1113,6 +1134,38 @@ export const Calendar: React.FC = () => {
   // Reset scroll position when view changes
   useEffect(() => { window.scrollTo({ top: 0 }); }, [viewMode]);
 
+  // Repeat a past workout: seed a fresh log-session draft with the same
+  // exercises (weights/reps pre-filled from last time as starting values,
+  // none marked done) and open the logger. Turns "reviewing" into "doing".
+  const repeatWorkout = (w: any) => {
+    const groups = groupExerciseSets(w, unit);
+    if (groups.length === 0) return;
+    try {
+      const existing = sessionStorage.getItem('athlix_active_workout');
+      if (existing && !window.confirm('Start a new workout from this? Your current in-progress workout draft will be replaced.')) return;
+    } catch { /* sessionStorage unavailable — proceed */ }
+    const exercises = groups.map((g) => ({
+      id: crypto.randomUUID(),
+      name: g.name,
+      muscleGroup: g.muscle_group || '',
+      exercise_db_id: g.exercise_db_id || undefined,
+      sets: g.sets.map((s) => ({ id: crypto.randomUUID(), weight: s.weight || null, reps: s.reps || null, done: false })),
+    }));
+    const now = Date.now();
+    const startAt = format(new Date(now), "yyyy-MM-dd'T'HH:mm");
+    const draft = {
+      title: isWorkoutUnnamed(w) ? '' : (w.title || ''),
+      startTime: now,
+      startAt,
+      endAt: startAt,
+      elapsedSeconds: 0,
+      exercises,
+      notes: '',
+    };
+    try { sessionStorage.setItem('athlix_active_workout', JSON.stringify(draft)); } catch { /* ignore */ }
+    navigate('/log');
+  };
+
   // ── Delete ───────────────────────────────────────────────────────────────────
 
   const handleDelete = async (id: string, title: string) => {
@@ -1205,6 +1258,7 @@ export const Calendar: React.FC = () => {
           sameDayWorkouts={allDayWorkouts.filter((w) => w.id !== workout.id)}
           onMerged={handleMerged}
           onOpenProgress={(name, muscle) => setProgressExercise({ name, muscle })}
+          onRepeat={() => repeatWorkout(workout)}
         />
       );
     }
@@ -1246,6 +1300,7 @@ export const Calendar: React.FC = () => {
           splitName={name}
           onDeleteExercise={handleDeleteExercise}
           onOpenProgress={(exName, muscle) => setProgressExercise({ name: exName, muscle })}
+          onRepeat={() => repeatWorkout(synthetic)}
         />
       );
     });
