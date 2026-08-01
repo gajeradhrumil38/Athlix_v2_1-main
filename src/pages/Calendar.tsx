@@ -304,6 +304,17 @@ const WorkoutCard: React.FC<{
   const extra     = names.length - chips.length;
   const hasDetail = (workout.exercises || []).length > 0;
 
+  // Top set of a split (single-exercise) card — the heaviest set (or most
+  // reps for a bodyweight exercise). Shown right on the collapsed card so a
+  // whole day is scannable without expanding anything.
+  const topSet = useMemo(() => {
+    if (!isSplit) return null;
+    const g = groupExerciseSets(workout, unit)[0];
+    if (!g || g.sets.length === 0) return null;
+    const best = g.sets.reduce((a, b) => (b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a));
+    return { weight: best.weight, reps: best.reps, count: g.sets.length };
+  }, [workout, unit, isSplit]);
+
   const beginEdit = () => { setGroups(groupExerciseSets(workout, unit)); setEditing(true); setExpanded(true); };
   const cancelEdit = () => { setGroups(groupExerciseSets(workout, unit)); setEditing(false); };
 
@@ -528,18 +539,34 @@ const WorkoutCard: React.FC<{
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-            <Clock3 className="h-3 w-3 shrink-0" />
-            <span>{dur > 0 ? `${dur} min` : `${exCount} ex`}</span>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <div className="flex -space-x-1.5">
-              {chips.map((n) => <ExerciseChip key={n} name={n} color={exerciseColor(n)} />)}
+        {isSplit ? (
+          // Split (per-exercise) card: show the top set inline so the day is
+          // scannable at a glance — no duration or exercise chips (redundant
+          // for a single exercise).
+          topSet && (
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[16px] font-black tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                {topSet.weight > 0 ? `${Math.round(topSet.weight)} ${unit} × ${topSet.reps}` : `${topSet.reps} reps`}
+              </span>
+              <span className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                · {topSet.count} set{topSet.count !== 1 ? 's' : ''} · top set
+              </span>
             </div>
-            {extra > 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>+{extra}</span>}
+          )
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              <Clock3 className="h-3 w-3 shrink-0" />
+              <span>{dur > 0 ? `${dur} min` : `${exCount} ex`}</span>
+            </div>
+            <div className="flex items-center gap-0.5">
+              <div className="flex -space-x-1.5">
+                {chips.map((n) => <ExerciseChip key={n} name={n} color={exerciseColor(n)} />)}
+              </div>
+              {extra > 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>+{extra}</span>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ⋯ actions menu */}
