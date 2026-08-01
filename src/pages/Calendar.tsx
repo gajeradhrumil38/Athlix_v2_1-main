@@ -37,6 +37,7 @@ import {
   LogIn,
   MoreHorizontal,
   ExternalLink,
+  TrendingUp,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -49,6 +50,7 @@ import { OPENTRAINING_EXERCISES } from '../data/opentrainingCatalog';
 import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
 import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
+import { ExerciseProgressSheet } from '../components/calendar/ExerciseProgressSheet';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -264,7 +266,8 @@ const WorkoutCard: React.FC<{
   splitParentId?: string;
   splitName?: string;
   onDeleteExercise?: (parentId: string, exerciseName: string) => void;
-}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise }) => {
+  onOpenProgress?: (exerciseName: string, muscle?: string | null) => void;
+}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress }) => {
   const isSplit = !!splitParentId;
   const { user } = useAuth();
   const [expanded, setExpanded]         = useState(false);
@@ -471,6 +474,17 @@ const WorkoutCard: React.FC<{
                 className="w-full text-[15px] font-bold leading-snug rounded-lg px-2 py-0.5 focus:outline-none"
                 style={{ background: 'var(--bg-surface)', border: '1px solid var(--accent)', color: 'var(--text-primary)', caretColor: 'var(--accent)' }}
               />
+            ) : isSplit && splitName ? (
+              // Split (per-exercise) card: tapping the exercise name opens its
+              // progression (recent top sets, best, trend) — the fastest way
+              // to review "am I getting stronger on this?".
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenProgress?.(splitName, muscleGroups[0]); }}
+                className="flex items-center gap-1.5 text-left active:opacity-60 transition-opacity"
+              >
+                <span className="text-[15px] font-bold leading-snug truncate" style={{ color: 'var(--text-primary)' }}>{title}</span>
+                <TrendingUp className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--text-muted)' }} />
+              </button>
             ) : (
               <p className="text-[15px] font-bold leading-snug truncate" style={{ color: 'var(--text-primary)' }}>{title}</p>
             )}
@@ -694,7 +708,17 @@ const WorkoutCard: React.FC<{
                             style={{ background: `color-mix(in srgb, ${exColor} 14%, var(--bg-elevated))`, color: exColor }}>
                             {g.name.charAt(0)}
                           </div>
-                          <p className="flex-1 text-[15px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{g.name}</p>
+                          {!editing && onOpenProgress ? (
+                            <button
+                              onClick={() => onOpenProgress(g.name, g.muscle_group)}
+                              className="flex-1 min-w-0 flex items-center gap-1.5 text-left active:opacity-60 transition-opacity"
+                            >
+                              <span className="text-[15px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{g.name}</span>
+                              <TrendingUp className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--text-muted)' }} />
+                            </button>
+                          ) : (
+                            <p className="flex-1 text-[15px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{g.name}</p>
+                          )}
                           {editing ? (
                             <div className="flex items-center gap-1.5 shrink-0">
                               <button
@@ -905,6 +929,7 @@ export const Calendar: React.FC = () => {
   const [workouts, setWorkouts]         = useState<any[]>([]);
   const [loading, setLoading]           = useState(true);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [progressExercise, setProgressExercise] = useState<{ name: string; muscle?: string | null } | null>(null);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear]     = useState(today.getFullYear());
   const [windowScrollY, setWindowScrollY] = useState(0);
@@ -1152,6 +1177,7 @@ export const Calendar: React.FC = () => {
           onExtracted={handleExtracted}
           sameDayWorkouts={allDayWorkouts.filter((w) => w.id !== workout.id)}
           onMerged={handleMerged}
+          onOpenProgress={(name, muscle) => setProgressExercise({ name, muscle })}
         />
       );
     }
@@ -1192,6 +1218,7 @@ export const Calendar: React.FC = () => {
           splitParentId={workout.id}
           splitName={name}
           onDeleteExercise={handleDeleteExercise}
+          onOpenProgress={(exName, muscle) => setProgressExercise({ name: exName, muscle })}
         />
       );
     });
@@ -1851,6 +1878,15 @@ export const Calendar: React.FC = () => {
           </AnimatePresence>
         )}
       </div>
+
+      {progressExercise && (
+        <ExerciseProgressSheet
+          exerciseName={progressExercise.name}
+          muscleGroup={progressExercise.muscle}
+          unit={unit}
+          onClose={() => setProgressExercise(null)}
+        />
+      )}
     </div>
   );
 };
