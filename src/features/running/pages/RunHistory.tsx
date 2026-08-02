@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, ChevronDown, Footprints, Trash2, Calendar,
@@ -523,6 +523,7 @@ type RunTab = 'all' | 'outdoor' | 'treadmill';
 
 export const RunHistory: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [localRuns, setLocalRuns] = useState<SavedRun[]>(() => getRuns());
   const [cloudRuns, setCloudRuns] = useState<SavedRun[]>([]);
@@ -569,6 +570,17 @@ export const RunHistory: React.FC = () => {
   // Merged: real runs (local + cloud) + demo only when 0 real runs
   const realRuns = useMemo(() => mergeRuns(localRuns, cloudRuns), [localRuns, cloudRuns]);
   const showDemo = realRuns.length === 0;
+
+  // Deep-link from the calendar's "Open run" action: /run/history?workout=<id>
+  // opens that specific run's detail once runs have loaded. Consumed once, then
+  // the param is cleared so a later manual close of the detail doesn't re-open.
+  useEffect(() => {
+    const workoutId = searchParams.get('workout');
+    if (!workoutId || realRuns.length === 0) return;
+    const match = realRuns.find((r) => r.workoutId === workoutId);
+    if (match) setSelected(match);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, realRuns, setSearchParams]);
   const allRuns = useMemo(() => showDemo ? DEMO_RUNS : realRuns, [showDemo, realRuns]);
 
   const isDemo = (run: SavedRun) => run.id < 0;

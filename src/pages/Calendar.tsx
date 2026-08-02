@@ -38,6 +38,7 @@ import {
   MoreHorizontal,
   ExternalLink,
   TrendingUp,
+  Footprints,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -114,6 +115,14 @@ const matchesFilter = (w: any, f: string | null) => {
   if (f === 'Arms') return g.includes('Arms') || g.includes('Biceps') || g.includes('Triceps');
   return g.includes(f);
 };
+
+// A GPS-run-created workout: ActiveRun.handleStop saves it titled
+// "Outdoor Run" with a single Cardio exercise named "Running". Used to show
+// the "Open run" action that deep-links to that specific run's history.
+const isRunWorkout = (w: any): boolean =>
+  w?.title === 'Outdoor Run' ||
+  (Array.isArray(w?.exercises) &&
+    w.exercises.some((e: any) => (e?.muscle_group || '').toLowerCase() === 'cardio' && e?.name === 'Running'));
 
 // Same matching, but for one exercise's own muscle group — used to keep a
 // split (unnamed) workout's per-exercise cards to just the filtered muscle.
@@ -194,7 +203,12 @@ const ExerciseChip: React.FC<{ name: string; color: string }> = ({ name, color }
 // ── Expandable workout card (view + inline set editing) ───────────────────────
 
 interface EditSet { weight: number; reps: number }
-interface EditGroup { name: string; muscle_group?: string; exercise_db_id?: string | null; sets: EditSet[]; isCardio: boolean }
+// distanceUnit: for a GPS run/cardio row the exercise is stored with
+// weight = distance and reps = duration-in-minutes (see ActiveRun.handleStop),
+// and the row's `unit` holds the distance unit (mi/km), not a weight unit.
+// We keep it so the card can render "1.13 mi · 9 min" instead of a bogus
+// "— / 9 reps".
+interface EditGroup { name: string; muscle_group?: string; exercise_db_id?: string | null; sets: EditSet[]; isCardio: boolean; distanceUnit?: string }
 
 /** Group a workout's flat set-rows into per-exercise groups, weights converted to `unit`. */
 const groupExerciseSets = (w: any, unit: WeightUnit): EditGroup[] => {
@@ -205,11 +219,18 @@ const groupExerciseSets = (w: any, unit: WeightUnit): EditGroup[] => {
     let g = map.get(key);
     if (!g) {
       const isCardio = (r.muscle_group || '').toLowerCase() === 'cardio';
-      g = { name: key, muscle_group: r.muscle_group || undefined, exercise_db_id: r.exercise_db_id || null, sets: [], isCardio };
+      // A cardio row's unit is a distance unit (mi/km); a strength row's is a
+      // weight unit. Only capture it as a distance unit for cardio.
+      const distanceUnit = isCardio && !isWeightUnit(r.unit) ? (r.unit || undefined) : undefined;
+      g = { name: key, muscle_group: r.muscle_group || undefined, exercise_db_id: r.exercise_db_id || null, sets: [], isCardio, distanceUnit };
       map.set(key, g);
     }
     const from = isWeightUnit(r.unit) ? r.unit : unit;
-    const wt = convertWeight(Number(r.weight || 0), from, unit, 0.1);
+    // For cardio the "weight" is a distance, not a mass — don't unit-convert
+    // it or round to the 0.1 weight step (that turned 1.13 mi into 1.1).
+    const wt = g.isCardio
+      ? Number(r.weight || 0)
+      : convertWeight(Number(r.weight || 0), from, unit, 0.1);
     const count = Math.max(1, Number(r.sets || 1)); // expand any aggregated rows
     for (let i = 0; i < count; i++) g.sets.push({ weight: wt, reps: Number(r.reps || 0) });
   }
@@ -268,7 +289,8 @@ const WorkoutCard: React.FC<{
   onDeleteExercise?: (parentId: string, exerciseName: string) => void;
   onOpenProgress?: (exerciseName: string, muscle?: string | null) => void;
   onRepeat?: () => void;
-}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress, onRepeat }) => {
+  onOpenRun?: () => void;
+}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress, onRepeat, onOpenRun }) => {
   const isSplit = !!splitParentId;
   const { user } = useAuth();
   const [expanded, setExpanded]         = useState(false);
@@ -655,6 +677,22 @@ const WorkoutCard: React.FC<{
                 </div>
               </Link>
 
+              {/* Open run — deep-link to this specific run in Run History */}
+              {onOpenRun && (
+                <button
+                  onClick={() => { setShowMenu(false); onOpenRun(); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:bg-white/[0.04] transition-colors text-left"
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(255,138,76,0.12)' }}>
+                    <Footprints className="w-3.5 h-3.5" style={{ color: '#ff8a4c' }} />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>Open run</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>See map, splits & pace in Run History</p>
+                  </div>
+                </button>
+              )}
+
               {/* Repeat — seed a new session with these exercises */}
               {onRepeat && (
                 <button
@@ -845,7 +883,10 @@ const WorkoutCard: React.FC<{
                           </button>
                         </div>
                       ) : (
-                        /* View mode — 3-col grid with lime set numbers */
+                        /* View mode — 3-col grid with lime set numbers.
+                           For cardio (a GPS run) the columns are distance +
+                           duration, not weight + reps: the run stores
+                           weight = distance and reps = duration-in-minutes. */
                         <div className="flex flex-col gap-2.5 p-3">
                           {g.sets.map((s, si) => (
                             <div key={si} className="grid overflow-hidden rounded-[12px]"
@@ -856,16 +897,20 @@ const WorkoutCard: React.FC<{
                               </div>
                               <div className="flex flex-col items-center justify-center gap-0.5 py-3 px-2">
                                 <span className="font-victory text-[32px] leading-none text-white tabular-nums">
-                                  {g.isCardio ? '—' : s.weight.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                                  {g.isCardio
+                                    ? s.weight.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                                    : s.weight.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                 </span>
                                 <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>
-                                  {g.isCardio ? '' : unit}
+                                  {g.isCardio ? (g.distanceUnit || 'mi') : unit}
                                 </span>
                               </div>
                               <div className="flex flex-col items-center justify-center gap-0.5 py-3 px-2"
                                 style={{ borderLeft: '1px solid var(--border)' }}>
                                 <span className="font-victory text-[32px] leading-none text-white tabular-nums">{s.reps}</span>
-                                <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>reps</span>
+                                <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>
+                                  {g.isCardio ? 'min' : 'reps'}
+                                </span>
                               </div>
                             </div>
                           ))}
@@ -1259,6 +1304,7 @@ export const Calendar: React.FC = () => {
           onMerged={handleMerged}
           onOpenProgress={(name, muscle) => setProgressExercise({ name, muscle })}
           onRepeat={() => repeatWorkout(workout)}
+          onOpenRun={isRunWorkout(workout) ? () => navigate(`/run/history?workout=${workout.id}`) : undefined}
         />
       );
     }
