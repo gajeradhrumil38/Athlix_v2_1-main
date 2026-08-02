@@ -179,12 +179,17 @@ export const whoopService = {
   },
 
   async getConnectionInfo(userId: string): Promise<{ connected: boolean; connectedAt?: string } | null> {
+    // Connected = a token row exists for this user. NOTE: whoop_tokens has no
+    // `connected_at` column — selecting it made this query error out and
+    // report "not connected" even when a valid token was present (so the
+    // dashboard was stuck on the Connect prompt). Use `created_at`, and
+    // maybeSingle() so zero rows is a clean null, not a thrown error.
     const { data } = await supabase
       .from('whoop_tokens')
-      .select('connected_at')
+      .select('created_at')
       .eq('user_id', userId)
-      .single();
-    return data ? { connected: true, connectedAt: data.connected_at as string } : { connected: false };
+      .maybeSingle();
+    return data ? { connected: true, connectedAt: data.created_at as string } : { connected: false };
   },
 
   async connect(_userId: string, token: string): Promise<void> {
