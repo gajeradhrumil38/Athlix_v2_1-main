@@ -3,6 +3,7 @@ import { format, subDays } from 'date-fns';
 import { Activity, ChevronDown, X, LinkIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { whoopService, KJ_TO_STEPS } from '../services/whoopService';
+import { LoadInsights } from './LoadInsights';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProgress } from '../../../contexts/ProgressContext';
 import type { WhoopRecovery, WhoopSleep, WhoopCycle, WhoopWorkout } from '../types';
@@ -715,6 +716,9 @@ export const WhoopDashboard: React.FC = () => {
       {!loading && !error && steps.length > 0 && (
         <StepsCard cycles={steps} tab={tab} />
       )}
+
+      {/* Training load & injury risk (self-fetches its own 4-week window) */}
+      {user?.id && <LoadInsights userId={user.id} />}
 
       {/* Workouts section */}
       {!loading && !error && workouts.length > 0 && (
