@@ -1992,6 +1992,35 @@ export const Progress: React.FC = () => {
                 </div>
               </div>
 
+              {/* How to connect WHOOP as the live-HR source */}
+              {!hrConnected && (
+                <div className="rounded-2xl border border-white/8 bg-[linear-gradient(160deg,#0F1520_0%,#0A1018_100%)] p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bluetooth className="w-4 h-4" style={{ color: 'var(--heart-rate)' }} />
+                    <h3 className="text-[13px] font-bold text-white">Use WHOOP as your live HR monitor</h3>
+                  </div>
+                  <p className="text-[11px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    WHOOP's cloud doesn't stream live heart rate — but your band can broadcast it over
+                    Bluetooth like a chest strap, and Athlix connects straight to that.
+                  </p>
+                  <ol className="space-y-1.5 mb-3">
+                    {[
+                      <>In the <b>WHOOP app</b>: Menu → <b>Device Settings</b> → turn <b>Heart Rate Broadcast</b> ON.</>,
+                      <>Back here, tap <b>Connect device</b> and pick <b>WHOOP</b> from the Bluetooth list.</>,
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                        <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black"
+                          style={{ background: 'rgba(25,204,240,0.15)', color: 'var(--heart-rate)' }}>{i + 1}</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    Bluetooth pairing needs Android Chrome or desktop Chrome/Edge — iPhone browsers (incl. Chrome on iOS) don't support Web Bluetooth yet.
+                  </p>
+                </div>
+              )}
+
               {/* BPM hero */}
               <div className="rounded-2xl border border-white/8 bg-[linear-gradient(160deg,#0F1520_0%,#0A1018_100%)] overflow-hidden">
                 {/* Decorative waveform strip */}
