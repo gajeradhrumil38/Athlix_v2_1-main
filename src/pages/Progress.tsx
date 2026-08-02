@@ -808,16 +808,17 @@ export const Progress: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-28 md:pb-10">
       {/* ── Sticky Tab Nav ─────────────────────────────────── */}
-      {/* 55px matches the fixed header's true height (54px row + its own
-          1px border-bottom, see Layout.tsx) — docks flush with zero gap.
-          transform/will-change/isolation mirror the fix already applied to
-          Layout.tsx's .lg-nav header (see index.css): a sticky/fixed bar
-          without its own stable GPU compositing layer can momentarily
-          recomposite as transparent during scroll, letting the page content
-          scrolling underneath show through for a frame or two — reads as a
-          washed-out/empty gap where the bar should be solid. */}
+      {/* top-0, NOT top-[55px]: `main` (Layout.tsx) already has
+          padding-top: calc(55px + safe-area) to clear the fixed mobile
+          header, and `position: sticky` sticks relative to the scroll
+          container's PADDING edge — so top-0 already docks this bar right
+          below the header. An earlier top-[55px] added that clearance a
+          SECOND time (55px padding + 55px sticky = ~55px too low), which
+          left the first content card visible in the gap above the bar.
+          transform/will-change/isolation keep the bar on its own stable
+          GPU layer (mirrors Layout.tsx's .lg-nav header). */}
       <div
-        className="sticky top-[calc(55px+env(safe-area-inset-top))] md:top-0 z-20"
+        className="sticky top-0 z-20"
         style={{
           background: 'var(--bg-base)',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
