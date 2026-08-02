@@ -809,8 +809,23 @@ export const Progress: React.FC = () => {
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-28 md:pb-10">
       {/* ── Sticky Tab Nav ─────────────────────────────────── */}
       {/* 55px matches the fixed header's true height (54px row + its own
-          1px border-bottom, see Layout.tsx) — docks flush with zero gap. */}
-      <div className="sticky top-[calc(55px+env(safe-area-inset-top))] md:top-0 z-20" style={{ background: 'var(--bg-base)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          1px border-bottom, see Layout.tsx) — docks flush with zero gap.
+          transform/will-change/isolation mirror the fix already applied to
+          Layout.tsx's .lg-nav header (see index.css): a sticky/fixed bar
+          without its own stable GPU compositing layer can momentarily
+          recomposite as transparent during scroll, letting the page content
+          scrolling underneath show through for a frame or two — reads as a
+          washed-out/empty gap where the bar should be solid. */}
+      <div
+        className="sticky top-[calc(55px+env(safe-area-inset-top))] md:top-0 z-20"
+        style={{
+          background: 'var(--bg-base)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          transform: 'translateZ(0)',
+          willChange: 'transform',
+          isolation: 'isolate',
+        }}
+      >
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[var(--bg-elevated)] border border-white/8 relative">
             {TABS.map((tab) => {
