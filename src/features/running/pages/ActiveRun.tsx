@@ -400,15 +400,52 @@ export const ActiveRun: React.FC = () => {
     : 'OPEN RUN';
 
   // Voice cues — Web Speech API (built into the browser, no dependency).
-  // The two moments a runner most needs audio feedback: a new split just
-  // completed, and auto-pause kicking in/releasing (which happens without
-  // any tap, so there's otherwise no way to know it happened without
-  // looking at the screen).
+  // Chosen over cloud TTS (ElevenLabs/OpenAI/etc.) and in-browser neural
+  // models (kokoro-js) on purpose: run cues must work OFFLINE (you lose
+  // signal mid-run), fire instantly, and not drain battery — which rules
+  // out a network round-trip or an 80MB+ WASM model. The one thing the
+  // default lacks is a GOOD voice, so we explicitly pick the best on-device
+  // English voice (the OS's own Siri/Google neural voice) instead of
+  // whatever robotic fallback the device hands out by default.
+  const preferredVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const scoreVoice = (v: SpeechSynthesisVoice): number => {
+      const name = v.name.toLowerCase();
+      const lang = v.lang.toLowerCase();
+      if (!lang.startsWith('en')) return -1;
+      let s = 0;
+      if (v.localService) s += 3;                                   // offline-capable — critical mid-run
+      if (lang === 'en-us') s += 2;
+      if (/(natural|neural|enhanced|premium)/.test(name)) s += 5;   // named quality tiers
+      if (/(samantha|siri|ava|allison|zoe|aaron|nicky|evan)/.test(name)) s += 4; // Apple premium voices
+      if (name.includes('google')) s += 3;                          // Android's good default
+      if (/(compact|espeak|novelty)/.test(name)) s -= 4;            // known-robotic
+      return s;
+    };
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return; // not ready yet — 'voiceschanged' will re-fire
+      const best = voices
+        .map((v) => ({ v, s: scoreVoice(v) }))
+        .filter(({ s }) => s >= 0)
+        .sort((a, b) => b.s - a.s)[0];
+      if (best) preferredVoiceRef.current = best.v;
+    };
+    pickVoice(); // some browsers have voices ready synchronously
+    window.speechSynthesis.addEventListener?.('voiceschanged', pickVoice);
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', pickVoice);
+  }, []);
+
   const speak = useCallback((text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel(); // don't stack overlapping cues
       const utterance = new SpeechSynthesisUtterance(text);
+      if (preferredVoiceRef.current) {
+        utterance.voice = preferredVoiceRef.current;
+        utterance.lang = preferredVoiceRef.current.lang;
+      }
       utterance.rate = 1.05;
       window.speechSynthesis.speak(utterance);
     } catch { /* speech synthesis unavailable/blocked — fail silent */ }
