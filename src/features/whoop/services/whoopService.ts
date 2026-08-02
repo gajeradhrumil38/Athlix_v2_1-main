@@ -69,12 +69,12 @@ function parseSleep(raw: { records?: unknown[] }): WhoopSleep[] {
 // WHOOP's API exposes no step count (a cycle's score has only kilojoule,
 // strain, and avg/max HR — no steps), so we estimate steps from the cycle's
 // total energy. This factor is calibrated directly against WHOOP's OWN in-app
-// step number: a real 3,602 kJ day reads 2,101 steps in the WHOOP app
-// (2101 / 3602 ≈ 0.58 steps per kJ). It stays a rough estimate — total energy
+// step number: a 3,602 kJ cycle reads 2,131 steps in the WHOOP app
+// (2131 / 3602 ≈ 0.59 steps per kJ). It stays a rough estimate — total energy
 // includes resting metabolism, so it can't track a pedometer exactly — but it
-// now lines up with what the WHOOP app shows instead of being ~2× too high
-// (and nowhere near the original 23.9, which gave ~240,000-step days).
-export const KJ_TO_STEPS = 0.58;
+// lines up with what the WHOOP app shows instead of being ~2× too high (and
+// nowhere near the original 23.9, which gave ~240,000-step days).
+export const KJ_TO_STEPS = 0.59;
 
 function parseCycles(raw: { records?: unknown[] }): WhoopCycle[] {
   return ((raw?.records ?? []) as Record<string, unknown>[]).map((r) => {
