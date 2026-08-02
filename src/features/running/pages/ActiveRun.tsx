@@ -414,13 +414,18 @@ export const ActiveRun: React.FC = () => {
     } catch { /* speech synthesis unavailable/blocked — fail silent */ }
   }, []);
 
-  const announcedSplitsRef = useRef(0);
+  // Announce each whole distance milestone in the user's unit — miles by
+  // default ("1 mile", "2 miles", …) — with the current pace per that unit.
+  // Keyed off displayDistance (already mi/km per the unit toggle) rather than
+  // the raw per-km splits, so the spoken number matches the on-screen unit.
+  const announcedMilestoneRef = useRef(0);
   useEffect(() => {
-    if (splits.length === 0 || splits.length <= announcedSplitsRef.current) return;
-    announcedSplitsRef.current = splits.length;
-    const latest = splits[splits.length - 1];
-    speak(`Kilometer ${Math.round(latest.km)}. Pace ${formatPace(latest.pace)} per kilometer.`);
-  }, [splits, speak]);
+    const milestone = Math.floor(displayDistance);
+    if (milestone < 1 || milestone <= announcedMilestoneRef.current) return;
+    announcedMilestoneRef.current = milestone;
+    const unitWord = distanceUnit === 'mi' ? 'mile' : 'kilometer';
+    speak(`${milestone} ${unitWord}${milestone === 1 ? '' : 's'}. Pace ${formatPace(displayPace)} per ${unitWord}.`);
+  }, [displayDistance, displayPace, distanceUnit, speak]);
 
   const prevAutoPausedRef = useRef(false);
   useEffect(() => {
@@ -463,7 +468,7 @@ export const ActiveRun: React.FC = () => {
       return;
     }
 
-    speak(`Run complete. ${displayDist.toFixed(2)} ${distanceUnit}, in ${formatDuration(summary.duration)}.`);
+    speak(`Run complete. ${displayDist.toFixed(2)} ${distanceUnit === 'mi' ? 'miles' : 'kilometers'}, in ${formatDuration(summary.duration)}.`);
     const saved = saveRun(summary);
     setAllRuns((prev) => [...prev, saved]);
     const cloudRunPromise = user ? saveRunToCloud(user.id, saved) : Promise.resolve(null);
