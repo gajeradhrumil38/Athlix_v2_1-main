@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { subDays } from 'date-fns';
 import { ShieldAlert, TrendingUp } from 'lucide-react';
-import { whoopService } from '../services/whoopService';
+import { whoopService, whoopWindowRange } from '../services/whoopService';
 import {
   buildDailyLoads, computeLoadMetrics, acwrZone, formZone, monotonyZone,
   type LoadMetrics,
@@ -19,9 +18,8 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
 
   useEffect(() => {
     let cancelled = false;
-    const end = new Date();
-    const start = subDays(end, WINDOW_DAYS);
-    whoopService.fetchAll('month', start.toISOString(), end.toISOString())
+    const { start, end } = whoopWindowRange(WINDOW_DAYS);
+    whoopService.fetchAll('month', start, end)
       .then((res) => {
         if (cancelled) return;
         const loads = buildDailyLoads(res.cycles, WINDOW_DAYS);

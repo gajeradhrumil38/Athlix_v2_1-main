@@ -145,6 +145,19 @@ export interface WhoopAllData {
   fromCache: boolean;
 }
 
+// Stable day-floored ISO range for the last `days` days. Because it's pinned to
+// day boundaries (not the exact call time), multiple insight cards asking for
+// the same window produce the SAME fetchAll cache key and share one fetch
+// instead of each firing a separate WHOOP call.
+export function whoopWindowRange(days: number): { start: string; end: string } {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(end);
+  start.setDate(end.getDate() - days);
+  start.setHours(0, 0, 0, 0);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 export const whoopService = {
   // ── OAuth helpers ──────────────────────────────────────────
 

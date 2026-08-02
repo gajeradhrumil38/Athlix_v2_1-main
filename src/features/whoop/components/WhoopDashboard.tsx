@@ -4,6 +4,7 @@ import { Activity, ChevronDown, X, LinkIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { whoopService, KJ_TO_STEPS } from '../services/whoopService';
 import { LoadInsights } from './LoadInsights';
+import { CardiacHealth } from './CardiacHealth';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProgress } from '../../../contexts/ProgressContext';
 import type { WhoopRecovery, WhoopSleep, WhoopCycle, WhoopWorkout } from '../types';
@@ -719,6 +720,9 @@ export const WhoopDashboard: React.FC = () => {
 
       {/* Training load & injury risk (self-fetches its own 4-week window) */}
       {user?.id && <LoadInsights userId={user.id} />}
+
+      {/* Cardiometric health — VO2max, resting HR, HRV, HR reserve */}
+      {user?.id && <CardiacHealth userId={user.id} />}
 
       {/* Workouts section */}
       {!loading && !error && workouts.length > 0 && (
