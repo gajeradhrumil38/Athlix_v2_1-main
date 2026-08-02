@@ -66,13 +66,22 @@ function parseSleep(raw: { records?: unknown[] }): WhoopSleep[] {
     });
 }
 
+// WHOOP has no pedometer — "steps" is a rough estimate from a cycle's TOTAL
+// daily energy expenditure (kilojoule). Derivation: kcal = kJ / 4.184; of the
+// whole day's energy only the ambulatory portion makes steps (~25% for a
+// typical active person — the rest is BMR + non-walking activity) and a step
+// costs ~0.05 kcal, so  steps ≈ (kJ / 4.184) × 0.25 / 0.05 ≈ kJ × 1.2.
+// The old factor (23.9) effectively treated ALL daily energy as walking and
+// mis-scaled kJ→kcal, turning a ~10,000 kJ day into ~240,000 "steps".
+export const KJ_TO_STEPS = 1.2;
+
 function parseCycles(raw: { records?: unknown[] }): WhoopCycle[] {
   return ((raw?.records ?? []) as Record<string, unknown>[]).map((r) => {
     const score = r.score as Record<string, number> | undefined;
     const kj = score?.kilojoule ?? 0;
     return {
       date: format(new Date(r.start as string), 'yyyy-MM-dd'),
-      estimated_steps: Math.round(kj * 23.9),
+      estimated_steps: Math.round(kj * KJ_TO_STEPS),
       raw_kilojoules: kj,
       strain_score: score?.strain,
       average_heart_rate: score?.average_heart_rate,

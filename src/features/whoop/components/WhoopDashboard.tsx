@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { format, subDays } from 'date-fns';
 import { Activity, ChevronDown, X, LinkIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { whoopService } from '../services/whoopService';
+import { whoopService, KJ_TO_STEPS } from '../services/whoopService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProgress } from '../../../contexts/ProgressContext';
 import type { WhoopRecovery, WhoopSleep, WhoopCycle, WhoopWorkout } from '../types';
@@ -202,13 +202,13 @@ const StepsCard: React.FC<StepsCardProps> = ({ cycles, tab }) => {
   // ── Compute totals ────────────────────────────────────────────
   // Re-derive from raw_kilojoules for maximum accuracy (avoids rounding from the parse step)
   const today = cycles[0];
-  const todaySteps = Math.round(today.raw_kilojoules * 23.9);
+  const todaySteps = Math.round(today.raw_kilojoules * KJ_TO_STEPS);
 
   // Group cycles by calendar date and sum steps per day
   const byDate = new Map<string, number>();
   cycles.forEach((c) => {
     const existing = byDate.get(c.date) ?? 0;
-    byDate.set(c.date, existing + Math.round(c.raw_kilojoules * 23.9));
+    byDate.set(c.date, existing + Math.round(c.raw_kilojoules * KJ_TO_STEPS));
   });
 
   const dayEntries = Array.from(byDate.entries())
