@@ -200,9 +200,13 @@ const StepsCard: React.FC<StepsCardProps> = ({ cycles, tab }) => {
   if (!cycles.length) return null;
 
   // ── Compute totals ────────────────────────────────────────────
-  // Re-derive from raw_kilojoules for maximum accuracy (avoids rounding from the parse step)
-  const today = cycles[0];
-  const todaySteps = Math.round(today.raw_kilojoules * KJ_TO_STEPS);
+  // The big "day" number is TODAY's steps only — the cycle whose local date
+  // is today, not simply the most recent cycle (which can be a day or two
+  // old when WHOOP hasn't synced yet, and would otherwise be mislabelled as
+  // today). If there's no cycle for today, show 0.
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayCycle = cycles.find((c) => c.date === todayStr);
+  const todaySteps = todayCycle ? Math.round(todayCycle.raw_kilojoules * KJ_TO_STEPS) : 0;
 
   // Group cycles by calendar date and sum steps per day
   const byDate = new Map<string, number>();
