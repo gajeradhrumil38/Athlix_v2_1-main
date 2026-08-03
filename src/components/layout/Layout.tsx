@@ -273,29 +273,6 @@ export const Layout: React.FC = () => {
       {/* ── Mobile bottom nav ─────────────────────────── */}
       {!isImmersiveRoute && (
         <>
-          {/* Distortion + blur zone above the pill — warps content entering the glass */}
-          <div
-            className="md:hidden fixed left-3 right-3 z-[97] pointer-events-none"
-            style={{
-              bottom: 'calc(76px + env(safe-area-inset-bottom))',
-              height: 40,
-              borderRadius: '20px 20px 0 0',
-              backdropFilter: 'blur(18px) saturate(1.6)',
-              WebkitBackdropFilter: 'blur(18px) saturate(1.6)',
-              maskImage: 'linear-gradient(to bottom, transparent, black)',
-              WebkitMaskImage: 'linear-gradient(to bottom, transparent, black)',
-            }}
-          />
-          {/* Dark scrim that fades page content into the blur zone */}
-          <div
-            className="md:hidden fixed left-0 right-0 z-[96] pointer-events-none"
-            style={{
-              bottom: 'calc(76px + env(safe-area-inset-bottom))',
-              height: 56,
-              background: 'linear-gradient(to bottom, transparent, rgba(3,5,8,0.88))',
-            }}
-          />
-
           {/* Floating liquid-glass pill nav */}
           <nav
             className="md:hidden fixed left-3 right-3 z-[98]"
@@ -305,7 +282,13 @@ export const Layout: React.FC = () => {
               className="relative flex h-[66px] w-full items-center rounded-[33px]"
               style={{ overflow: 'visible' }}
             >
-              {/* Glass shell — clips all layers to pill shape */}
+              {/* Glass shell — one clean frosted layer clipped to the pill:
+                  a real backdrop-blur of the page content behind it, a dark
+                  translucent tint for legibility, a hairline edge + inset top
+                  highlight + soft drop shadow. Replaces the old 2px-blur +
+                  SVG liquid-displacement stack (which barely blurred on Chrome
+                  and threw square-corner artifacts) and the full-width scrim
+                  above it (which read as a rectangle behind the rounded pill). */}
               <div
                 aria-hidden="true"
                 className="pointer-events-none"
@@ -313,15 +296,13 @@ export const Layout: React.FC = () => {
                   position: 'absolute', inset: 0,
                   borderRadius: 33,
                   overflow: 'hidden',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.40), 0 0 0 1px rgba(255,255,255,0.06)',
+                  background: 'rgba(12, 16, 23, 0.55)',
+                  backdropFilter: 'blur(22px) saturate(1.7)',
+                  WebkitBackdropFilter: 'blur(22px) saturate(1.7)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  boxShadow: '0 10px 34px rgba(0,0,0,0.46), inset 0 1px 0 rgba(255,255,255,0.09)',
                 }}
-              >
-                {/* Layer 1 — backdrop blur + liquid displacement */}
-                <div className="lg-distortion" />
-                {/* Layer 2 — dark tint */}
-                <div style={{ position: 'absolute', inset: 0, background: 'var(--lg-nav-bg)' }} />
-              </div>
+              />
                   {/* Sliding active indicator — spans all 5 slots (20% each) */}
               {activeNavSlot >= 0 && (
                 <div
