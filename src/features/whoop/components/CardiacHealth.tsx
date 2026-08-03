@@ -43,12 +43,12 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
   }, [userId]);
 
   if (loading) {
-    return <div className="mx-4 mb-4 rounded-2xl animate-pulse" style={{ height: 150, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />;
+    return <div className="rounded-2xl animate-pulse" style={{ height: 150, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />;
   }
   if (!data || data.daysOfData < 2) return null;
 
   return (
-    <div className="mx-4 mb-4 rounded-2xl p-4" style={{ background: 'linear-gradient(160deg,#1a1216 0%,#120e12 100%)', border: '1px solid rgba(248,113,113,0.14)' }}>
+    <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(160deg,#1a1216 0%,#120e12 100%)', border: '1px solid rgba(248,113,113,0.14)' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">

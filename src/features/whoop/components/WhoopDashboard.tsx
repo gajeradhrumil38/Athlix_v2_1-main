@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { whoopService, KJ_TO_STEPS } from '../services/whoopService';
 import { LoadInsights } from './LoadInsights';
 import { CardiacHealth } from './CardiacHealth';
+import { WhoopCard, TileIcons, type WhoopGauge, type WhoopTile, type WhoopSteps } from './WhoopCard';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProgress } from '../../../contexts/ProgressContext';
 import type { WhoopRecovery, WhoopSleep, WhoopCycle, WhoopWorkout } from '../types';
@@ -596,127 +597,59 @@ export const WhoopDashboard: React.FC = () => {
   const avgStrain = tab !== 'day' ? numAvg(steps.filter((s) => s.strain_score != null).map((s) => s.strain_score!)) : null;
   const lastDate = recovery[0]?.date ? format(new Date(recovery[0].date), 'MMM d') : null;
 
-  const hasSubStats = tab === 'day'
-    ? (hrv != null || rhr != null || inBedHours != null || strain != null)
-    : (avgRecovery != null || avgHrv != null || avgRhr != null || avgSleep != null || avgStrain != null);
+  // ── Redesigned-card data (see WhoopCard) ───────────────────
+  const caption = { day: 'Last night', week: 'This week', month: 'This month' }[tab];
+  const avgInBed = tab !== 'day' ? numAvg(sleep.map((s) => s.total_in_bed_time_milli / 3_600_000)) : null;
+
+  const SLEEP_C = '#4fc3f7', REC_C = '#ffd54f', STRAIN_C = '#C8FF00', HRV_C = '#afa9ec', RHR_C = '#ff8080';
+
+  const gauges: WhoopGauge[] = [
+    { label: 'Sleep', value: sleepVal != null ? sleepVal.toFixed(1) : '—', pctUnit: '%', pct: sleepVal ?? 0, color: SLEEP_C, max: '100', caption },
+    { label: 'Recovery', value: recoveryVal != null ? String(Math.round(recoveryVal)) : '—', pctUnit: '%', pct: recoveryVal ?? 0, color: REC_C, max: '100', caption },
+    { label: 'Strain', value: strainVal != null ? strainVal.toFixed(1) : '—', pctUnit: '', pct: strainVal != null ? (strainVal / 21) * 100 : 0, color: STRAIN_C, max: '21', caption },
+  ];
+
+  const tiles: WhoopTile[] = tab === 'day'
+    ? [
+        { label: 'HRV', value: hrv != null ? String(Math.round(hrv)) : '—', unit: 'ms', color: HRV_C, icon: TileIcons.hrv(HRV_C) },
+        { label: 'RHR', value: rhr != null ? String(rhr) : '—', unit: 'bpm', color: RHR_C, icon: TileIcons.rhr(RHR_C) },
+        { label: 'In Bed', value: inBedHours ?? '—', unit: 'h', color: SLEEP_C, icon: TileIcons.inBed(SLEEP_C) },
+        { label: 'Strain', value: strain != null ? strain.toFixed(1) : '—', unit: '', color: STRAIN_C, icon: TileIcons.strain(STRAIN_C) },
+      ]
+    : [
+        { label: 'HRV', value: avgHrv != null ? String(Math.round(avgHrv)) : '—', unit: 'ms', color: HRV_C, icon: TileIcons.hrv(HRV_C) },
+        { label: 'RHR', value: avgRhr != null ? String(Math.round(avgRhr)) : '—', unit: 'bpm', color: RHR_C, icon: TileIcons.rhr(RHR_C) },
+        { label: 'In Bed', value: avgInBed != null ? avgInBed.toFixed(1) : '—', unit: 'h', color: SLEEP_C, icon: TileIcons.inBed(SLEEP_C) },
+        { label: 'Strain', value: avgStrain != null ? avgStrain.toFixed(1) : '—', unit: '', color: STRAIN_C, icon: TileIcons.strain(STRAIN_C) },
+      ];
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const stepGoal = tab === 'day' ? 10_000 : tab === 'week' ? 70_000 : 300_000;
+  const stepTotal = tab === 'day'
+    ? (() => { const c = steps.find((cy) => cy.date === todayStr); return c ? Math.round(c.raw_kilojoules * KJ_TO_STEPS) : 0; })()
+    : steps.reduce((sum, cy) => sum + Math.round(cy.raw_kilojoules * KJ_TO_STEPS), 0);
+  const stepsData: WhoopSteps = {
+    value: stepTotal.toLocaleString(),
+    goal: stepGoal.toLocaleString(),
+    pct: stepGoal > 0 ? (stepTotal / stepGoal) * 100 : 0,
+    reached: stepTotal >= stepGoal,
+    showCaption: true,
+  };
 
   return (
-    <div
-      className="rounded-2xl animate-card-enter overflow-hidden relative"
-      style={{
-        background: 'linear-gradient(160deg, #0d1117 0%, #111827 100%)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        animationDelay: '420ms',
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-3">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4" style={{ color: '#C8FF00' }} />
-          <span style={{ color: 'white', fontSize: 13, fontWeight: 800, letterSpacing: '0.08em' }}>WHOOP</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {lastDate && tab === 'day' && (
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>{lastDate}</span>
-          )}
-          {stale && !loading && (
-            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 9, letterSpacing: '0.05em' }}>cached</span>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b mx-4" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-        {(['day', 'week', 'month'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className="flex-1 py-2 text-center transition-colors"
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: tab === t ? 'white' : 'rgba(255,255,255,0.3)',
-              borderBottom: tab === t ? '2px solid #C8FF00' : '2px solid transparent',
-            }}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="mx-4 mt-3 rounded-xl px-3 py-2 text-[11px]" style={{ background: 'rgba(248,113,113,0.1)', color: '#f87171' }}>
-          {error} —{' '}
-          <button type="button" onClick={() => void fetchAll()} className="underline">Retry</button>
-        </div>
-      )}
-
-      {/* Rings */}
-      <div className="flex justify-around px-3 py-4">
-        {loading ? (
-          <>
-            <RingSkeleton />
-            <RingSkeleton />
-            <RingSkeleton />
-          </>
-        ) : (
-          <>
-            <Ring
-              value={sleepVal}
-              max={100}
-              color="#60a5fa"
-              label="Sleep"
-              unit="%"
-              decimals={1}
-            />
-            <Ring
-              value={recoveryVal}
-              max={100}
-              color={recoveryVal != null ? recoveryColor(recoveryVal) : '#666'}
-              label="Recovery"
-              unit="%"
-            />
-            <Ring
-              value={strainVal}
-              max={21}
-              color="#C8FF00"
-              label="Strain"
-              unit="/ 21"
-              decimals={1}
-            />
-          </>
-        )}
-      </div>
-
-      {/* Sub-stats */}
-      {!loading && !error && hasSubStats && (
-        <div className="px-4 pb-4">
-          {tab === 'day' ? (
-            <div className="flex gap-2">
-              {hrv != null && <Stat label="HRV" value={`${Math.round(hrv)}ms`} color="#a78bfa" onInfo={() => setActiveInfo('HRV')} />}
-              {rhr != null && <Stat label="RHR" value={`${rhr}bpm`} color="#f87171" onInfo={() => setActiveInfo('RHR')} />}
-              {inBedHours && <Stat label="In Bed" value={`${inBedHours}h`} color="#60a5fa" onInfo={() => setActiveInfo('IN BED')} />}
-              {strain != null && <Stat label="Strain" value={strain.toFixed(1)} color="#C8FF00" onInfo={() => setActiveInfo('STRAIN')} />}
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              {avgHrv != null && <Stat label="Avg HRV" value={`${Math.round(avgHrv)}ms`} color="#a78bfa" onInfo={() => setActiveInfo('HRV')} />}
-              {avgRhr != null && <Stat label="Avg RHR" value={`${Math.round(avgRhr)}`} color="#f87171" onInfo={() => setActiveInfo('RHR')} />}
-              {avgSleep != null && <Stat label="Avg Sleep" value={`${Math.round(avgSleep)}%`} color="#60a5fa" onInfo={() => setActiveInfo('IN BED')} />}
-              {avgStrain != null && <Stat label="Avg Strain" value={avgStrain.toFixed(1)} color="#C8FF00" onInfo={() => setActiveInfo('STRAIN')} />}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Step counter */}
-      {!loading && !error && steps.length > 0 && (
-        <StepsCard cycles={steps} tab={tab} />
-      )}
+    <div className="space-y-4">
+      <WhoopCard
+        tab={tab}
+        onTab={setTab}
+        loading={loading}
+        error={error}
+        onRetry={() => void fetchAll()}
+        stale={stale}
+        dateLabel={lastDate}
+        gauges={gauges}
+        tiles={tiles}
+        steps={stepsData}
+      />
 
       {/* Training load & injury risk (self-fetches its own 4-week window) */}
       {user?.id && <LoadInsights userId={user.id} />}
@@ -724,9 +657,9 @@ export const WhoopDashboard: React.FC = () => {
       {/* Cardiometric health — VO2max, resting HR, HRV, HR reserve */}
       {user?.id && <CardiacHealth userId={user.id} />}
 
-      {/* Workouts section */}
+      {/* Workouts */}
       {!loading && !error && workouts.length > 0 && (
-        <div className="px-4 pb-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, marginTop: -2 }}>
+        <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <button
             type="button"
             onClick={() => setShowWorkouts((p) => !p)}
@@ -748,10 +681,8 @@ export const WhoopDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Info popup overlay */}
-      {activeInfo && (
-        <InfoPopup stat={activeInfo} onClose={() => setActiveInfo(null)} />
-      )}
+      {activeInfo && <InfoPopup stat={activeInfo} onClose={() => setActiveInfo(null)} />}
     </div>
   );
+
 };
