@@ -241,22 +241,6 @@ const ChipPicker: React.FC<{
   );
 };
 
-/* ── Effort bars ────────────────────────────────────────────────── */
-const EffortBars: React.FC<{ effort: number }> = ({ effort }) => (
-  <div className="flex items-end gap-[3px]">
-    {[1, 2, 3, 4, 5].map((i) => (
-      <div
-        key={i}
-        style={{
-          width: 5,
-          height: 4 + i * 3,
-          borderRadius: 2,
-          background: i <= effort ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
-        }}
-      />
-    ))}
-  </div>
-);
 
 /* ── Goal ring icon — mirrors the ring+glow construction used on the run
    history cards (MiniRingMetric), so the same "ring = goal/progress"
@@ -648,12 +632,6 @@ export const ActiveRun: React.FC = () => {
   /* ── Run complete ───────────────────────────────────────────── */
   if (finished) {
     const cal = Math.round(finished.distance * (finished.unit === 'mi' ? 1.609344 : 1) * 65);
-    const effort = finished.pace <= 0 ? 3
-      : finished.pace < 4 ? 5
-      : finished.pace < 5 ? 4
-      : finished.pace < 6 ? 3
-      : finished.pace < 7 ? 2
-      : 1;
 
     // Check if this is a PR (best pace among all saved runs, same
     // MIN_PR_ELIGIBLE_KM qualification RunHistory.tsx uses — a short fast
@@ -810,20 +788,6 @@ export const ActiveRun: React.FC = () => {
                 </span>
               </div>
             ))}
-
-            {/* Effort row — not part of the original design, kept at the
-                same visual weight as TIME/CALORIES */}
-            <div className="flex flex-col items-center" style={{ gap: 6 }}>
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                EFFORT
-              </span>
-              <div className="flex items-center gap-2.5">
-                <EffortBars effort={effort} />
-                <span className="font-victory text-[28px] font-black leading-none text-white">
-                  {effort}<span className="text-[14px] font-semibold" style={{ color: 'rgba(255,255,255,0.38)' }}>/5</span>
-                </span>
-              </div>
-            </div>
           </motion.div>
 
           {/* Splits — secondary, minimal, no bars (matches history detail) */}
@@ -847,9 +811,12 @@ export const ActiveRun: React.FC = () => {
                   return splits.map((split, idx) => {
                     const isBest = split.pace === bestP;
                     const col = idx % 3; // 0 left, 1 centre, 2 right
-                    const justify = col === 0 ? 'flex-start' : col === 1 ? 'center' : 'flex-end';
+                    // A lone split spans the full row and centres, instead of
+                    // sitting in the left column.
+                    const single = splits.length === 1;
+                    const justify = single ? 'center' : col === 0 ? 'flex-start' : col === 1 ? 'center' : 'flex-end';
                     return (
-                      <div key={idx} className="flex items-baseline" style={{ gap: 6, justifyContent: justify }}>
+                      <div key={idx} className="flex items-baseline" style={{ gap: 6, justifyContent: justify, gridColumn: single ? '1 / -1' : undefined }}>
                         <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.4)' }}>{idx + 1}</span>
                         <span style={{ color: 'rgba(255,255,255,0.24)' }}>—</span>
                         <span className="font-victory tabular-nums leading-none"
