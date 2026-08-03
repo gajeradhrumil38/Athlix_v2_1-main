@@ -666,7 +666,7 @@ export const ActiveRun: React.FC = () => {
       finished.rawPace <= Math.min(...validPaces);
 
     return (
-      <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: '#0d0f14' }}>
+      <div className="relative flex h-screen flex-col overflow-hidden" style={{ background: '#0d0f14' }}>
         <RunRouteBackground path={finished.path} />
 
         {/* Two layers: the vertical fade keeps content legible over the
@@ -735,11 +735,19 @@ export const ActiveRun: React.FC = () => {
           </span>
         </motion.div>
 
-        {/* Content */}
-        <div
-          className="relative z-10 flex flex-1 flex-col items-center justify-end gap-3 px-5"
-          style={{ paddingBottom: 'max(28px, env(safe-area-inset-bottom))' }}
-        >
+        {/* Content — scrolls when the stat stack + splits are taller than the
+            screen, with top padding that clears the top bar AND the SAVED / PR
+            badge so the 108px hero distance can never ride up under them
+            (that overlap was the bug). The inner min-h-full + justify-end keeps
+            a short run bottom-anchored over the route map, exactly as before. */}
+        <div className="relative z-10 flex-1 w-full overflow-y-auto">
+          <div
+            className="flex min-h-full flex-col items-center justify-end gap-3 px-5"
+            style={{
+              paddingTop: 'calc(max(16px, env(safe-area-inset-top)) + 100px)',
+              paddingBottom: 'max(28px, env(safe-area-inset-bottom))',
+            }}
+          >
           {/* Hero distance — same vertical-stack layout as the history detail
               screen (Run Detail Screen.dc.html) so a run looks the same
               whether you're seeing it right after finishing or later from
@@ -869,6 +877,7 @@ export const ActiveRun: React.FC = () => {
           <p className="text-[10px] font-semibold text-white/20">
             © {new Date().getFullYear()} Athlix · Map © OpenStreetMap &amp; CARTO
           </p>
+          </div>
         </div>
       </div>
     );
