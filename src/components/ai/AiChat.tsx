@@ -561,6 +561,11 @@ export const AiChat: React.FC = () => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { hasKey, model, save: saveAiCoachKey } = useAiCoachKey();
+  // Always-current mirror of hasKey. The athlix:open-ai listener is registered
+  // once ([] deps) and would otherwise capture hasKey from the first render
+  // (null), forcing the setup modal on EVERY reopen even after a key is saved.
+  const hasKeyRef = useRef(hasKey);
+  useEffect(() => { hasKeyRef.current = hasKey; }, [hasKey]);
   const [streamingText, setStreamingText] = useState('');
 
   /* ── Persist chat history across mount/unmount (e.g. visiting /log) so
@@ -630,8 +635,12 @@ export const AiChat: React.FC = () => {
   const close = () => setOpen(false);
 
   const openChat = () => {
-    if (!hasKey) { setShowKeySetup(true); setOpen(true); }
-    else { setShowKeySetup(false); setOpen(true); }
+    // Read hasKeyRef, not hasKey: this runs from the once-registered
+    // athlix:open-ai listener whose closure captured hasKey=null. Only a
+    // DEFINITE "no key" (false, not the null loading state) shows setup, so a
+    // saved key never re-triggers it on reopen.
+    setShowKeySetup(hasKeyRef.current === false);
+    setOpen(true);
   };
 
   // Inject aurora CSS once
