@@ -139,7 +139,12 @@ export const CoachNote: React.FC = () => {
     if (hasKey && user?.id) void generate();
   }, [hasKey, user?.id, generate]);
 
-  const pickFeeling = (f: string) => { setTodayFeeling(f); setFeeling(f); void generate(); };
+  const pickFeeling = (f: string) => {
+    if (f === feeling) return; // already selected — don't burn a regeneration
+    setTodayFeeling(f);
+    setFeeling(f);
+    void generate();
+  };
   const openChat = () => window.dispatchEvent(new CustomEvent('athlix:open-ai'));
 
   if (!hasKey) return null;
@@ -155,8 +160,16 @@ export const CoachNote: React.FC = () => {
     <div className="animate-card-enter px-1">
       <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '0 0 6px 4px' }}>{label}</p>
 
-      {/* Avatar + speech bubble — same treatment as an AI-coach chat reply. */}
-      <button onClick={openChat} className="w-full text-left flex gap-2 active:opacity-80 transition-opacity">
+      {/* Avatar + speech bubble — same treatment as an AI-coach chat reply.
+          A clickable div (not a <button>) so the bubble <div> isn't nested
+          inside a button (invalid HTML); keyboard-openable via role/tabindex. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={openChat}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openChat(); } }}
+        className="w-full flex gap-2 cursor-pointer active:opacity-80 transition-opacity"
+      >
         <CoachAvatar />
         <div
           style={{
@@ -187,7 +200,7 @@ export const CoachNote: React.FC = () => {
             text
           )}
         </div>
-      </button>
+      </div>
 
       {/* How are you feeling? — feeds the next briefing. Indented to line up
           under the bubble (past the avatar column). */}
@@ -199,6 +212,7 @@ export const CoachNote: React.FC = () => {
             <button
               key={f}
               onClick={() => pickFeeling(f)}
+              aria-pressed={active}
               className="rounded-full px-2.5 py-1 transition-all active:scale-95"
               style={{
                 fontSize: 11, fontWeight: 700,
