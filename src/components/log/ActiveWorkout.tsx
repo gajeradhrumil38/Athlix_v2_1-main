@@ -5,6 +5,7 @@ import { muscleColor } from '../../lib/muscleColors';
 import toast from 'react-hot-toast';
 import type { WorkoutState, ExerciseEntry, Set as WorkoutSet } from '../../pages/Log';
 import { ExerciseContent } from './ExerciseContent';
+import { SetFeedbackFlash } from './SetFeedbackFlash';
 import { ExercisePicker } from './ExercisePicker';
 import { DialPicker } from './DialPicker';
 import { useAuth } from '../../contexts/AuthContext';
@@ -406,6 +407,19 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       if (nextDone) {
         haptics.success();
         startRestTimer();
+        // Instant, zero-latency coach feedback: compare this set to last time.
+        // SetFeedbackFlash listens and shows a flash for a beat/matched set.
+        window.dispatchEvent(new CustomEvent('athlix:set-logged', {
+          detail: {
+            name: exercise.name,
+            weight: set.weight,
+            reps: set.reps,
+            unit: weightUnit,
+            last: exercise.lastSession
+              ? { weight: exercise.lastSession.weight, reps: exercise.lastSession.reps }
+              : null,
+          },
+        }));
         const doneCount = exercise.sets.filter((entry) => entry.done || entry.id === setId).length;
         if (doneCount === exercise.sets.length) haptics.complete();
       } else {
@@ -1606,6 +1620,7 @@ const CalendarPicker: React.FC<{
       exit={{ opacity: 0 }}
       onClick={onClose}
     >
+      <SetFeedbackFlash />
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <motion.div
         initial={{ y: 24, opacity: 0, scale: 0.97 }}
