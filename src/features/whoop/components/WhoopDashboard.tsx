@@ -575,13 +575,17 @@ export const WhoopDashboard: React.FC = () => {
   // (today when synced); the arrows in the card header step back through it,
   // like the calendar. Every day-view metric is read for the SAME selected
   // date (previously each used index [0], which could mix dates).
-  const dayDates = React.useMemo(() => {
+  // Plain computation, NOT useMemo: this runs below the component's early
+  // returns (connectionLoading / !connected), so making it a hook would break
+  // the Rules of Hooks and crash the card when the connection state flips.
+  // The arrays are tiny (~10 days), so recomputing each render is free.
+  const dayDates = (() => {
     const set = new Set<string>();
     recovery.forEach((r) => r.date && set.add(r.date));
     sleep.forEach((s) => s.date && set.add(s.date));
     steps.forEach((c) => c.date && set.add(c.date));
     return Array.from(set).sort((a, b) => b.localeCompare(a));
-  }, [recovery, sleep, steps]);
+  })();
 
   const clampedDayIdx = Math.min(dayIdx, Math.max(0, dayDates.length - 1));
   const selectedDate = dayDates[clampedDayIdx] ?? null;
