@@ -37,6 +37,23 @@ export interface WhoopSteps {
 const TAB_W: Record<WhoopTab, number> = { day: 30, week: 45, month: 58 };
 const EASE = 'cubic-bezier(.4,0,.2,1)';
 
+const NavArrow: React.FC<{ dir: 'prev' | 'next'; disabled: boolean; onClick: () => void }> = ({ dir, disabled, onClick }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    aria-label={dir === 'prev' ? 'Previous day' : 'Next day'}
+    style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 8,
+      background: 'var(--bg-surface)', border: '1px solid var(--border)', cursor: disabled ? 'default' : 'pointer',
+      opacity: disabled ? 0.3 : 1, transition: 'opacity 150ms',
+    }}
+  >
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      {dir === 'prev' ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
+    </svg>
+  </button>
+);
+
 // One semicircle gauge: track arc + value arc (dash-offset fill) + a needle
 // that rotates from -90° (empty) to +90° (full), matching the design SVG.
 const Gauge: React.FC<{ g: WhoopGauge }> = ({ g }) => {
@@ -89,6 +106,14 @@ const Tile: React.FC<{ t: WhoopTile }> = ({ t }) => (
   </div>
 );
 
+export interface WhoopDayNav {
+  label: string;
+  canPrev: boolean;
+  canNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}
+
 export const WhoopCard: React.FC<{
   tab: WhoopTab;
   onTab: (t: WhoopTab) => void;
@@ -97,10 +122,11 @@ export const WhoopCard: React.FC<{
   onRetry: () => void;
   stale: boolean;
   dateLabel: string | null;
+  dayNav?: WhoopDayNav | null;
   gauges: WhoopGauge[];
   tiles: WhoopTile[];
   steps: WhoopSteps;
-}> = ({ tab, onTab, loading, error, onRetry, stale, dateLabel, gauges, tiles, steps }) => {
+}> = ({ tab, onTab, loading, error, onRetry, stale, dateLabel, dayNav, gauges, tiles, steps }) => {
   const tabs: WhoopTab[] = ['day', 'week', 'month'];
   const idx = tabs.indexOf(tab);
   const w = TAB_W[tab];
@@ -121,10 +147,20 @@ export const WhoopCard: React.FC<{
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
           <span style={{ font: '600 14px/1 Inter, sans-serif', letterSpacing: '0.08em', color: 'var(--text-primary)' }}>WHOOP</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {dateLabel && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{dateLabel}</span>}
-          {stale && !loading && <><span style={{ fontSize: 12, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 12, color: 'var(--text-muted)' }}>cached</span></>}
-        </div>
+        {dayNav ? (
+          // Day-view date stepper — back/forward through the days that have
+          // data, like the calendar. Left arrow = older, right = newer.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <NavArrow dir="prev" disabled={!dayNav.canPrev} onClick={dayNav.onPrev} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', minWidth: 78, textAlign: 'center' }}>{dayNav.label}</span>
+            <NavArrow dir="next" disabled={!dayNav.canNext} onClick={dayNav.onNext} />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {dateLabel && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{dateLabel}</span>}
+            {stale && !loading && <><span style={{ fontSize: 12, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 12, color: 'var(--text-muted)' }}>cached</span></>}
+          </div>
+        )}
       </div>
 
       {/* Tabs with sliding underline */}

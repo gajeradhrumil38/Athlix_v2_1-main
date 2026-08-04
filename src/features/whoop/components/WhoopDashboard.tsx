@@ -479,6 +479,10 @@ export const WhoopDashboard: React.FC = () => {
   const [connected, setConnected] = useState(false);
   const [connectionLoading, setConnectionLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('day');
+  // Day-view browsing offset: 0 = most recent day (today when synced), higher
+  // = further back. Reset whenever the tab changes.
+  const [dayIdx, setDayIdx] = useState(0);
+  useEffect(() => { setDayIdx(0); }, [tab]);
 
   const [recovery, setRecovery] = useState<WhoopRecovery[]>([]);
   const [sleep, setSleep] = useState<WhoopSleep[]>([]);
@@ -565,15 +569,35 @@ export const WhoopDashboard: React.FC = () => {
     );
   }
 
-  // ── Compute ring values ────────────────────────────────────
+  // ── Day-by-day browsing (day tab) ──────────────────────────
+  // Union of dates across recovery / sleep / cycle, newest first, so a day
+  // that has only some of the three metrics still appears. dayIdx 0 = latest
+  // (today when synced); the arrows in the card header step back through it,
+  // like the calendar. Every day-view metric is read for the SAME selected
+  // date (previously each used index [0], which could mix dates).
+  const dayDates = React.useMemo(() => {
+    const set = new Set<string>();
+    recovery.forEach((r) => r.date && set.add(r.date));
+    sleep.forEach((s) => s.date && set.add(s.date));
+    steps.forEach((c) => c.date && set.add(c.date));
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [recovery, sleep, steps]);
+
+  const clampedDayIdx = Math.min(dayIdx, Math.max(0, dayDates.length - 1));
+  const selectedDate = dayDates[clampedDayIdx] ?? null;
+  const dayRec = selectedDate ? recovery.find((r) => r.date === selectedDate) : recovery[0];
+  const daySleep = selectedDate ? sleep.find((s) => s.date === selectedDate) : sleep[0];
+  const dayCycle = selectedDate ? steps.find((c) => c.date === selectedDate) : steps[0];
+
+  // ── Ring values ────────────────────────────────────────────
   let recoveryVal: number | null = null;
   let strainVal: number | null = null;
   let sleepVal: number | null = null;
 
   if (tab === 'day') {
-    recoveryVal = recovery[0]?.recovery_score ?? null;
-    strainVal = steps[0]?.strain_score ?? null;
-    sleepVal = sleep[0]?.sleep_performance_percentage ?? null;
+    recoveryVal = dayRec?.recovery_score ?? null;
+    strainVal = dayCycle?.strain_score ?? null;
+    sleepVal = daySleep?.sleep_performance_percentage ?? null;
   } else {
     recoveryVal = numAvg(recovery.map((r) => r.recovery_score));
     const strainArr = steps.filter((s) => s.strain_score != null).map((s) => s.strain_score!);
@@ -581,21 +605,30 @@ export const WhoopDashboard: React.FC = () => {
     sleepVal = numAvg(sleep.map((s) => s.sleep_performance_percentage));
   }
 
-  const todayRec = recovery[0];
-  const todaySleep = sleep[0];
-  const todayStep = steps[0];
+  const hrv = dayRec?.hrv_rmssd_milli ?? null;
+  const rhr = dayRec?.resting_heart_rate ?? null;
+  const inBedHours = daySleep ? (daySleep.total_in_bed_time_milli / 3_600_000).toFixed(1) : null;
+  const strain = dayCycle?.strain_score ?? null;
 
-  const hrv = todayRec?.hrv_rmssd_milli ?? null;
-  const rhr = todayRec?.resting_heart_rate ?? null;
-  const inBedHours = todaySleep ? (todaySleep.total_in_bed_time_milli / 3_600_000).toFixed(1) : null;
-  const strain = todayStep?.strain_score ?? null;
-
-  const avgRecovery = tab !== 'day' ? numAvg(recovery.map((r) => r.recovery_score)) : null;
   const avgHrv = tab !== 'day' ? numAvg(recovery.map((r) => r.hrv_rmssd_milli)) : null;
   const avgRhr = tab !== 'day' ? numAvg(recovery.map((r) => r.resting_heart_rate)) : null;
   const avgSleep = tab !== 'day' ? numAvg(sleep.map((s) => s.sleep_performance_percentage)) : null;
   const avgStrain = tab !== 'day' ? numAvg(steps.filter((s) => s.strain_score != null).map((s) => s.strain_score!)) : null;
-  const lastDate = recovery[0]?.date ? format(new Date(recovery[0].date), 'MMM d') : null;
+
+  const dayDateObj = selectedDate ? new Date(`${selectedDate}T00:00:00`) : null;
+  const lastDate = tab === 'day'
+    ? (dayDateObj ? format(dayDateObj, 'EEE, MMM d') : null)
+    : (recovery[0]?.date ? format(new Date(recovery[0].date), 'MMM d') : null);
+
+  const dayNav = tab === 'day' && dayDates.length > 0
+    ? {
+        label: lastDate ?? '',
+        canPrev: clampedDayIdx < dayDates.length - 1,   // older day exists
+        canNext: clampedDayIdx > 0,                     // newer day exists
+        onPrev: () => setDayIdx((i) => Math.min(i + 1, dayDates.length - 1)),
+        onNext: () => setDayIdx((i) => Math.max(i - 1, 0)),
+      }
+    : null;
 
   // ── Redesigned-card data (see WhoopCard) ───────────────────
   const caption = { day: 'Last night', week: 'This week', month: 'This month' }[tab];
@@ -623,10 +656,9 @@ export const WhoopDashboard: React.FC = () => {
         { label: 'Strain', value: avgStrain != null ? avgStrain.toFixed(1) : '—', unit: '', color: STRAIN_C, icon: TileIcons.strain(STRAIN_C) },
       ];
 
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
   const stepGoal = tab === 'day' ? 10_000 : tab === 'week' ? 70_000 : 300_000;
   const stepTotal = tab === 'day'
-    ? (() => { const c = steps.find((cy) => cy.date === todayStr); return c ? Math.round(c.raw_kilojoules * KJ_TO_STEPS) : 0; })()
+    ? (dayCycle ? Math.round(dayCycle.raw_kilojoules * KJ_TO_STEPS) : 0)
     : steps.reduce((sum, cy) => sum + Math.round(cy.raw_kilojoules * KJ_TO_STEPS), 0);
   const stepsData: WhoopSteps = {
     value: stepTotal.toLocaleString(),
@@ -646,6 +678,7 @@ export const WhoopDashboard: React.FC = () => {
         onRetry={() => void fetchAll()}
         stale={stale}
         dateLabel={lastDate}
+        dayNav={dayNav}
         gauges={gauges}
         tiles={tiles}
         steps={stepsData}
