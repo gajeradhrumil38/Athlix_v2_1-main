@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../../../lib/supabase';
+import { aiCoachFetch } from '../../../lib/aiCoachFetch';
 import type {
   DetectedFood,
   FatSecretFoodEntry,
@@ -328,7 +329,7 @@ export async function recognizeFoodWithGemini(imageFile: File): Promise<GeminiSc
     '- If truly no food is visible (empty plate, non-food scene): {"scanType":"dish","items":[]}\n' +
     '- DO NOT return empty items if there is food — make your best identification even under imperfect conditions';
 
-  const resp = await fetch('/api/ai-coach/generate', {
+  const resp = await aiCoachFetch('/api/ai-coach/generate', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -499,7 +500,7 @@ export async function analyzePackagedIngredients(
     'Keep each ingredients value short — only the concerning ones, not the full list.';
 
   try {
-    const resp = await fetch('/api/ai-coach/generate', {
+    const resp = await aiCoachFetch('/api/ai-coach/generate', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

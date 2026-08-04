@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { aiCoachFetch } from '../lib/aiCoachFetch';
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash';
 
@@ -41,7 +42,7 @@ export function useAiCoachKey() {
   const [loading, setLoading] = useState(true);
 
   const save = useCallback(async (apiKey: string, targetModel: string): Promise<SaveResult> => {
-    const res = await fetch('/api/ai-coach/keys', {
+    const res = await aiCoachFetch('/api/ai-coach/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey, model: targetModel }),
@@ -57,7 +58,7 @@ export function useAiCoachKey() {
   }, []);
 
   const remove = useCallback(async () => {
-    await fetch('/api/ai-coach/keys', { method: 'DELETE' });
+    await aiCoachFetch('/api/ai-coach/keys', { method: 'DELETE' });
     setHasKey(false);
     writeConfirmed(false);
   }, []);
@@ -65,7 +66,7 @@ export function useAiCoachKey() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/ai-coach/keys');
+      const res = await aiCoachFetch('/api/ai-coach/keys');
 
       // Auth hiccup (401 / 5xx) — usually the session is still restoring on a
       // fresh load. Don't wipe the prompt-state: trust the last confirmed

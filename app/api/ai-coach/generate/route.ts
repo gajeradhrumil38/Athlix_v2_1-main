@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerSupabaseClient } from '@/lib/supabase';
+import { resolveApiUser } from '@/lib/apiAuth';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 export async function POST(req: NextRequest) {
-  const supabase = await createRouteHandlerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, supabase } = await resolveApiUser(req);
   if (!user) {
     return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Not signed in' } }, { status: 401 });
   }

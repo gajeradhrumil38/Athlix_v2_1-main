@@ -116,6 +116,21 @@ export async function createRouteHandlerSupabaseClient() {
   });
 }
 
+// A server client scoped to a user's access token (passed by the SPA as a
+// Bearer header). Uses the anon key + the JWT in the Authorization header, so
+// queries still run under RLS as that user — but WITHOUT depending on the
+// session cookie, which is what makes cookie-only auth flaky in the
+// Vite-SPA-in-iframe + Next-API setup (the browser client and the route
+// handler both auto-refresh, rotating each other's refresh token). The SPA
+// always holds a fresh in-memory token, so this path is reliable.
+export function createAccessTokenClient(accessToken: string) {
+  const env = getServerSupabaseEnv();
+  return createSupabaseAdminClient<Database>(env.url, env.publicKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export function createServiceRoleSupabaseClient() {
   if (!supabaseServiceRoleKey) {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');

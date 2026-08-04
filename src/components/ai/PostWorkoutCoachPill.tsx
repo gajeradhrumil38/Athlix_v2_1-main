@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { aiCoachFetch } from '../../lib/aiCoachFetch';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -220,14 +221,14 @@ export const PostWorkoutCoachPill: React.FC = () => {
         },
       });
 
-      let res = await fetch('/api/ai-coach/generate', {
+      let res = await aiCoachFetch('/api/ai-coach/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildBody(model)),
         signal: controller.signal,
       });
       if (!res.ok) {
-        res = await fetch('/api/ai-coach/generate', {
+        res = await aiCoachFetch('/api/ai-coach/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(buildBody(FALLBACK_MODEL)),

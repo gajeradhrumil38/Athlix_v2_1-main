@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { aiCoachFetch } from '../../lib/aiCoachFetch';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, RotateCcw, Copy, Check, Plus, Minus, Trash2, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -744,7 +745,7 @@ export const AiChat: React.FC = () => {
         };
 
         const streamWithRetry = (contents: object[]): Promise<Response> =>
-          fetchWithRetry((targetModel) => fetch('/api/ai-coach/generate', {
+          fetchWithRetry((targetModel) => aiCoachFetch('/api/ai-coach/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildBody(contents, targetModel, true)),
@@ -753,7 +754,7 @@ export const AiChat: React.FC = () => {
         // Non-streaming request through the proxy — used only for the short
         // tool-result follow-up turn, which doesn't need live token rendering.
         const generateOnce = async (contents: object[]): Promise<any> => {
-          const res = await fetchWithRetry((targetModel) => fetch('/api/ai-coach/generate', {
+          const res = await fetchWithRetry((targetModel) => aiCoachFetch('/api/ai-coach/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildBody(contents, targetModel, false)),
