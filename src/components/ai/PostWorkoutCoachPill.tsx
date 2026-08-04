@@ -13,7 +13,7 @@ import { getFoodScans } from '../../lib/foodData';
 import { buildSystemPrompt, parseSkincareStats, type WorkoutWithExercises } from '../../lib/aiCoach';
 import type { WorkoutComparison } from '../../lib/supabaseData';
 import { useAiCoachKey } from '../../hooks/useAiCoachKey';
-import { buildBriefingPrompt, setCachedBriefing, getTodayFeeling, briefingShownToday, markBriefingShownToday } from '../../lib/dailyBriefing';
+import { buildBriefingPrompt, buildFallbackBriefing, setCachedBriefing, getTodayFeeling, briefingShownToday, markBriefingShownToday } from '../../lib/dailyBriefing';
 
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
@@ -283,23 +283,33 @@ export const PostWorkoutCoachPill: React.FC = () => {
     const myRequestId = ++requestIdRef.current;
     setView('analyzing');
 
+    // 1) Gather context FIRST, WITHOUT the abort timer. The 28-day WHOOP fetch
+    //    can be slow on a cold cache; letting it eat the generate's timeout was
+    //    aborting the request and dropping the pill straight back to closed.
+    const { start, end } = whoopWindowRange(28);
+    const [wRes, pRes, whoopRes, fRes] = await Promise.allSettled([
+      getWorkouts(user.id, { limit: 25, includeExercises: true }),
+      getPersonalRecords(user.id),
+      whoopService.fetchAll('month', start, end).catch(() => null),
+      getFoodScans(user.id).then((r) => r.scans).catch(() => [] as FoodScan[]),
+    ]);
+    if (myRequestId !== requestIdRef.current) return;
+    const workouts = (wRes.status === 'fulfilled' ? wRes.value : []) as WorkoutWithExercises[];
+    const prs = pRes.status === 'fulfilled' ? pRes.value : [];
+    const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
+    const food = (fRes.status === 'fulfilled' ? fRes.value : []) as FoodScan[];
+    const firstName = (profile?.full_name || 'there').split(' ')[0];
+
+    // Deterministic fallback so the flow ALWAYS ends in a message, never a
+    // silent close, even if the model call fails or returns empty.
+    const fallback = buildFallbackBriefing(firstName, workouts, whoopData);
+
+    // 2) Only the generate is under the abort timer now.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
     try {
-      const { start, end } = whoopWindowRange(28);
-      const [wRes, pRes, whoopRes, fRes] = await Promise.allSettled([
-        getWorkouts(user.id, { limit: 25, includeExercises: true }),
-        getPersonalRecords(user.id),
-        whoopService.fetchAll('month', start, end).catch(() => null),
-        getFoodScans(user.id).then((r) => r.scans).catch(() => [] as FoodScan[]),
-      ]);
-      const workouts = (wRes.status === 'fulfilled' ? wRes.value : []) as WorkoutWithExercises[];
-      const prs = pRes.status === 'fulfilled' ? pRes.value : [];
-      const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
-      const food = (fRes.status === 'fulfilled' ? fRes.value : []) as FoodScan[];
-
       const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight');
-      const userTurn = buildBriefingPrompt((profile?.full_name || 'there').split(' ')[0], getTodayFeeling());
+      const userTurn = buildBriefingPrompt(firstName, getTodayFeeling());
 
       const buildBody = (targetModel: string) => ({
         model: targetModel,
@@ -308,7 +318,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
         contents: [{ role: 'user', parts: [{ text: userTurn }] }],
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 200,
+          maxOutputTokens: 220,
           ...(/^gemini-2\.5/.test(targetModel) && { thinkingConfig: { thinkingBudget: 0 } }),
         },
       });
@@ -324,14 +334,18 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
       clearTimeout(timeoutId);
       if (myRequestId !== requestIdRef.current) return;
-      markBriefingShownToday(); // only on success — a failure retries next open
+      markBriefingShownToday();
       setCachedBriefing(text);
       setMessage(text);
       startTyping(text);
     } catch (err) {
-      console.warn('Daily briefing failed:', err);
+      console.warn('Daily briefing generation failed, using fallback:', err);
       clearTimeout(timeoutId);
-      if (myRequestId === requestIdRef.current) setView('closed'); // quietly back to idle
+      if (myRequestId !== requestIdRef.current) return;
+      markBriefingShownToday();
+      setCachedBriefing(fallback);
+      setMessage(fallback);
+      startTyping(fallback); // smooth flow: type the fallback instead of closing
     }
   }, [user?.id, profile, hasKey, model, startTyping]);
 

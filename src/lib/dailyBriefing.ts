@@ -55,6 +55,36 @@ export function setTodayFeeling(feeling: string) {
   invalidateBriefing(); // regenerate the note with the new feeling in mind
 }
 
+// Deterministic short briefing used when the model call fails or returns
+// empty, so the coach pill always ends in a message rather than a silent
+// close. Built from the same signals (WHOOP recovery + which muscle group is
+// most rested). `workouts`/`whoop` are loosely typed to avoid import cycles.
+export function buildFallbackBriefing(name: string, workouts: any[], whoop: any): string {
+  const rec = whoop?.recovery?.[0]?.recovery_score;
+  const recLine = typeof rec === 'number'
+    ? `Recovery's ${rec}% today — ${rec >= 67 ? 'good to push hard' : rec >= 34 ? 'keep it moderate' : 'take it easy'}.`
+    : '';
+
+  const age: Record<string, number> = {};
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (const w of workouts || []) {
+    if (!w?.date) continue;
+    const d = new Date(`${w.date}T00:00:00`);
+    const days = Math.round((today.getTime() - d.getTime()) / 86_400_000);
+    for (const mg of (w.muscle_groups || [])) {
+      const k = String(mg);
+      if (age[k] == null || days < age[k]) age[k] = days;
+    }
+  }
+  const mostRested = Object.entries(age).sort((a, b) => b[1] - a[1])[0];
+  const dueLine = mostRested
+    ? `${mostRested[0].charAt(0).toUpperCase() + mostRested[0].slice(1)} is your most rested — good day to train it.`
+    : 'Log a session today and I’ll tailor tomorrow’s plan.';
+
+  return `Morning, ${name}. ${recLine} ${dueLine}`.replace(/\s+/g, ' ').trim();
+}
+
 // User turn for the briefing. The heavy context (workouts, WHOOP, PRs, …) rides
 // in the system prompt (buildSystemPrompt 'insight'); this just says what shape
 // of answer we want.
