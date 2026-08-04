@@ -19,6 +19,9 @@ const FALLBACK_MODEL = 'gemini-1.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
 const COOLDOWN_MS = 60_000;
 const COLLAPSED_AUTO_DISMISS_MS = 30_000;
+// The daily briefing returns to the idle FAB faster than the post-workout
+// insight — it's a passing "here's your day", not something to dwell on.
+const BRIEFING_DISMISS_MS = 7_000;
 const TYPE_CHAR_MS = 24;
 
 // Vertical anchor shared by the FAB / bar / drawer so switching between them
@@ -155,7 +158,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
     }
   }, []);
 
-  const startTyping = useCallback((full: string) => {
+  const startTyping = useCallback((full: string, dismissMs: number = COLLAPSED_AUTO_DISMISS_MS) => {
     setTypedText('');
     setTypingDone(false);
     setView('typing');
@@ -170,7 +173,9 @@ export const PostWorkoutCoachPill: React.FC = () => {
         setTimeout(() => {
           setView('collapsed');
           clearDismissTimer();
-          dismissTimerRef.current = setTimeout(() => setView((v) => (v === 'collapsed' ? 'closed' : v)), COLLAPSED_AUTO_DISMISS_MS);
+          // Auto-return to the idle FAB after `dismissMs` (unless the user
+          // taps it first, which clears this and expands the drawer).
+          dismissTimerRef.current = setTimeout(() => setView((v) => (v === 'collapsed' ? 'closed' : v)), dismissMs);
         }, 550);
       }
     }, TYPE_CHAR_MS);
@@ -318,7 +323,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
         contents: [{ role: 'user', parts: [{ text: userTurn }] }],
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 220,
+          maxOutputTokens: 320,
           ...(/^gemini-2\.5/.test(targetModel) && { thinkingConfig: { thinkingBudget: 0 } }),
         },
       });
@@ -337,7 +342,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       markBriefingShownToday();
       setCachedBriefing(text);
       setMessage(text);
-      startTyping(text);
+      startTyping(text, BRIEFING_DISMISS_MS);
     } catch (err) {
       console.warn('Daily briefing generation failed, using fallback:', err);
       clearTimeout(timeoutId);
@@ -345,7 +350,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       markBriefingShownToday();
       setCachedBriefing(fallback);
       setMessage(fallback);
-      startTyping(fallback); // smooth flow: type the fallback instead of closing
+      startTyping(fallback, BRIEFING_DISMISS_MS); // smooth flow: type the fallback instead of closing
     }
   }, [user?.id, profile, hasKey, model, startTyping]);
 

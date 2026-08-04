@@ -68,10 +68,12 @@ export function buildFallbackBriefing(name: string, workouts: any[], whoop: any)
   const age: Record<string, number> = {};
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  let sessions7 = 0;
   for (const w of workouts || []) {
     if (!w?.date) continue;
     const d = new Date(`${w.date}T00:00:00`);
     const days = Math.round((today.getTime() - d.getTime()) / 86_400_000);
+    if (days >= 0 && days <= 6) sessions7 += 1;
     for (const mg of (w.muscle_groups || [])) {
       const k = String(mg);
       if (age[k] == null || days < age[k]) age[k] = days;
@@ -81,17 +83,21 @@ export function buildFallbackBriefing(name: string, workouts: any[], whoop: any)
   const dueLine = mostRested
     ? `${mostRested[0].charAt(0).toUpperCase() + mostRested[0].slice(1)} is your most rested — good day to train it.`
     : 'Log a session today and I’ll tailor tomorrow’s plan.';
+  const weekLine = sessions7 > 0 ? ` You've trained ${sessions7} time${sessions7 === 1 ? '' : 's'} in the last 7 days.` : '';
 
-  return `Morning, ${name}. ${recLine} ${dueLine}`.replace(/\s+/g, ' ').trim();
+  return `Morning, ${name}. ${recLine} ${dueLine}${weekLine}`.replace(/\s+/g, ' ').trim();
 }
 
 // User turn for the briefing. The heavy context (workouts, WHOOP, PRs, …) rides
 // in the system prompt (buildSystemPrompt 'insight'); this just says what shape
 // of answer we want.
 export function buildBriefingPrompt(name: string, feeling: string | null): string {
-  return `Write ${name}'s daily coaching line for today, speaking AS their personal trainer — warm, direct, second person ("you"). MAX 2 short sentences (aim ~30 words). No greeting, no markdown, no lists. Use ONLY the system-context data; never invent numbers.
+  return `Write ${name}'s daily coaching briefing for today, speaking AS their personal trainer — warm, direct, second person ("you"). 3 short sentences (aim ~55 words). No greeting header, no markdown, no lists. Use ONLY the system-context data; never invent numbers.
 
-Say the ONE thing that matters most today, chosen from: today's readiness (WHOOP recovery/load), the muscle group most due to train (skip anything trained today/yesterday) with 1–2 concrete exercises, or a specific PR/plateau with its number.
-${feeling ? `They feel "${feeling}" today — reflect it.` : ''}
-If there's barely any data, give a one-line nudge to log today's session.`;
+Cover, tightly:
+1) Today's readiness — one line from WHOOP recovery/load (cite the recovery % or ACWR if present).
+2) What to train today — the muscle group most due (skip anything trained today/yesterday), with 2 concrete exercises and sets×reps.
+3) One number to chase — a PR to beat or a plateau to break, with the actual figure.
+${feeling ? `They feel "${feeling}" today — reflect it in the call.` : ''}
+If there's barely any data, give a short two-line nudge to log today's session instead.`;
 }
