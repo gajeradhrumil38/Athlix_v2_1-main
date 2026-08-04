@@ -15,6 +15,19 @@ import {
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const FEELINGS = ['Fresh', 'Good', 'Sore', 'Tired'] as const;
 
+// idle → nothing yet; analyzing → generating (thinking dots); typing → the
+// coach "writes" the note character by character; done → static.
+type Phase = 'idle' | 'analyzing' | 'typing' | 'done';
+
+const COACH_NOTE_CSS = `
+@keyframes cn-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+.cn-cursor { display:inline-block; width:2px; height:0.95em; margin-left:2px; background:var(--accent); vertical-align:-2px; border-radius:1px; animation:cn-blink 0.85s steps(1,end) infinite; }
+@keyframes cn-dot { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+.cn-dots i { font-style:normal; animation:cn-dot 1.2s infinite; }
+.cn-dots i:nth-child(2){ animation-delay:0.2s; }
+.cn-dots i:nth-child(3){ animation-delay:0.4s; }
+`;
+
 const greetingWord = () => {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
@@ -34,14 +47,25 @@ export const CoachNote: React.FC = () => {
   const { user, profile } = useAuth();
   const { hasKey, model } = useAiCoachKey();
   const [text, setText] = useState<string | null>(() => getCachedBriefing()?.text ?? null);
-  const [loading, setLoading] = useState(false);
+  const [typed, setTyped] = useState<string>(() => getCachedBriefing()?.text ?? '');
+  // Cached note = already "said" → show it whole (done). No cache = it'll be
+  // freshly written, so it types in.
+  const [phase, setPhase] = useState<Phase>(() => (getCachedBriefing()?.text ? 'done' : 'idle'));
   const [feeling, setFeeling] = useState<string | null>(() => getTodayFeeling());
   const genRef = useRef(0);
+
+  useEffect(() => {
+    if (document.getElementById('coach-note-css')) return;
+    const el = document.createElement('style');
+    el.id = 'coach-note-css';
+    el.textContent = COACH_NOTE_CSS;
+    document.head.appendChild(el);
+  }, []);
 
   const generate = useCallback(async () => {
     if (!user?.id || !hasKey) return;
     const myGen = ++genRef.current;
-    setLoading(true);
+    setPhase('analyzing');
     try {
       const { start, end } = whoopWindowRange(28); // 4 weeks → real load/cardiac metrics
       const [wRes, pRes, whoopRes, fRes] = await Promise.allSettled([
@@ -78,10 +102,24 @@ export const CoachNote: React.FC = () => {
       const parts: Array<{ text?: string; thought?: boolean }> = data?.candidates?.[0]?.content?.parts || [];
       const out = parts.filter((p) => !p.thought).map((p) => p.text).join('').trim().replace(/\*\*/g, '');
       if (myGen !== genRef.current) return;
-      if (out) { setText(out); setCachedBriefing(out); }
-    } catch { /* keep any cached text */ }
-    finally { if (myGen === genRef.current) setLoading(false); }
+      if (out) { setText(out); setCachedBriefing(out); setTyped(''); setPhase('typing'); }
+      else { setPhase('done'); } // empty result — fall back to any existing text or hide
+    } catch {
+      if (myGen === genRef.current) setPhase('done');
+    }
   }, [user?.id, profile, hasKey, model]);
+
+  // Typewriter: reveal the freshly-written note character by character.
+  useEffect(() => {
+    if (phase !== 'typing' || !text) return;
+    let i = 0;
+    const id = window.setInterval(() => {
+      i += 2; // ~2 chars/tick → a natural, brisk "writing" pace
+      setTyped(text.slice(0, i));
+      if (i >= text.length) { window.clearInterval(id); setTyped(text); setPhase('done'); }
+    }, 16);
+    return () => window.clearInterval(id);
+  }, [phase, text]);
 
   useEffect(() => {
     if (getCachedBriefing()?.text) return; // already have today's — instant, no network
@@ -92,29 +130,34 @@ export const CoachNote: React.FC = () => {
   const openChat = () => window.dispatchEvent(new CustomEvent('athlix:open-ai'));
 
   if (!hasKey) return null;
-  if (!text && !loading) return null;
+  // Show while thinking or once there's a note; hide if a generation produced
+  // nothing and there's no cached note.
+  if (phase !== 'analyzing' && !text) return null;
 
   const name = profile?.full_name?.split(' ')[0] || 'there';
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-elevated) 100%)', border: '1px solid var(--border)' }}>
+    <div className="rounded-2xl overflow-hidden animate-card-enter" style={{ background: 'linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-elevated) 100%)', border: '1px solid var(--border)' }}>
       <button onClick={openChat} className="w-full text-left px-4 pt-4 pb-3 active:opacity-80 transition-opacity">
         <div className="flex items-center gap-2.5 mb-2.5">
           <CoachAvatar />
           <div>
             <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{greetingWord()}, {name}</p>
-            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>Coach&apos;s note</p>
+            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+              {phase === 'analyzing' ? 'Coach is thinking' : phase === 'typing' ? 'Coach is writing' : "Coach's note"}
+            </p>
           </div>
         </div>
 
-        {text ? (
-          <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>{text}</p>
+        {phase === 'analyzing' ? (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Reading your recovery, volume &amp; plan<span className="cn-dots"><i>.</i><i>.</i><i>.</i></span>
+          </p>
         ) : (
-          <div className="space-y-1.5">
-            <div className="h-3 rounded animate-pulse" style={{ background: 'var(--bg-elevated)', width: '92%' }} />
-            <div className="h-3 rounded animate-pulse" style={{ background: 'var(--bg-elevated)', width: '80%' }} />
-            <div className="h-3 rounded animate-pulse" style={{ background: 'var(--bg-elevated)', width: '60%' }} />
-          </div>
+          <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+            {phase === 'typing' ? typed : text}
+            {phase === 'typing' && <span className="cn-cursor" />}
+          </p>
         )}
       </button>
 
