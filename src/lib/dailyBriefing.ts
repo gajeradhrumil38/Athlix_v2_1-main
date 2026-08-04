@@ -8,8 +8,19 @@ import { format } from 'date-fns';
 
 const CACHE_KEY = 'athlix:coach_note';
 const FEELING_KEY = 'athlix:coach_feeling';
+const SHOWN_KEY = 'athlix:coach_note_shown';
 
 export const briefingToday = (): string => format(new Date(), 'yyyy-MM-dd');
+
+// "Was the briefing pill surfaced yet today?" — separate from whether the TEXT
+// is cached, so a note that got generated/cached without being shown (or by an
+// older code path) still surfaces once. Marked only on a successful show.
+export function briefingShownToday(): boolean {
+  try { return localStorage.getItem(SHOWN_KEY) === briefingToday(); } catch { return false; }
+}
+export function markBriefingShownToday() {
+  try { localStorage.setItem(SHOWN_KEY, briefingToday()); } catch { /* ignore */ }
+}
 
 export interface CachedBriefing { date: string; text: string }
 

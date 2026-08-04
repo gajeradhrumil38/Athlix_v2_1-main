@@ -13,7 +13,7 @@ import { getFoodScans } from '../../lib/foodData';
 import { buildSystemPrompt, parseSkincareStats, type WorkoutWithExercises } from '../../lib/aiCoach';
 import type { WorkoutComparison } from '../../lib/supabaseData';
 import { useAiCoachKey } from '../../hooks/useAiCoachKey';
-import { buildBriefingPrompt, getCachedBriefing, setCachedBriefing, getTodayFeeling } from '../../lib/dailyBriefing';
+import { buildBriefingPrompt, setCachedBriefing, getTodayFeeling, briefingShownToday, markBriefingShownToday } from '../../lib/dailyBriefing';
 
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
@@ -324,6 +324,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
       clearTimeout(timeoutId);
       if (myRequestId !== requestIdRef.current) return;
+      markBriefingShownToday(); // only on success — a failure retries next open
       setCachedBriefing(text);
       setMessage(text);
       startTyping(text);
@@ -338,7 +339,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
   useEffect(() => {
     if (briefingTriedRef.current) return;
     if (!hasKey || !user?.id || isImmersiveRoute) return;
-    if (getCachedBriefing()) { briefingTriedRef.current = true; return; } // already shown today
+    if (briefingShownToday()) { briefingTriedRef.current = true; return; } // already surfaced today
     briefingTriedRef.current = true;
     // Small delay so it "comes out" a beat after the app settles, not on top of the loading screen.
     const t = setTimeout(() => { void runBriefing(); }, 1600);
