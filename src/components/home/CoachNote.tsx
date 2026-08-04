@@ -109,16 +109,28 @@ export const CoachNote: React.FC = () => {
     }
   }, [user?.id, profile, hasKey, model]);
 
-  // Typewriter: reveal the freshly-written note character by character.
+  // Typewriter — TIME-based via requestAnimationFrame, not a fixed per-tick
+  // char count. Frame-rate independent, so it reads smoothly (no pairs-of-
+  // chars stutter), and the number shown is derived from elapsed time each
+  // frame (never drifts). Honours reduced-motion by showing the note at once.
   useEffect(() => {
     if (phase !== 'typing' || !text) return;
-    let i = 0;
-    const id = window.setInterval(() => {
-      i += 2; // ~2 chars/tick → a natural, brisk "writing" pace
-      setTyped(text.slice(0, i));
-      if (i >= text.length) { window.clearInterval(id); setTyped(text); setPhase('done'); }
-    }, 16);
-    return () => window.clearInterval(id);
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setTyped(text);
+      setPhase('done');
+      return;
+    }
+    const CHARS_PER_SEC = 62; // brisk but readable
+    const start = performance.now();
+    let raf = 0;
+    const step = (now: number) => {
+      const n = Math.min(text.length, Math.floor(((now - start) / 1000) * CHARS_PER_SEC));
+      setTyped(text.slice(0, n));
+      if (n >= text.length) { setPhase('done'); return; }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
   }, [phase, text]);
 
   useEffect(() => {
@@ -155,8 +167,18 @@ export const CoachNote: React.FC = () => {
           </p>
         ) : (
           <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
-            {phase === 'typing' ? typed : text}
-            {phase === 'typing' && <span className="cn-cursor" />}
+            {phase === 'typing' ? (
+              <>
+                <span>{typed}</span>
+                <span className="cn-cursor" />
+                {/* Ghost the not-yet-typed remainder so the paragraph reserves
+                    its full size up front — the layout never reflows and words/
+                    punctuation never jump lines while it types. */}
+                <span aria-hidden="true" style={{ opacity: 0 }}>{(text ?? '').slice(typed.length)}</span>
+              </>
+            ) : (
+              text
+            )}
           </p>
         )}
       </button>
