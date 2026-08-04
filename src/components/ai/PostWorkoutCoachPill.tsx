@@ -13,15 +13,21 @@ import { getFoodScans } from '../../lib/foodData';
 import { buildSystemPrompt, parseSkincareStats, type WorkoutWithExercises } from '../../lib/aiCoach';
 import type { WorkoutComparison } from '../../lib/supabaseData';
 import { useAiCoachKey } from '../../hooks/useAiCoachKey';
-import { buildBriefingPrompt, buildFallbackBriefing, setCachedBriefing, getTodayFeeling, briefingShownToday, markBriefingShownToday } from '../../lib/dailyBriefing';
+import { buildBriefingPrompt, buildFallbackBriefing, getCachedBriefing, setCachedBriefing, getTodayFeeling } from '../../lib/dailyBriefing';
+import { COACH_CONTEXTS, contextFiredToday, markContextFired } from '../../lib/contextCoach';
 
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
 const COOLDOWN_MS = 60_000;
 const COLLAPSED_AUTO_DISMISS_MS = 30_000;
-// The daily briefing returns to the idle FAB faster than the post-workout
-// insight — it's a passing "here's your day", not something to dwell on.
+// The daily briefing / contextual notes return to the idle FAB faster than the
+// post-workout insight — they're passing "here's your day / here's this page",
+// not something to dwell on.
 const BRIEFING_DISMISS_MS = 7_000;
+const CONTEXT_DISMISS_MS = 8_000;
+// Don't fire another contextual pill within this window — browsing around fast
+// shouldn't stack pills.
+const CONTEXT_COOLDOWN_MS = 60_000;
 const TYPE_CHAR_MS = 24;
 
 // Vertical anchor shared by the FAB / bar / drawer so switching between them
@@ -277,20 +283,22 @@ export const PostWorkoutCoachPill: React.FC = () => {
     return () => window.removeEventListener('athlix:workout-finished', handler);
   }, [runInsight]);
 
-  // ── Daily briefing ─────────────────────────────────────────────────────────
-  // The proactive "Coach's Note" now rides the SAME pill as the post-workout
-  // insight (analyzing → typed reply → collapsed bar you can tap to reply) —
-  // there's no separate home-page card. Reuses buildBriefingPrompt + the
-  // per-day cache, and a 4-week WHOOP window so the load/cardiac metrics in the
-  // system prompt are real.
-  const runBriefing = useCallback(async () => {
+  // ── Proactive coach (daily briefing + contextual page notes) ────────────────
+  // Both ride the SAME pill as the post-workout insight (analyzing → typed
+  // reply → collapsed bar you can tap to reply). deliverCoachMessage does the
+  // shared work: gather full context, generate for a given user turn, always
+  // resolve to a message (a deterministic fallback if the model call fails).
+  const deliverCoachMessage = useCallback(async (
+    userTurn: string,
+    dismissMs: number,
+    onShown?: (text: string) => void,
+  ) => {
     if (!user?.id || !hasKey) return;
     const myRequestId = ++requestIdRef.current;
     setView('analyzing');
 
-    // 1) Gather context FIRST, WITHOUT the abort timer. The 28-day WHOOP fetch
-    //    can be slow on a cold cache; letting it eat the generate's timeout was
-    //    aborting the request and dropping the pill straight back to closed.
+    // Gather context FIRST, untimed — the 28-day WHOOP fetch can be slow on a
+    // cold cache and would otherwise eat the generate's abort budget.
     const { start, end } = whoopWindowRange(28);
     const [wRes, pRes, whoopRes, fRes] = await Promise.allSettled([
       getWorkouts(user.id, { limit: 25, includeExercises: true }),
@@ -304,18 +312,12 @@ export const PostWorkoutCoachPill: React.FC = () => {
     const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
     const food = (fRes.status === 'fulfilled' ? fRes.value : []) as FoodScan[];
     const firstName = (profile?.full_name || 'there').split(' ')[0];
-
-    // Deterministic fallback so the flow ALWAYS ends in a message, never a
-    // silent close, even if the model call fails or returns empty.
     const fallback = buildFallbackBriefing(firstName, workouts, whoopData);
 
-    // 2) Only the generate is under the abort timer now.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
     try {
       const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight');
-      const userTurn = buildBriefingPrompt(firstName, getTodayFeeling());
-
       const buildBody = (targetModel: string) => ({
         model: targetModel,
         stream: false,
@@ -335,35 +337,74 @@ export const PostWorkoutCoachPill: React.FC = () => {
       const data = await res.json();
       const parts: Array<{ text?: string; thought?: boolean }> = data?.candidates?.[0]?.content?.parts || [];
       const text = parts.filter((p) => !p.thought).map((p) => p.text).join('').trim().replace(/\*\*/g, '');
-      if (!text) throw new Error('Empty briefing response');
+      if (!text) throw new Error('Empty response');
 
       clearTimeout(timeoutId);
       if (myRequestId !== requestIdRef.current) return;
-      markBriefingShownToday();
-      setCachedBriefing(text);
+      onShown?.(text);
       setMessage(text);
-      startTyping(text, BRIEFING_DISMISS_MS);
+      startTyping(text, dismissMs);
     } catch (err) {
-      console.warn('Daily briefing generation failed, using fallback:', err);
+      console.warn('Coach message failed, using fallback:', err);
       clearTimeout(timeoutId);
       if (myRequestId !== requestIdRef.current) return;
-      markBriefingShownToday();
-      setCachedBriefing(fallback);
+      onShown?.(fallback);
       setMessage(fallback);
-      startTyping(fallback, BRIEFING_DISMISS_MS); // smooth flow: type the fallback instead of closing
+      startTyping(fallback, dismissMs); // smooth flow: never close silently
     }
   }, [user?.id, profile, hasKey, model, startTyping]);
 
+  // Live mirror of `view` so the contextual effect can check "is a pill already
+  // up?" without re-running every time the view morphs.
+  const viewRef = useRef(view);
+  useEffect(() => { viewRef.current = view; }, [view]);
+  const lastPillFiredRef = useRef(0);
+
+  // Daily briefing — surfaces on EVERY app open/refresh (once per mount),
+  // shortly after the app settles. Uses the per-period cache: instant + free
+  // if this time-of-day's note already exists, otherwise generates it. So it
+  // always appears, is time-appropriate, but only spends a request a few times
+  // a day.
   const briefingTriedRef = useRef(false);
   useEffect(() => {
     if (briefingTriedRef.current) return;
     if (!hasKey || !user?.id || isImmersiveRoute) return;
-    if (briefingShownToday()) { briefingTriedRef.current = true; return; } // already surfaced today
     briefingTriedRef.current = true;
-    // Small delay so it "comes out" a beat after the app settles, not on top of the loading screen.
-    const t = setTimeout(() => { void runBriefing(); }, 1600);
+    const cached = getCachedBriefing();
+    const t = setTimeout(() => {
+      if (viewRef.current !== 'closed') return; // a workout insight is already up
+      lastPillFiredRef.current = Date.now();
+      if (cached?.text) {
+        setMessage(cached.text);
+        startTyping(cached.text, BRIEFING_DISMISS_MS);
+      } else {
+        void deliverCoachMessage(
+          buildBriefingPrompt((profile?.full_name || 'there').split(' ')[0], getTodayFeeling()),
+          BRIEFING_DISMISS_MS,
+          (text) => setCachedBriefing(text),
+        );
+      }
+    }, 1600);
     return () => clearTimeout(t);
-  }, [hasKey, user?.id, isImmersiveRoute, runBriefing]);
+  }, [hasKey, user?.id, isImmersiveRoute, profile, deliverCoachMessage, startTyping]);
+
+  // Contextual notes — landing on a data page proactively pops the relevant
+  // "how's the past, what's next" note (once per context per day, cooldown-
+  // throttled, never over an already-open pill).
+  useEffect(() => {
+    if (!hasKey || !user?.id || isImmersiveRoute) return;
+    if (viewRef.current !== 'closed') return;
+    const ctx = COACH_CONTEXTS.find((c) => c.matches(location.pathname));
+    if (!ctx || contextFiredToday(ctx.id)) return;
+    if (Date.now() - lastPillFiredRef.current < CONTEXT_COOLDOWN_MS) return;
+    const t = setTimeout(() => {
+      if (viewRef.current !== 'closed') return;
+      lastPillFiredRef.current = Date.now();
+      markContextFired(ctx.id);
+      void deliverCoachMessage(ctx.userTurn, CONTEXT_DISMISS_MS);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [location.pathname, hasKey, user?.id, isImmersiveRoute, deliverCoachMessage]);
 
   useEffect(() => () => {
     clearDismissTimer();

@@ -12,6 +12,11 @@ const SHOWN_KEY = 'athlix:coach_note_shown';
 
 export const briefingToday = (): string => format(new Date(), 'yyyy-MM-dd');
 
+export const periodOfDay = (): 'morning' | 'afternoon' | 'evening' => {
+  const h = new Date().getHours();
+  return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+};
+
 // "Was the briefing pill surfaced yet today?" — separate from whether the TEXT
 // is cached, so a note that got generated/cached without being shown (or by an
 // older code path) still surfaces once. Marked only on a successful show.
@@ -22,19 +27,22 @@ export function markBriefingShownToday() {
   try { localStorage.setItem(SHOWN_KEY, briefingToday()); } catch { /* ignore */ }
 }
 
-export interface CachedBriefing { date: string; text: string }
+export interface CachedBriefing { date: string; period: string; text: string }
 
+// Cache is keyed by date AND period (morning/afternoon/evening) so the note
+// stays valid for the whole period — every app open within it is instant and
+// free — but a new period gets a fresh, time-appropriate briefing.
 export function getCachedBriefing(): CachedBriefing | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as CachedBriefing;
-    return p?.date === briefingToday() && p.text ? p : null;
+    return p?.date === briefingToday() && p.period === periodOfDay() && p.text ? p : null;
   } catch { return null; }
 }
 
 export function setCachedBriefing(text: string) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ date: briefingToday(), text })); } catch { /* ignore */ }
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ date: briefingToday(), period: periodOfDay(), text })); } catch { /* ignore */ }
 }
 
 export function invalidateBriefing() {
@@ -85,14 +93,20 @@ export function buildFallbackBriefing(name: string, workouts: any[], whoop: any)
     : 'Log a session today and I’ll tailor tomorrow’s plan.';
   const weekLine = sessions7 > 0 ? ` You've trained ${sessions7} time${sessions7 === 1 ? '' : 's'} in the last 7 days.` : '';
 
-  return `Morning, ${name}. ${recLine} ${dueLine}${weekLine}`.replace(/\s+/g, ' ').trim();
+  const p = periodOfDay();
+  const hi = p === 'morning' ? 'Morning' : p === 'afternoon' ? 'Afternoon' : 'Evening';
+  return `${hi}, ${name}. ${recLine} ${dueLine}${weekLine}`.replace(/\s+/g, ' ').trim();
 }
 
 // User turn for the briefing. The heavy context (workouts, WHOOP, PRs, …) rides
 // in the system prompt (buildSystemPrompt 'insight'); this just says what shape
 // of answer we want.
 export function buildBriefingPrompt(name: string, feeling: string | null): string {
-  return `Write ${name}'s daily coaching briefing for today, speaking AS their personal trainer — warm, direct, second person ("you"). 3 short sentences (aim ~55 words). No greeting header, no markdown, no lists. Use ONLY the system-context data; never invent numbers.
+  const period = periodOfDay();
+  const periodHint = period === 'morning' ? 'It\'s morning — set up their day.'
+    : period === 'afternoon' ? 'It\'s the afternoon — a mid-day check-in; note if they\'ve trained yet.'
+    : 'It\'s evening — reflect on today and point at tomorrow.';
+  return `Write ${name}'s ${period} coaching briefing, speaking AS their personal trainer — warm, direct, second person ("you"). ${periodHint} 3 short sentences (aim ~55 words). No greeting header, no markdown, no lists. Use ONLY the system-context data; never invent numbers.
 
 Cover, tightly:
 1) Today's readiness — one line from WHOOP recovery/load (cite the recovery % or ACWR if present).
