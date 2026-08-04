@@ -35,7 +35,7 @@ const TYPE_CHAR_MS = 24;
 const DOCK_BOTTOM = 'calc(env(safe-area-inset-bottom) + 88px)';
 
 const KEYFRAMES = `
-@keyframes pwcp-fabPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(90,110,255,0.35); } 50% { box-shadow: 0 0 0 8px rgba(90,110,255,0); } }
+@keyframes pwcp-fabGlow { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.35), 0 0 0 0 rgba(124,108,245,0); } 50% { box-shadow: 0 8px 22px rgba(0,0,0,0.4), 0 0 16px 2px rgba(124,108,245,0.35); } }
 @keyframes pwcp-sparklePulse { 0%,100% { opacity:0.85; transform: scale(1); } 50% { opacity:1; transform: scale(1.08); } }
 @keyframes pwcp-borderChase { to { transform: rotate(360deg); } }
 @keyframes pwcp-cursorBlink { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
@@ -433,6 +433,16 @@ export const PostWorkoutCoachPill: React.FC = () => {
     setView('closed');
   };
 
+  // A page can hide the coach pill while it shows its OWN full-screen overlay
+  // (e.g. Run History's run-detail) so the FAB doesn't float on top of it —
+  // dispatch `athlix:coach-overlay` with { open }.
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  useEffect(() => {
+    const h = (e: Event) => setOverlayOpen(!!(e as CustomEvent<{ open?: boolean }>).detail?.open);
+    window.addEventListener('athlix:coach-overlay', h);
+    return () => window.removeEventListener('athlix:coach-overlay', h);
+  }, []);
+
   const [drawerInput, setDrawerInput] = useState('');
   const handOffToChat = (seedText: string) => {
     setView('closed');
@@ -443,6 +453,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
   if (typeof document === 'undefined') return null;
   if (view === 'closed' && isImmersiveRoute) return null;
+  if (overlayOpen) return null; // a page has a full-screen overlay up — stay out of its way
 
   const firstName = (profile?.full_name || 'there').split(' ')[0];
   const displayText = view === 'analyzing' ? 'Analyzing…' : view === 'typing' ? typedText : message;
@@ -452,24 +463,33 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
   return createPortal(
     <>
-      {/* Idle FAB — mobile only, matches the AI-entry-point button it replaces (desktop keeps the sidebar link) */}
-      {view === 'closed' && !isImmersiveRoute && (
-        <button
-          type="button"
-          onClick={openFab}
-          aria-label="AI Coach"
-          className="md:hidden fixed z-[110]"
-          style={{
-            ...aiBadgeStyle(56, 16),
-            right: 20,
-            bottom: DOCK_BOTTOM,
-            cursor: 'pointer',
-            animation: 'pwcp-fabPulse 2.4s ease-in-out infinite',
-          }}
-        >
-          <Sparkles className="w-6 h-6" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
-        </button>
-      )}
+      {/* Idle FAB — mobile only (desktop keeps the sidebar link). Springs in/out
+          smoothly; a soft, slow breathing glow instead of the hard pulse. */}
+      <AnimatePresence>
+        {view === 'closed' && !isImmersiveRoute && (
+          <motion.button
+            key="fab"
+            type="button"
+            onClick={openFab}
+            aria-label="AI Coach"
+            className="md:hidden fixed z-[110]"
+            initial={{ opacity: 0, scale: 0.5, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: 12 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 24 }}
+            whileTap={{ scale: 0.88 }}
+            style={{
+              ...aiBadgeStyle(56, 16),
+              right: 20,
+              bottom: DOCK_BOTTOM,
+              cursor: 'pointer',
+              animation: 'pwcp-fabGlow 3.2s ease-in-out infinite',
+            }}
+          >
+            <Sparkles className="w-6 h-6" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Analyzing → typing → collapsed: one persistent bar that morphs continuously */}
       <AnimatePresence>
@@ -505,23 +525,31 @@ export const PostWorkoutCoachPill: React.FC = () => {
           >
             <span style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
               {barChasing && (
+                // Rotating gradient masked to a rounded-square RING so the light
+                // chases the icon's actual (rounded) border instead of sweeping a
+                // rectangle. The mask punches out the centre, leaving a 2px ring
+                // that follows border-radius 11 exactly.
                 <div
                   style={{
                     position: 'absolute',
                     inset: 0,
-                    borderRadius: 10,
+                    borderRadius: 11,
                     pointerEvents: 'none',
-                    background: 'conic-gradient(from 0deg, transparent 0deg, #7c6cf5 90deg, #3f6df0 180deg, transparent 280deg, transparent 360deg)',
+                    background: 'conic-gradient(from 0deg, transparent 0deg, #7c6cf5 70deg, #3f6df0 150deg, transparent 230deg, transparent 360deg)',
+                    WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+                    WebkitMaskComposite: 'xor',
+                    mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+                    maskComposite: 'exclude',
+                    padding: 2,
                     animation: 'pwcp-borderChase 1.6s linear infinite',
                   }}
                 />
               )}
               <span
                 style={{
-                  ...aiBadgeStyle(26, 8),
+                  ...aiBadgeStyle(26, 9),
                   position: 'absolute',
                   inset: 3,
-                  boxShadow: '0 0 0 2px #161a20',
                   animation: view === 'analyzing' ? 'pwcp-sparklePulse 1.1s ease-in-out infinite' : 'none',
                 }}
               >

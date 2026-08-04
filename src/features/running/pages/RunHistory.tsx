@@ -528,6 +528,14 @@ export const RunHistory: React.FC = () => {
   const distanceUnit = useDistanceUnit();
   const [whoopWorkouts, setWhoopWorkouts] = useState<WhoopWorkout[]>([]);
 
+  // Hide the floating AI coach pill while one of this page's own full-screen
+  // overlays is up, so it doesn't float on top of the run detail / calendar.
+  useEffect(() => {
+    const overlayUp = !!selected || !!confirmDelete || showCalendar;
+    window.dispatchEvent(new CustomEvent('athlix:coach-overlay', { detail: { open: overlayUp } }));
+    return () => { window.dispatchEvent(new CustomEvent('athlix:coach-overlay', { detail: { open: false } })); };
+  }, [selected, confirmDelete, showCalendar]);
+
   // Load cloud runs once on mount
   useEffect(() => {
     if (!user) return;
