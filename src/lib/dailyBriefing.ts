@@ -48,12 +48,9 @@ export function setTodayFeeling(feeling: string) {
 // in the system prompt (buildSystemPrompt 'insight'); this just says what shape
 // of answer we want.
 export function buildBriefingPrompt(name: string, feeling: string | null): string {
-  return `Write ${name}'s daily coaching briefing for today, speaking AS their personal trainer — warm, direct, second person ("you"). 2 to 4 flowing sentences, no greeting header, no markdown, no bullet lists. Use ONLY the data in the system context; never invent numbers.
+  return `Write ${name}'s daily coaching line for today, speaking AS their personal trainer — warm, direct, second person ("you"). MAX 2 short sentences (aim ~30 words). No greeting, no markdown, no lists. Use ONLY the system-context data; never invent numbers.
 
-Cover, in order:
-1) A one-line readiness read from WHOOP recovery/load if present (e.g. "recovery's low today, keep it easy").
-2) What to train TODAY: pick the muscle group most in need — longest since trained, or under its weekly volume target — and skip anything trained today or yesterday (⛔). Name 2–3 concrete exercises with sets×reps.
-3) One specific progression cue: a PR to chase or a plateau to break, citing the actual number.
-${feeling ? `The athlete says they feel "${feeling}" today — weave that into the call (e.g. dial it back if sore/tired, push if fresh).` : ''}
-If there's barely any logged data, skip the plan and give a short encouraging nudge to log today's session instead.`;
+Say the ONE thing that matters most today, chosen from: today's readiness (WHOOP recovery/load), the muscle group most due to train (skip anything trained today/yesterday) with 1–2 concrete exercises, or a specific PR/plateau with its number.
+${feeling ? `They feel "${feeling}" today — reflect it.` : ''}
+If there's barely any data, give a one-line nudge to log today's session.`;
 }

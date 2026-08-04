@@ -33,9 +33,10 @@ const greetingWord = () => {
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 };
 
+// Matches the coach-chat message avatar (gradient tile + lime sparkle).
 const CoachAvatar = () => (
-  <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#7c3aed,#2563eb)' }}>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8FF00" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" /></svg>
+  <div style={{ width: 26, height: 26, borderRadius: 8, marginTop: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#7c3aed,#2563eb)' }}>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#C8FF00" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" /></svg>
   </div>
 );
 
@@ -89,7 +90,7 @@ export const CoachNote: React.FC = () => {
         contents: [{ role: 'user', parts: [{ text: userTurn }] }],
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 512,
+          maxOutputTokens: 200,
           ...(/^gemini-2\.5/.test(m) && { thinkingConfig: { thinkingBudget: 0 } }),
         },
       });
@@ -146,45 +147,51 @@ export const CoachNote: React.FC = () => {
   // nothing and there's no cached note.
   if (phase !== 'analyzing' && !text) return null;
 
-  const name = profile?.full_name?.split(' ')[0] || 'there';
+  // Label above the row (the coach chat has no per-message header; a small
+  // caption gives context without cluttering the bubble).
+  const label = phase === 'analyzing' ? 'Coach is thinking' : phase === 'typing' ? 'Coach is writing' : `Coach's note · ${greetingWord()}`;
 
   return (
-    <div className="rounded-2xl overflow-hidden animate-card-enter" style={{ background: 'linear-gradient(160deg, var(--bg-surface) 0%, var(--bg-elevated) 100%)', border: '1px solid var(--border)' }}>
-      <button onClick={openChat} className="w-full text-left px-4 pt-4 pb-3 active:opacity-80 transition-opacity">
-        <div className="flex items-center gap-2.5 mb-2.5">
-          <CoachAvatar />
-          <div>
-            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{greetingWord()}, {name}</p>
-            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-              {phase === 'analyzing' ? 'Coach is thinking' : phase === 'typing' ? 'Coach is writing' : "Coach's note"}
-            </p>
-          </div>
-        </div>
+    <div className="animate-card-enter px-1">
+      <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '0 0 6px 4px' }}>{label}</p>
 
-        {phase === 'analyzing' ? (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Reading your recovery, volume &amp; plan<span className="cn-dots"><i>.</i><i>.</i><i>.</i></span>
-          </p>
-        ) : (
-          <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
-            {phase === 'typing' ? (
-              <>
-                <span>{typed}</span>
-                <span className="cn-cursor" />
-                {/* Ghost the not-yet-typed remainder so the paragraph reserves
-                    its full size up front — the layout never reflows and words/
-                    punctuation never jump lines while it types. */}
-                <span aria-hidden="true" style={{ opacity: 0 }}>{(text ?? '').slice(typed.length)}</span>
-              </>
-            ) : (
-              text
-            )}
-          </p>
-        )}
+      {/* Avatar + speech bubble — same treatment as an AI-coach chat reply. */}
+      <button onClick={openChat} className="w-full text-left flex gap-2 active:opacity-80 transition-opacity">
+        <CoachAvatar />
+        <div
+          style={{
+            maxWidth: '92%',
+            padding: '10px 13px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: '14px 14px 14px 4px',
+            fontSize: 13.5,
+            lineHeight: 1.5,
+            color: 'var(--text-primary)',
+            wordBreak: 'break-word',
+          }}
+        >
+          {phase === 'analyzing' ? (
+            <span style={{ color: 'var(--text-muted)' }}>
+              Reading your recovery, volume &amp; plan<span className="cn-dots"><i>.</i><i>.</i><i>.</i></span>
+            </span>
+          ) : phase === 'typing' ? (
+            <>
+              <span>{typed}</span>
+              <span className="cn-cursor" />
+              {/* Ghost the untyped remainder so the bubble reserves its full
+                  size up front — no reflow / word-jump while it types. */}
+              <span aria-hidden="true" style={{ opacity: 0 }}>{(text ?? '').slice(typed.length)}</span>
+            </>
+          ) : (
+            text
+          )}
+        </div>
       </button>
 
-      {/* How are you feeling? — feeds the next briefing */}
-      <div className="px-4 pb-3.5 pt-1 flex items-center gap-1.5" style={{ borderTop: '1px solid var(--border)' }}>
+      {/* How are you feeling? — feeds the next briefing. Indented to line up
+          under the bubble (past the avatar column). */}
+      <div className="flex items-center gap-1.5 mt-2.5" style={{ paddingLeft: 34 }}>
         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', marginRight: 2 }}>Feeling</span>
         {FEELINGS.map((f) => {
           const active = feeling === f;
