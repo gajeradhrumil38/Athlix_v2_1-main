@@ -95,25 +95,37 @@ export function useAiCoachKey() {
         return;
       }
 
-      // One-time silent migration of a pre-server-proxy localStorage key.
-      if (!data) {
-        const legacyKey = localStorage.getItem(LEGACY_KEY_STORAGE)?.trim();
-        if (legacyKey) {
-          const legacyModel = localStorage.getItem(LEGACY_MODEL_STORAGE) || DEFAULT_MODEL;
-          const migrated = await save(legacyKey, legacyModel);
-          if (migrated.success) {
-            localStorage.removeItem(LEGACY_KEY_STORAGE);
-            localStorage.removeItem(LEGACY_MODEL_STORAGE);
-            return;
-          }
+      if (data) {
+        // Found — authoritative positive. Update state + cache.
+        const modelValue = (data.model as string | undefined) || DEFAULT_MODEL;
+        setHasKey(true);
+        setModel(modelValue);
+        writeConfirmed(true, modelValue);
+        return;
+      }
+
+      // No row found. Try the one-time migration of a legacy localStorage key.
+      const legacyKey = localStorage.getItem(LEGACY_KEY_STORAGE)?.trim();
+      if (legacyKey) {
+        const legacyModel = localStorage.getItem(LEGACY_MODEL_STORAGE) || DEFAULT_MODEL;
+        const migrated = await save(legacyKey, legacyModel);
+        if (migrated.success) {
+          localStorage.removeItem(LEGACY_KEY_STORAGE);
+          localStorage.removeItem(LEGACY_MODEL_STORAGE);
+          return;
         }
       }
 
-      // Authoritative — also corrects the cache (e.g. key removed elsewhere).
-      const modelValue = (data?.model as string | undefined) || DEFAULT_MODEL;
-      setHasKey(!!data);
-      setModel(modelValue);
-      writeConfirmed(!!data, modelValue);
+      // "Not found" does NOT downgrade a confirmed key. The cache is only ever
+      // set on a CONFIRMED save (so cache=true means the key really was saved),
+      // whereas this read can transiently miss (session mid-refresh, RLS timing
+      // in the iframe). Only remove() clears the cache. So a returning user who
+      // added a key is never re-prompted; a brand-new user (cache empty) still
+      // correctly sees the prompt.
+      const cached = readConfirmed();
+      setHasKey(cached);
+      const m = readConfirmedModel();
+      if (m) setModel(m);
     } catch {
       setHasKey(readConfirmed());
     } finally {
