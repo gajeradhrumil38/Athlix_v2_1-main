@@ -8,10 +8,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getWorkouts, getPersonalRecords } from '../../lib/supabaseData';
 import type { FoodScan } from '../../features/food/types';
 import { getRuns } from '../../features/running/utils/storage';
-import { whoopService } from '../../features/whoop/services/whoopService';
+import { whoopService, whoopWindowRange } from '../../features/whoop/services/whoopService';
+import { getFoodScans } from '../../lib/foodData';
 import { buildSystemPrompt, parseSkincareStats, type WorkoutWithExercises } from '../../lib/aiCoach';
 import type { WorkoutComparison } from '../../lib/supabaseData';
 import { useAiCoachKey } from '../../hooks/useAiCoachKey';
+import { buildBriefingPrompt, getCachedBriefing, setCachedBriefing, getTodayFeeling } from '../../lib/dailyBriefing';
 
 const FALLBACK_MODEL = 'gemini-1.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
@@ -269,6 +271,79 @@ export const PostWorkoutCoachPill: React.FC = () => {
     window.addEventListener('athlix:workout-finished', handler);
     return () => window.removeEventListener('athlix:workout-finished', handler);
   }, [runInsight]);
+
+  // ── Daily briefing ─────────────────────────────────────────────────────────
+  // The proactive "Coach's Note" now rides the SAME pill as the post-workout
+  // insight (analyzing → typed reply → collapsed bar you can tap to reply) —
+  // there's no separate home-page card. Reuses buildBriefingPrompt + the
+  // per-day cache, and a 4-week WHOOP window so the load/cardiac metrics in the
+  // system prompt are real.
+  const runBriefing = useCallback(async () => {
+    if (!user?.id || !hasKey) return;
+    const myRequestId = ++requestIdRef.current;
+    setView('analyzing');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
+    try {
+      const { start, end } = whoopWindowRange(28);
+      const [wRes, pRes, whoopRes, fRes] = await Promise.allSettled([
+        getWorkouts(user.id, { limit: 25, includeExercises: true }),
+        getPersonalRecords(user.id),
+        whoopService.fetchAll('month', start, end).catch(() => null),
+        getFoodScans(user.id).then((r) => r.scans).catch(() => [] as FoodScan[]),
+      ]);
+      const workouts = (wRes.status === 'fulfilled' ? wRes.value : []) as WorkoutWithExercises[];
+      const prs = pRes.status === 'fulfilled' ? pRes.value : [];
+      const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
+      const food = (fRes.status === 'fulfilled' ? fRes.value : []) as FoodScan[];
+
+      const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight');
+      const userTurn = buildBriefingPrompt((profile?.full_name || 'there').split(' ')[0], getTodayFeeling());
+
+      const buildBody = (targetModel: string) => ({
+        model: targetModel,
+        stream: false,
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userTurn }] }],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 200,
+          ...(/^gemini-2\.5/.test(targetModel) && { thinkingConfig: { thinkingBudget: 0 } }),
+        },
+      });
+
+      let res = await aiCoachFetch('/api/ai-coach/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildBody(model)), signal: controller.signal });
+      if (!res.ok) res = await aiCoachFetch('/api/ai-coach/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildBody(FALLBACK_MODEL)), signal: controller.signal });
+      if (!res.ok) throw new Error(`Gemini request failed (${res.status})`);
+
+      const data = await res.json();
+      const parts: Array<{ text?: string; thought?: boolean }> = data?.candidates?.[0]?.content?.parts || [];
+      const text = parts.filter((p) => !p.thought).map((p) => p.text).join('').trim().replace(/\*\*/g, '');
+      if (!text) throw new Error('Empty briefing response');
+
+      clearTimeout(timeoutId);
+      if (myRequestId !== requestIdRef.current) return;
+      setCachedBriefing(text);
+      setMessage(text);
+      startTyping(text);
+    } catch (err) {
+      console.warn('Daily briefing failed:', err);
+      clearTimeout(timeoutId);
+      if (myRequestId === requestIdRef.current) setView('closed'); // quietly back to idle
+    }
+  }, [user?.id, profile, hasKey, model, startTyping]);
+
+  const briefingTriedRef = useRef(false);
+  useEffect(() => {
+    if (briefingTriedRef.current) return;
+    if (!hasKey || !user?.id || isImmersiveRoute) return;
+    if (getCachedBriefing()) { briefingTriedRef.current = true; return; } // already shown today
+    briefingTriedRef.current = true;
+    // Small delay so it "comes out" a beat after the app settles, not on top of the loading screen.
+    const t = setTimeout(() => { void runBriefing(); }, 1600);
+    return () => clearTimeout(t);
+  }, [hasKey, user?.id, isImmersiveRoute, runBriefing]);
 
   useEffect(() => () => {
     clearDismissTimer();

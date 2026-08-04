@@ -7,7 +7,6 @@ import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isSameDay, is
 import { MuscleMap, MuscleData } from '../components/home/MuscleMap';
 import { WeeklyRing } from '../components/home/WeeklyRing';
 import { GoalEditSheet } from '../components/home/GoalEditSheet';
-import { CoachNote } from '../components/home/CoachNote';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDashboardLayout } from '../hooks/useDashboardLayout';
 import { getBodyWeightLogs, getCustomExerciseSlugMap, getPersonalRecords, getWorkouts } from '../lib/supabaseData';
@@ -912,11 +911,6 @@ export const Home: React.FC = () => {
             {WIDGET_COMPONENTS[id]}
           </React.Fragment>
         );
-      }
-      // Proactive coach briefing sits right under the date header — the first
-      // thing seen on opening the app ("here's your day").
-      if (id === 'date_navigator') {
-        rendered.push(<CoachNote key="coach_note" />);
       }
     }
     return rendered;
