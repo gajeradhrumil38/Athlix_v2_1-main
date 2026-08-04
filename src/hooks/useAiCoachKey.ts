@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { aiCoachFetch } from '../lib/aiCoachFetch';
+import { supabase } from '../lib/supabase';
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash';
 
@@ -66,25 +67,36 @@ export function useAiCoachKey() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await aiCoachFetch('/api/ai-coach/keys');
-
-      // Auth hiccup (401 / 5xx) — usually the session is still restoring on a
-      // fresh load. Don't wipe the prompt-state: trust the last confirmed
-      // answer so a stored key isn't wrongly reported as missing.
-      if (!res.ok) {
-        const confirmed = readConfirmed();
-        setHasKey(confirmed);
+      // Presence-check via the SPA's OWN Supabase session — the reliable one
+      // the whole app already runs on — NOT the Next.js /api/ai-coach/keys
+      // route. That route's cookie/Bearer auth races the iframe session
+      // injection on mount, so on reopen it intermittently 401'd and reported
+      // the stored key as missing, re-showing the "add key" prompt. Reading
+      // ai_coach_keys directly under RLS (only the `model` column — never the
+      // key itself) is authoritative and race-free.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Session not ready yet — don't clear the prompt-state; trust cache.
+        setHasKey(readConfirmed());
         const m = readConfirmedModel();
         if (m) setModel(m);
         return;
       }
 
-      const data = await res.json();
+      const { data, error } = await supabase
+        .from('ai_coach_keys')
+        .select('model')
+        .maybeSingle();
 
-      // One-time silent migration: a pre-existing localStorage key from
-      // before the server-side proxy gets pushed up and the local copy
-      // cleared, so the user never has to re-enter it.
-      if (!data.hasKey) {
+      if (error) {
+        setHasKey(readConfirmed());
+        const m = readConfirmedModel();
+        if (m) setModel(m);
+        return;
+      }
+
+      // One-time silent migration of a pre-server-proxy localStorage key.
+      if (!data) {
         const legacyKey = localStorage.getItem(LEGACY_KEY_STORAGE)?.trim();
         if (legacyKey) {
           const legacyModel = localStorage.getItem(LEGACY_MODEL_STORAGE) || DEFAULT_MODEL;
@@ -97,15 +109,13 @@ export function useAiCoachKey() {
         }
       }
 
-      // Clean answer from the server — this is authoritative, so it also
-      // corrects the cache (e.g. after the key was removed on another device).
-      setHasKey(!!data.hasKey);
-      setModel(data.model || DEFAULT_MODEL);
-      writeConfirmed(!!data.hasKey, data.model);
+      // Authoritative — also corrects the cache (e.g. key removed elsewhere).
+      const modelValue = (data?.model as string | undefined) || DEFAULT_MODEL;
+      setHasKey(!!data);
+      setModel(modelValue);
+      writeConfirmed(!!data, modelValue);
     } catch {
-      // Network error — same as an auth hiccup: fall back to the cache.
-      const confirmed = readConfirmed();
-      setHasKey(confirmed);
+      setHasKey(readConfirmed());
     } finally {
       setLoading(false);
     }
