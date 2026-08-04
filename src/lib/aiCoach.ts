@@ -3,6 +3,8 @@ import type { LocalWorkout, LocalExercise, LocalPersonalRecord } from './supabas
 import type { FoodScan } from '../features/food/types';
 import type { SavedRun } from '../features/running/utils/storage';
 import type { WhoopAllData } from '../features/whoop/services/whoopService';
+import { buildDailyLoads, computeLoadMetrics } from '../features/whoop/services/loadMetrics';
+import { computeCardiacHealth } from '../features/whoop/services/cardiacHealth';
 
 export type WorkoutWithExercises = LocalWorkout & { exercises?: LocalExercise[] };
 
@@ -193,7 +195,32 @@ export function buildWhoopSection(data: WhoopAllData | null): string {
   const s = data.sleep?.[0];
   const sleepH = s ? (s.total_in_bed_time_milli / 3_600_000).toFixed(1) : '?';
   const strain = data.cycles?.[0]?.strain_score?.toFixed(1) ?? '?';
-  return `\n\n━━ WHOOP RECOVERY (latest: ${r.date}) ━━\n  Recovery: ${r.recovery_score}% | HRV: ${Math.round(r.hrv_rmssd_milli)}ms | RHR: ${r.resting_heart_rate}bpm | Sleep: ${sleepH}h | Strain: ${strain}`;
+
+  const readiness = r.recovery_score >= 67 ? 'GREEN — safe to push hard'
+    : r.recovery_score >= 34 ? 'YELLOW — moderate, quality over volume'
+    : 'RED — prioritise recovery / easy day';
+
+  // Derived load + cardiac intelligence — the same models the home dashboard
+  // shows. Needs a few weeks of cycles to be meaningful; degrades to nothing
+  // when there isn't enough, so a short WHOOP window just omits it.
+  let derived = '';
+  try {
+    const loads = buildDailyLoads(data.cycles || [], 28);
+    const lm = computeLoadMetrics(loads);
+    const ch = computeCardiacHealth(data.recovery || [], data.cycles || [], data.workouts || []);
+    if (lm.daysOfData >= 7 && lm.acwr > 0) {
+      const acwrZone = lm.acwr > 1.5 ? 'HIGH injury risk — back off'
+        : lm.acwr >= 0.8 ? 'optimal sweet-spot'
+        : 'detraining — safe to add load';
+      derived += `\n  Load — ACWR ${lm.acwr.toFixed(2)} (${acwrZone}); form ${lm.form > 0 ? '+' : ''}${lm.form.toFixed(1)} (fitness ${lm.ctl.toFixed(1)} / fatigue ${lm.atl.toFixed(1)})`;
+    }
+    if (ch.vo2max != null) {
+      const rhrTrend = ch.restingHrDelta < 0 ? '↓ improving' : ch.restingHrDelta > 0 ? '↑ rising' : 'flat';
+      derived += `\n  Fitness — est. VO2max ${ch.vo2max} (${ch.vo2maxLabel}); resting HR trend ${rhrTrend}`;
+    }
+  } catch { /* insufficient WHOOP history — skip derived metrics */ }
+
+  return `\n\n━━ WHOOP READINESS (latest: ${r.date}) ━━\n  Recovery: ${r.recovery_score}% → ${readiness}\n  HRV: ${Math.round(r.hrv_rmssd_milli)}ms | RHR: ${r.resting_heart_rate}bpm | Sleep: ${sleepH}h | Strain today: ${strain}${derived}`;
 }
 
 export function buildSkincareSection(stats: { weekPercent: number; streak: number } | null): string {
