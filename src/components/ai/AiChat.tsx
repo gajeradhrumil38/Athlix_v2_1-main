@@ -1,7 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { aiCoachFetch } from '../../lib/aiCoachFetch';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, RotateCcw, Copy, Check, Plus, Minus, Trash2, ExternalLink } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, RotateCcw, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { format, subDays } from 'date-fns';
@@ -186,6 +198,24 @@ interface ToolResult {
   formInitialName?: string; // pre-fill exercise name in form
 }
 
+type CoachChartKind = 'bar' | 'line';
+
+interface CoachChartPoint {
+  label: string;
+  value: number;
+  secondary?: number;
+}
+
+interface CoachChart {
+  kind: CoachChartKind;
+  title: string;
+  subtitle?: string;
+  valueLabel: string;
+  secondaryLabel?: string;
+  color?: string;
+  data: CoachChartPoint[];
+}
+
 interface Message {
   role: 'user' | 'model';
   text: string;
@@ -193,6 +223,8 @@ interface Message {
   action?: ToolResult;
   exerciseForm?: boolean;         // render inline exercise form
   exerciseFormInitialName?: string; // pre-fill exercise name
+  chart?: CoachChart;
+  suggestedChart?: CoachChart;
 }
 
 interface ApiUsage {
@@ -217,6 +249,234 @@ function trackTokenUsage(tokens: number): void {
     month_key: monthKey,
   };
   localStorage.setItem(USAGE_STORAGE, JSON.stringify(data));
+}
+
+const CHART_REQUEST_RE = /\b(chart|plot|graph|visual|visuali[sz]e|bar|line|trend|progression)\b/i;
+
+const titleCase = (s: string) =>
+  s.split(/\s+/).filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+
+const parseWorkoutDate = (date: string) => new Date(`${date}T00:00:00`);
+
+function buildVolumeChart(workouts: WorkoutWithExercises[], text: string): CoachChart | undefined {
+  const windowDays = /\b(month|monthly|28|4 week|four week)\b/i.test(text) ? 28 : 7;
+  const setsByMuscle = new Map<string, number>();
+
+  for (const w of workouts) {
+    if (calDaysSince(w.date) > windowDays - 1) continue;
+    for (const ex of w.exercises || []) {
+      const muscle = titleCase(ex.muscle_group || 'Other');
+      setsByMuscle.set(muscle, (setsByMuscle.get(muscle) || 0) + (Number(ex.sets) || 0));
+    }
+  }
+
+  const data = Array.from(setsByMuscle.entries())
+    .map(([label, value]) => ({ label, value }))
+    .filter((p) => p.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  if (!data.length) return undefined;
+  return {
+    kind: 'bar',
+    title: `${windowDays === 28 ? '28-Day' : 'Weekly'} Volume`,
+    subtitle: 'Sets by muscle group',
+    valueLabel: 'Sets',
+    data,
+  };
+}
+
+function findExerciseNameForChart(workouts: WorkoutWithExercises[], text: string): string | null {
+  const names = new Map<string, string>();
+  for (const w of workouts) {
+    for (const ex of w.exercises || []) names.set(ex.name.toLowerCase(), ex.name);
+  }
+  const lower = text.toLowerCase();
+  const exact = Array.from(names.values())
+    .sort((a, b) => b.length - a.length)
+    .find((name) => lower.includes(name.toLowerCase()));
+  if (exact) return exact;
+
+  const words = lower.split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const scored = Array.from(names.values()).map((name) => {
+    const n = name.toLowerCase();
+    const score = words.reduce((sum, word) => sum + (n.includes(word) ? 1 : 0), 0);
+    return { name, score };
+  }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score);
+
+  return scored[0]?.name || null;
+}
+
+function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string, unit: string): CoachChart | undefined {
+  const exerciseName = findExerciseNameForChart(workouts, text);
+  if (!exerciseName) return undefined;
+
+  const points = new Map<string, number>();
+  const lowerName = exerciseName.toLowerCase();
+  for (const w of [...workouts].sort((a, b) => parseWorkoutDate(a.date).getTime() - parseWorkoutDate(b.date).getTime())) {
+    const matching = (w.exercises || []).filter((ex) => ex.name.toLowerCase() === lowerName);
+    if (!matching.length) continue;
+    const volume = matching.reduce((sum, ex) => {
+      const sets = Number(ex.sets) || 0;
+      const reps = Number(ex.reps) || 0;
+      const weight = Number(ex.weight) || 0;
+      return sum + sets * reps * weight;
+    }, 0);
+    if (volume > 0) points.set(w.date, (points.get(w.date) || 0) + volume);
+  }
+
+  const data = Array.from(points.entries())
+    .slice(-12)
+    .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value }));
+
+  if (data.length < 2) return undefined;
+  return {
+    kind: 'line',
+    title: `${exerciseName} Volume`,
+    subtitle: 'Total volume per logged session',
+    valueLabel: `${unit} volume`,
+    data,
+  };
+}
+
+function buildLoggedWorkoutVolumeChart(workouts: WorkoutWithExercises[], unit: string): CoachChart | undefined {
+  const data = [...workouts]
+    .sort((a, b) => parseWorkoutDate(a.date).getTime() - parseWorkoutDate(b.date).getTime())
+    .map((w) => {
+      const value = (w.exercises || []).reduce((sum, ex) => {
+        const sets = Number(ex.sets) || 0;
+        const reps = Number(ex.reps) || 0;
+        const weight = Number(ex.weight) || 0;
+        return sum + sets * reps * weight;
+      }, 0);
+      return { label: format(parseWorkoutDate(w.date), 'MMM d'), value };
+    })
+    .filter((p) => p.value > 0)
+    .slice(-14);
+
+  if (data.length < 2) return undefined;
+  return {
+    kind: 'bar',
+    title: 'Logged Workout Volume',
+    subtitle: 'Total volume per logged session',
+    valueLabel: `${unit} volume`,
+    data,
+  };
+}
+
+function buildNutritionChart(foodScans: FoodScan[], text: string): CoachChart | undefined {
+  if (!foodScans.length) return undefined;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const recent = foodScans.filter((scan) => new Date(scan.scan_date) >= cutoff);
+  if (!recent.length) return undefined;
+
+  if (/\b(macro|protein|carb|fat)\b/i.test(text)) {
+    const totals = recent.reduce(
+      (acc, scan) => ({
+        protein: acc.protein + (Number(scan.total_protein) || 0),
+        carbs: acc.carbs + (Number(scan.total_carbs) || 0),
+        fat: acc.fat + (Number(scan.total_fat) || 0),
+      }),
+      { protein: 0, carbs: 0, fat: 0 },
+    );
+    return {
+      kind: 'bar',
+      title: '7-Day Macros',
+      subtitle: 'Logged food totals',
+      valueLabel: 'g',
+      data: [
+        { label: 'Protein', value: Math.round(totals.protein) },
+        { label: 'Carbs', value: Math.round(totals.carbs) },
+        { label: 'Fat', value: Math.round(totals.fat) },
+      ].filter((p) => p.value > 0),
+    };
+  }
+
+  const daily = new Map<string, number>();
+  for (const scan of recent) {
+    const date = scan.scan_date.slice(0, 10);
+    daily.set(date, (daily.get(date) || 0) + (Number(scan.total_calories) || 0));
+  }
+  const data = Array.from(daily.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value: Math.round(value) }));
+
+  if (!data.length) return undefined;
+  return {
+    kind: 'bar',
+    title: 'Calories Logged',
+    subtitle: 'Last 7 days',
+    valueLabel: 'cal',
+    data,
+  };
+}
+
+function buildRunChart(runs: SavedRun[], text: string): CoachChart | undefined {
+  const recent = [...runs].sort((a, b) => a.timestamp - b.timestamp).slice(-8);
+  if (recent.length < 2) return undefined;
+
+  const isPace = /\b(pace|speed)\b/i.test(text);
+  return {
+    kind: isPace ? 'line' : 'bar',
+    title: isPace ? 'Running Pace' : 'Run Distance',
+    subtitle: `Last ${recent.length} runs`,
+    valueLabel: isPace ? 'min/km' : 'km',
+    data: recent.map((run) => ({
+      label: format(new Date(run.timestamp), 'MMM d'),
+      value: Number((isPace ? run.pace : run.distance).toFixed(2)),
+      secondary: isPace ? Number(run.distance.toFixed(2)) : undefined,
+    })),
+  };
+}
+
+function buildCoachChart(
+  text: string,
+  workouts: WorkoutWithExercises[],
+  foodScans: FoodScan[],
+  recentRuns: SavedRun[],
+  unit: string,
+): CoachChart | undefined {
+  if (!CHART_REQUEST_RE.test(text)) return undefined;
+
+  if (/\b(improvement|score|readiness|ml|model|logged|log|workout|session)\b/i.test(text)) {
+    return buildExerciseVolumeChart(workouts, text, unit)
+      || buildLoggedWorkoutVolumeChart(workouts, unit);
+  }
+  if (/\b(food|nutrition|macro|protein|carb|fat|calorie|diet)\b/i.test(text)) {
+    return buildNutritionChart(foodScans, text);
+  }
+  if (/\b(run|running|pace|mileage|distance|cardio)\b/i.test(text)) {
+    return buildRunChart(recentRuns, text);
+  }
+  if (/\b(volume|muscle|sets|weekly|month|monthly)\b/i.test(text)) {
+    return buildVolumeChart(workouts, text);
+  }
+
+  return buildExerciseVolumeChart(workouts, text, unit)
+    || buildLoggedWorkoutVolumeChart(workouts, unit)
+    || buildVolumeChart(workouts, text)
+    || buildNutritionChart(foodScans, text)
+    || buildRunChart(recentRuns, text);
+}
+
+function buildSuggestedCoachChart(
+  text: string,
+  workouts: WorkoutWithExercises[],
+  foodScans: FoodScan[],
+  recentRuns: SavedRun[],
+  unit: string,
+): CoachChart | undefined {
+  if (/\b(food|nutrition|macro|protein|carb|fat|calorie|diet)\b/i.test(text)) {
+    return buildNutritionChart(foodScans, text);
+  }
+  if (/\b(run|running|pace|mileage|distance|cardio)\b/i.test(text)) {
+    return buildRunChart(recentRuns, text);
+  }
+  return buildExerciseVolumeChart(workouts, text, unit)
+    || (/\b(volume|workout|session|log|logged|progress|trend|improv)/i.test(text)
+      ? buildLoggedWorkoutVolumeChart(workouts, unit) || buildVolumeChart(workouts, text)
+      : undefined);
 }
 
 // Matches src/pages/Log.tsx's freeform-workout default (line ~222) — a
@@ -604,7 +864,7 @@ export const AiChat: React.FC = () => {
       const [workoutRes, prRes, foodRes, whoopRes] = await Promise.allSettled([
         getWorkouts(user.id, { startDate, limit: 20, includeExercises: true }),
         getPersonalRecords(user.id),
-        getFoodScans(user.id, 0, 14),
+        getFoodScans(user.id, 0, 90),
         whoopService.fetchAll('day').catch(() => null),
       ]);
 
@@ -690,6 +950,21 @@ export const AiChat: React.FC = () => {
 
       try {
         const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats);
+        const chartIntentText = history.slice(-6).map((m) => m.text).join('\n');
+        const responseChart = buildCoachChart(
+          chartIntentText,
+          workouts,
+          foodScans,
+          recentRuns,
+          profile?.unit_preference || 'lbs',
+        );
+        const suggestedChart = responseChart ? undefined : buildSuggestedCoachChart(
+          chartIntentText,
+          workouts,
+          foodScans,
+          recentRuns,
+          profile?.unit_preference || 'lbs',
+        );
         const trimmedHistory = history.slice(-MAX_HISTORY);
         const geminiContents = trimmedHistory.map((m) => ({
           role: m.role,
@@ -857,13 +1132,19 @@ export const AiChat: React.FC = () => {
           const aiText2 = finalParts.filter((p) => !p.thought).map((p) => p.text).join('').trim() || 'Done!';
 
           setStreamingText('');
-          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult }]);
+          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart }]);
           return;
         }
 
         // ── Normal text response branch ──────────────────────────────────
         setStreamingText('');
-        setMessages((prev) => [...prev, { role: 'model', text: streamedText.trim() || '(no response)', thought: thought || undefined }]);
+        setMessages((prev) => [...prev, {
+          role: 'model',
+          text: streamedText.trim() || '(no response)',
+          thought: thought || undefined,
+          chart: responseChart,
+          suggestedChart,
+        }]);
       } catch (err: any) {
         const raw: string = err?.message || 'Something went wrong.';
         const display = raw.startsWith('QUOTA:')
@@ -905,6 +1186,14 @@ export const AiChat: React.FC = () => {
       setTimeout(() => setCopiedIdx(null), 2000);
     });
   };
+
+  const handlePlotSuggestion = useCallback((idx: number) => {
+    setMessages((prev) => prev.map((m, i) => (
+      i === idx && m.suggestedChart
+        ? { ...m, chart: m.suggestedChart, suggestedChart: undefined }
+        : m
+    )));
+  }, []);
 
   /* ── Direct exercise log (from form submit) ─────────────────────── */
   const handleLogExercise = useCallback(async (name: string, sets: SetEntry[], unit: 'kg' | 'lbs') => {
@@ -1007,6 +1296,7 @@ export const AiChat: React.FC = () => {
                 onGoSettings={() => { close(); navigate('/settings'); }}
                 onClear={() => setMessages([])}
                 onCopy={handleCopy}
+                onPlotSuggestion={handlePlotSuggestion}
               />
             )}
           </motion.div>
@@ -1053,6 +1343,7 @@ export const AiChat: React.FC = () => {
                 onGoSettings={() => { close(); navigate('/settings'); }}
                 onClear={() => setMessages([])}
                 onCopy={handleCopy}
+                onPlotSuggestion={handlePlotSuggestion}
               />
             )}
           </motion.div>
@@ -1062,6 +1353,84 @@ export const AiChat: React.FC = () => {
   );
 
   return <>{chatPanel}</>;
+};
+
+const CHART_COLORS = ['#C8FF00', '#7c6cf5', '#3f6df0', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6', '#f87171'];
+
+const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
+  if (!chart.data.length) return null;
+
+  const tooltipStyle: React.CSSProperties = {
+    background: '#161a20',
+    border: '1px solid rgba(255,255,255,0.14)',
+    borderRadius: 8,
+    color: 'var(--text-primary)',
+    fontSize: 11,
+  };
+
+  return (
+    <div
+      className="mt-1.5 overflow-hidden"
+      style={{
+        width: '100%',
+        minWidth: 240,
+        borderRadius: 10,
+        background: 'rgba(255,255,255,0.035)',
+        border: '1px solid rgba(255,255,255,0.09)',
+      }}
+    >
+      <div className="px-3 pt-2.5 pb-1">
+        <p className="text-[12px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
+          {chart.title}
+        </p>
+        {chart.subtitle && (
+          <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            {chart.subtitle}
+          </p>
+        )}
+      </div>
+      <div style={{ width: '100%', height: 178, padding: '0 4px 8px 0' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          {chart.kind === 'line' ? (
+            <LineChart data={chart.data} margin={{ top: 12, right: 12, bottom: 8, left: -18 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.38)', fontSize: 10 }} axisLine={false} tickLine={false} width={42} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                cursor={{ stroke: 'rgba(200,255,0,0.18)', strokeWidth: 1 }}
+                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, chart.valueLabel]}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={chart.color || '#C8FF00'}
+                strokeWidth={2.5}
+                dot={{ r: 3, strokeWidth: 0, fill: chart.color || '#C8FF00' }}
+                activeDot={{ r: 5, strokeWidth: 0, fill: '#fff' }}
+              />
+            </LineChart>
+          ) : (
+            <BarChart data={chart.data} margin={{ top: 12, right: 8, bottom: 8, left: -18 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.38)', fontSize: 10 }} axisLine={false} tickLine={false} width={42} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, chart.valueLabel]}
+              />
+              <Bar dataKey="value" radius={[5, 5, 2, 2]}>
+                {chart.data.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 };
 
 /* ── Inline exercise quick-log form ───────────────────────────────── */
@@ -1334,13 +1703,14 @@ interface ChatContentProps {
   onGoSettings: () => void;
   onClear: () => void;
   onCopy: (text: string, idx: number) => void;
+  onPlotSuggestion: (idx: number) => void;
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
   hasKey, messages, suggestions, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
-  onClose, onGoSettings, onClear, onCopy,
+  onClose, onGoSettings, onClear, onCopy, onPlotSuggestion,
 }) => {
   const [expandedThought, setExpandedThought] = useState<number | null>(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -1569,6 +1939,30 @@ const ChatContent: React.FC<ChatContentProps> = ({
                   >
                     {renderText(m.text)}
                   </div>
+                )}
+
+                {m.role === 'model' && m.chart && (
+                  <CoachChartCard chart={m.chart} />
+                )}
+
+                {m.role === 'model' && !m.chart && m.suggestedChart && (
+                  <button
+                    type="button"
+                    onClick={() => onPlotSuggestion(i)}
+                    className="self-start inline-flex items-center gap-1.5 transition-all active:scale-95"
+                    style={{
+                      padding: '6px 9px',
+                      borderRadius: 8,
+                      background: 'rgba(200,255,0,0.08)',
+                      border: '1px solid rgba(200,255,0,0.22)',
+                      color: '#C8FF00',
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <BarChart2 className="w-3 h-3" />
+                    Plot volume
+                  </button>
                 )}
 
                 {/* Inline exercise form */}
