@@ -207,16 +207,18 @@ export const PostWorkoutCoachPill: React.FC = () => {
     const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
 
     try {
-      const [workoutsRes, prsRes, whoopRes] = await Promise.allSettled([
+      const [workoutsRes, prsRes, whoopRes, foodRes] = await Promise.allSettled([
         getWorkouts(user.id, { limit: 20, includeExercises: true }),
         getPersonalRecords(user.id),
         whoopService.fetchAll('day').catch(() => null),
+        getFoodScans(user.id, 0, 90).then((r) => r.scans).catch(() => [] as FoodScan[]),
       ]);
       const workouts = (workoutsRes.status === 'fulfilled' ? workoutsRes.value : []) as WorkoutWithExercises[];
       const prs = prsRes.status === 'fulfilled' ? prsRes.value : [];
       const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
+      const food = (foodRes.status === 'fulfilled' ? foodRes.value : []) as FoodScan[];
 
-      const systemPrompt = buildSystemPrompt(profile, workouts, prs, [] as FoodScan[], getRuns(), whoopData as any, parseSkincareStats(), 'insight');
+      const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight');
       const userTurn = buildInsightPrompt(detail);
 
       // Thinking disabled: this is a short 2-3 sentence summary, not a
@@ -304,7 +306,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       getWorkouts(user.id, { limit: 25, includeExercises: true }),
       getPersonalRecords(user.id),
       whoopService.fetchAll('month', start, end).catch(() => null),
-      getFoodScans(user.id).then((r) => r.scans).catch(() => [] as FoodScan[]),
+      getFoodScans(user.id, 0, 90).then((r) => r.scans).catch(() => [] as FoodScan[]),
     ]);
     if (myRequestId !== requestIdRef.current) return;
     const workouts = (wRes.status === 'fulfilled' ? wRes.value : []) as WorkoutWithExercises[];
@@ -524,27 +526,6 @@ export const PostWorkoutCoachPill: React.FC = () => {
             }}
           >
             <span style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
-              {barChasing && (
-                // Rotating gradient masked to a rounded-square RING so the light
-                // chases the icon's actual (rounded) border instead of sweeping a
-                // rectangle. The mask punches out the centre, leaving a 2px ring
-                // that follows border-radius 11 exactly.
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    borderRadius: 11,
-                    pointerEvents: 'none',
-                    background: 'conic-gradient(from 0deg, transparent 0deg, #7c6cf5 70deg, #3f6df0 150deg, transparent 230deg, transparent 360deg)',
-                    WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-                    WebkitMaskComposite: 'xor',
-                    mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-                    maskComposite: 'exclude',
-                    padding: 2,
-                    animation: 'pwcp-borderChase 1.6s linear infinite',
-                  }}
-                />
-              )}
               <span
                 style={{
                   ...aiBadgeStyle(26, 9),
@@ -555,6 +536,27 @@ export const PostWorkoutCoachPill: React.FC = () => {
               >
                 <Sparkles className="w-3.5 h-3.5" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
               </span>
+              {barChasing && (
+                // A rotating highlight ring the SAME size/shape as the badge,
+                // laid exactly over its border so the border itself appears to
+                // chase — not a second, larger rounded square around it. The
+                // mask leaves only a ~1.5px ring at border-radius 9.
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 3,
+                    borderRadius: 9,
+                    pointerEvents: 'none',
+                    background: 'conic-gradient(from 0deg, transparent 0deg, #a99bff 60deg, #C8FF00 140deg, transparent 215deg, transparent 360deg)',
+                    WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+                    WebkitMaskComposite: 'xor',
+                    mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+                    maskComposite: 'exclude',
+                    padding: 1.5,
+                    animation: 'pwcp-borderChase 1.6s linear infinite',
+                  }}
+                />
+              )}
             </span>
             <div
               style={{
