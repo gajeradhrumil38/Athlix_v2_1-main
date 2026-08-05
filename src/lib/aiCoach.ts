@@ -5,6 +5,7 @@ import type { SavedRun } from '../features/running/utils/storage';
 import type { WhoopAllData } from '../features/whoop/services/whoopService';
 import { buildDailyLoads, computeLoadMetrics } from '../features/whoop/services/loadMetrics';
 import { computeCardiacHealth } from '../features/whoop/services/cardiacHealth';
+import { buildImprovementModel, buildImprovementModelSection } from './improvementModel';
 
 export type WorkoutWithExercises = LocalWorkout & { exercises?: LocalExercise[] };
 
@@ -250,6 +251,7 @@ export function buildSystemPrompt(
       ? `${profile.height_feet}'${profile.height_inches ?? 0}"`
       : 'not set';
   const unit = profile?.unit_preference || 'lbs';
+  const improvementModel = buildImprovementModel(workouts, prs, foodScans, recentRuns, whoopData, 90);
 
   const detailedSection = workouts.slice(0, 7).map((w) => {
     const age = calDaysSince(w.date);
@@ -286,19 +288,19 @@ export function buildSystemPrompt(
     .join('\n');
 
   const responseFormatSection = variant === 'chat' ? `
-RESPONSE FORMAT (non-negotiable):
-• Lines 1–3 (always, every reply): state (a) whether they've improved vs their historical data on the relevant lift/metric — cite the old number → new number from STRENGTH TRENDS/OLDER SESSIONS, or say plainly if there's not enough old data yet, and (b) what to focus on today or their next session. Never invent an old number — if none exists, say so instead of guessing.
-• After those 3 lines, answer the rest of the question in ≤2 more sentences — no preamble, no "Based on your data", no "You should"
-• Use **bold** for exercise names and key numbers only
-• Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}"
-• No closing summaries, no motivational sign-offs
-• Total response: aim for ≤180 words. If a list is needed, use bullet lines.
+RESPONSE FORMAT:
+• Open with the ANSWER — what to do / the direct reply — like a trainer talking to them. No preamble, no "Based on your data", and NEVER open with a meta-statement about the data you have (do not say "Insufficient data", "no comparison available", or similar).
+• If there IS prior history on the relevant lift/metric, weave the trend in naturally (old → new number). If there ISN'T enough history yet, just leave it out silently — never announce its absence, never invent a number.
+• Keep it tight and scannable: ≤110 words. Use **bold** only for exercise names and key numbers.
+• Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}".
+• No closing summary, no motivational sign-off.
+• The chat UI can render inline charts from logged data — never say you can't plot; if a visual would help and wasn't asked for, offer it in a short line.
 ` : `
 FORMAT: follow the plain-language, sentence-count instructions given in the user message exactly — no bold, no bullet lists, no headers.
 `;
 
   const toolCallingRule = variant === 'chat'
-    ? '\n6. "What should I train (today)?" / "what should I do?" / similar planning questions → this is a TEXT answer, never a tool call. Build the plan from WEEKLY VOLUME (this week), MONTHLY VOLUME (last 28 days), and MUSCLE RECOVERY STATUS together — call out any muscle group under its MEV for the week/month, skip anything ⛔, and give real exercises with sets/reps. Do NOT call show_exercise_form for these questions — only call it once the user picks a specific exercise to log.'
+    ? '\n8. "What should I train (today)?" / "what should I do?" / similar planning questions → this is a TEXT answer, never a tool call. Build the plan from WEEKLY VOLUME (this week), MONTHLY VOLUME (last 28 days), and MUSCLE RECOVERY STATUS together — call out any muscle group under its MEV for the week/month, skip anything ⛔, and give real exercises with sets/reps. Do NOT call show_exercise_form for these questions — only call it once the user picks a specific exercise to log.'
     : '';
 
   return `You are an expert strength & conditioning coach embedded in the Athlix fitness app. Your role: give ${name} evidence-based, data-driven advice using ONLY their logged data below. Never fabricate numbers.
@@ -306,6 +308,8 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
 TODAY: ${today}
 ATHLETE: ${name} | BW: ${bodyWeight} | Height: ${height} | Unit: ${unit}
 TRAINING PATTERN: ${workouts.length ? trainingStats(workouts) : 'no data'}
+
+${buildImprovementModelSection(improvementModel)}
 
 ━━ RECENT SESSIONS (full detail) ━━
 ${detailedSection || '  No workouts logged yet'}
@@ -332,7 +336,9 @@ COACHING RULES:
 2. Plateau on an exercise → suggest rep scheme change or drop set, not just "keep going"
 3. Weekly sets below MEV range → flag it, suggest extra sets
 4. PR opportunity → call it out explicitly with the weight to hit
-5. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
+5. For ML/model/readiness questions, use IMPROVEMENT MODEL V1 and ML readiness requirements; do not claim custom ML is ready unless status is ml_ready
+6. When discussing exercise progress, prefer total volume per logged session unless the user explicitly asks for best weight, reps, or estimated 1RM
+7. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
 ${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildSkincareSection(skincareStats)}`;
 }
