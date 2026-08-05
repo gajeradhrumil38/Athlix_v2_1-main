@@ -51,12 +51,10 @@ const aiBadgeStyle = (size: number, radius: number): React.CSSProperties => ({
   width: size,
   height: size,
   borderRadius: radius,
-  // Hairline (1px) gradient border over a frosted translucent fill — refined,
-  // Apple-material feel rather than a heavy solid chip.
-  border: '1px solid transparent',
-  backgroundImage: 'linear-gradient(rgba(20,22,28,0.78), rgba(20,22,28,0.78)), linear-gradient(135deg,#8b7bf5,#5b8cf0,#C8FF00)',
-  backgroundOrigin: 'border-box',
-  backgroundClip: 'padding-box, border-box',
+  // Plain mono hairline over a frosted translucent fill — quiet and
+  // Apple-material; the only colour is the accent sparkle inside.
+  border: '1px solid rgba(255,255,255,0.14)',
+  background: 'rgba(20,22,28,0.78)',
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
   display: 'flex',
