@@ -35,8 +35,8 @@ const TYPE_CHAR_MS = 24;
 const DOCK_BOTTOM = 'calc(env(safe-area-inset-bottom) + 88px)';
 
 const KEYFRAMES = `
-@keyframes pwcp-fabGlow { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.35), 0 0 0 0 rgba(124,108,245,0); } 50% { box-shadow: 0 8px 22px rgba(0,0,0,0.4), 0 0 16px 2px rgba(124,108,245,0.35); } }
-@keyframes pwcp-sparklePulse { 0%,100% { opacity:0.85; transform: scale(1); } 50% { opacity:1; transform: scale(1.08); } }
+@keyframes pwcp-fabGlow { 0%,100% { box-shadow: 0 8px 24px rgba(0,0,0,0.35); } 50% { box-shadow: 0 10px 30px rgba(0,0,0,0.4), 0 0 14px rgba(200,255,0,0.13); } }
+@keyframes pwcp-sparklePulse { 0%,100% { opacity:0.9; transform: scale(1); } 50% { opacity:1; transform: scale(1.06); } }
 @keyframes pwcp-borderChase { to { transform: rotate(360deg); } }
 @keyframes pwcp-cursorBlink { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
 `;
@@ -51,10 +51,14 @@ const aiBadgeStyle = (size: number, radius: number): React.CSSProperties => ({
   width: size,
   height: size,
   borderRadius: radius,
-  border: '1.5px solid transparent',
-  backgroundImage: 'linear-gradient(#161a20, #161a20), linear-gradient(135deg,#7c3aed,#2563eb,#C8FF00)',
+  // Hairline (1px) gradient border over a frosted translucent fill — refined,
+  // Apple-material feel rather than a heavy solid chip.
+  border: '1px solid transparent',
+  backgroundImage: 'linear-gradient(rgba(20,22,28,0.78), rgba(20,22,28,0.78)), linear-gradient(135deg,#8b7bf5,#5b8cf0,#C8FF00)',
   backgroundOrigin: 'border-box',
   backgroundClip: 'padding-box, border-box',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -514,15 +518,19 @@ export const PostWorkoutCoachPill: React.FC = () => {
               boxSizing: 'border-box',
               bottom: DOCK_BOTTOM,
               maxWidth: 'calc(100vw - 32px)',
-              background: '#161a20',
-              border: '1px solid rgba(111,92,245,0.3)',
-              borderRadius: 20,
-              padding: 12,
+              // Frosted-glass material with a hairline edge + inner top
+              // highlight + soft depth — the Apple "material over content" look.
+              background: 'rgba(20,22,28,0.72)',
+              backdropFilter: 'blur(24px) saturate(1.6)',
+              WebkitBackdropFilter: 'blur(24px) saturate(1.6)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 22,
+              padding: 13,
               display: 'flex',
               alignItems: barNarrow ? 'center' : 'flex-start',
-              gap: 10,
+              gap: 11,
               cursor: view === 'collapsed' || view === 'no-key' ? 'pointer' : 'default',
-              boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
             }}
           >
             <span style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
@@ -547,13 +555,13 @@ export const PostWorkoutCoachPill: React.FC = () => {
                     inset: 3,
                     borderRadius: 9,
                     pointerEvents: 'none',
-                    background: 'conic-gradient(from 0deg, transparent 0deg, #a99bff 60deg, #C8FF00 140deg, transparent 215deg, transparent 360deg)',
+                    background: 'conic-gradient(from 0deg, transparent 0deg, rgba(200,255,0,0.9) 70deg, transparent 175deg, transparent 360deg)',
                     WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
                     WebkitMaskComposite: 'xor',
                     mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
                     maskComposite: 'exclude',
-                    padding: 1.5,
-                    animation: 'pwcp-borderChase 1.6s linear infinite',
+                    padding: 1.25,
+                    animation: 'pwcp-borderChase 1.7s linear infinite',
                   }}
                 />
               )}
@@ -569,10 +577,11 @@ export const PostWorkoutCoachPill: React.FC = () => {
                 textOverflow: 'ellipsis',
                 whiteSpace: 'normal',
                 wordBreak: 'break-word',
-                color: '#f0f0f0',
+                color: 'rgba(255,255,255,0.92)',
                 fontSize: 13,
-                lineHeight: 1.35,
-                fontWeight: 500,
+                lineHeight: 1.4,
+                fontWeight: 450,
+                letterSpacing: '-0.01em',
               }}
             >
               {view === 'no-key' ? 'Set up AI Coach for workout insights' : displayText}
@@ -582,7 +591,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
                     display: 'inline-block',
                     width: 2,
                     height: 14,
-                    background: '#5b7cf0',
+                    background: AI_ACCENT,
                     marginLeft: 2,
                     verticalAlign: 'middle',
                     animation: 'pwcp-cursorBlink 0.8s step-end infinite',
