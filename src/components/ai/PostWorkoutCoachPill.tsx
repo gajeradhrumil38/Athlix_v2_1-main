@@ -37,7 +37,7 @@ const DOCK_BOTTOM = 'calc(env(safe-area-inset-bottom) + 88px)';
 const KEYFRAMES = `
 @keyframes pwcp-fabGlow { 0%,100% { box-shadow: 0 8px 24px rgba(0,0,0,0.35); } 50% { box-shadow: 0 10px 30px rgba(0,0,0,0.4), 0 0 14px rgba(200,255,0,0.13); } }
 @keyframes pwcp-sparklePulse { 0%,100% { opacity:0.9; transform: scale(1); } 50% { opacity:1; transform: scale(1.06); } }
-@keyframes pwcp-borderChase { to { transform: rotate(360deg); } }
+@keyframes pwcp-borderFlow { 0% { background-position: 0% 50%; } 100% { background-position: -300% 50%; } }
 @keyframes pwcp-cursorBlink { 0%,49% { opacity:1; } 50%,100% { opacity:0; } }
 `;
 
@@ -543,23 +543,25 @@ export const PostWorkoutCoachPill: React.FC = () => {
                 <Sparkles className="w-3.5 h-3.5" style={{ color: AI_ACCENT }} strokeWidth={1.75} />
               </span>
               {barChasing && (
-                // A rotating highlight ring the SAME size/shape as the badge,
-                // laid exactly over its border so the border itself appears to
-                // chase — not a second, larger rounded square around it. The
-                // mask leaves only a ~1.5px ring at border-radius 9.
+                // Gradient border that FLOWS in place — the colours drift
+                // through the whole rounded border (animated background-
+                // position) rather than a highlight circulating around it,
+                // which read as a rectangle sweeping on the rounded shape. The
+                // mask leaves only a ~1.25px ring at border-radius 9.
                 <div
                   style={{
                     position: 'absolute',
                     inset: 3,
                     borderRadius: 9,
                     pointerEvents: 'none',
-                    background: 'conic-gradient(from 0deg, transparent 0deg, rgba(200,255,0,0.9) 70deg, transparent 175deg, transparent 360deg)',
+                    background: 'linear-gradient(90deg, #C8FF00, #8b7bf5, #5b8cf0, #C8FF00, #8b7bf5)',
+                    backgroundSize: '300% 100%',
                     WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
                     WebkitMaskComposite: 'xor',
                     mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
                     maskComposite: 'exclude',
                     padding: 1.25,
-                    animation: 'pwcp-borderChase 1.7s linear infinite',
+                    animation: 'pwcp-borderFlow 2.4s linear infinite',
                   }}
                 />
               )}
