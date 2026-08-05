@@ -2,12 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { aiCoachFetch } from '../../lib/aiCoachFetch';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -1355,74 +1355,111 @@ export const AiChat: React.FC = () => {
   return <>{chatPanel}</>;
 };
 
-const CHART_COLORS = ['#C8FF00', '#7c6cf5', '#3f6df0', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6', '#f87171'];
+const CHART_ACCENT = '#C8FF00';
 
 const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
   if (!chart.data.length) return null;
 
+  const accent = chart.color || CHART_ACCENT;
+  const gradientId = React.useId();
+  const values = chart.data.map((d) => d.value);
+  const peak = Math.max(...values);
+  const headline = chart.kind === 'line' ? values[values.length - 1] : peak;
+
+  const fmt = (n: number) =>
+    n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${Math.round(n)}`;
+
   const tooltipStyle: React.CSSProperties = {
-    background: '#161a20',
-    border: '1px solid rgba(255,255,255,0.14)',
-    borderRadius: 8,
+    background: 'rgba(18,20,24,0.92)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: 10,
     color: 'var(--text-primary)',
     fontSize: 11,
+    padding: '6px 10px',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
   };
+  const axisTick = { fill: 'rgba(255,255,255,0.32)', fontSize: 10 } as const;
 
   return (
     <div
-      className="mt-1.5 overflow-hidden"
+      className="mt-2 overflow-hidden"
       style={{
         width: '100%',
         minWidth: 240,
-        borderRadius: 10,
-        background: 'rgba(255,255,255,0.035)',
-        border: '1px solid rgba(255,255,255,0.09)',
+        borderRadius: 16,
+        background: 'rgba(255,255,255,0.025)',
+        border: '1px solid rgba(255,255,255,0.06)',
       }}
     >
-      <div className="px-3 pt-2.5 pb-1">
-        <p className="text-[12px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
-          {chart.title}
-        </p>
-        {chart.subtitle && (
-          <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            {chart.subtitle}
+      <div className="px-4 pt-3.5 pb-1 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p
+            className="text-[10px] font-medium uppercase leading-tight truncate"
+            style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}
+          >
+            {chart.title}
           </p>
-        )}
+          {chart.subtitle && (
+            <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.30)' }}>
+              {chart.subtitle}
+            </p>
+          )}
+        </div>
+        <div className="text-right shrink-0 leading-none">
+          <span className="text-[20px] font-semibold tabular-nums" style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            {fmt(headline)}
+          </span>
+          <span className="text-[9px] ml-1" style={{ color: 'var(--text-muted)' }}>
+            {chart.valueLabel}
+          </span>
+        </div>
       </div>
-      <div style={{ width: '100%', height: 178, padding: '0 4px 8px 0' }}>
+      <div style={{ width: '100%', height: 150, padding: '4px 6px 6px 0' }}>
         <ResponsiveContainer width="100%" height="100%">
           {chart.kind === 'line' ? (
-            <LineChart data={chart.data} margin={{ top: 12, right: 12, bottom: 8, left: -18 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.38)', fontSize: 10 }} axisLine={false} tickLine={false} width={42} />
+            <AreaChart data={chart.data} margin={{ top: 10, right: 14, bottom: 6, left: -22 }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={accent} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={accent} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
+              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} dy={4} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={fmt} />
               <Tooltip
                 contentStyle={tooltipStyle}
-                cursor={{ stroke: 'rgba(200,255,0,0.18)', strokeWidth: 1 }}
-                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, chart.valueLabel]}
+                cursor={{ stroke: 'rgba(255,255,255,0.14)', strokeWidth: 1 }}
+                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="value"
-                stroke={chart.color || '#C8FF00'}
-                strokeWidth={2.5}
-                dot={{ r: 3, strokeWidth: 0, fill: chart.color || '#C8FF00' }}
-                activeDot={{ r: 5, strokeWidth: 0, fill: '#fff' }}
+                stroke={accent}
+                strokeWidth={2}
+                fill={`url(#${gradientId})`}
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 2, stroke: 'rgba(18,20,24,1)', fill: accent }}
               />
-            </LineChart>
+            </AreaChart>
           ) : (
-            <BarChart data={chart.data} margin={{ top: 12, right: 8, bottom: 8, left: -18 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.38)', fontSize: 10 }} axisLine={false} tickLine={false} width={42} />
+            <BarChart data={chart.data} margin={{ top: 10, right: 10, bottom: 6, left: -22 }} barCategoryGap="28%">
+              <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
+              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval={0} dy={4} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={fmt} />
               <Tooltip
                 contentStyle={tooltipStyle}
-                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, chart.valueLabel]}
+                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
               />
-              <Bar dataKey="value" radius={[5, 5, 2, 2]}>
-                {chart.data.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={34}>
+                {chart.data.map((d, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={accent}
+                    fillOpacity={d.value >= peak ? 1 : 0.28}
+                  />
                 ))}
               </Bar>
             </BarChart>
