@@ -13,6 +13,12 @@ const LOW_QUOTA_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.0-flash', 'gemin
 export const normalizeModel = (m?: string | null): string =>
   !m || LOW_QUOTA_MODELS.has(m) ? DEFAULT_MODEL : m;
 
+// Set when a shared Groq key is configured server-side (GROQ_API_KEY). With Groq
+// as the primary provider, the coach works even if the user has no Gemini key,
+// so the "add a key" gate is lifted.
+export const GROQ_ENABLED =
+  import.meta.env.VITE_GROQ_ENABLED === '1' || import.meta.env.VITE_GROQ_ENABLED === 'true';
+
 const LEGACY_KEY_STORAGE = 'athlix:gemini_api_key';
 const LEGACY_MODEL_STORAGE = 'athlix:gemini_model';
 
@@ -50,7 +56,7 @@ interface SaveResult {
 // The raw key never lives in this hook's state or in localStorage — only
 // hasKey/model are held client-side (hasKey also cached, see above).
 export function useAiCoachKey() {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [hasKey, setHasKey] = useState<boolean | null>(GROQ_ENABLED ? true : null);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [loading, setLoading] = useState(true);
 
@@ -89,7 +95,7 @@ export function useAiCoachKey() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         // Session not ready yet — don't clear the prompt-state; trust cache.
-        setHasKey(readConfirmed());
+        setHasKey(GROQ_ENABLED || readConfirmed());
         const m = readConfirmedModel();
         if (m) setModel(m);
         return;
@@ -101,7 +107,7 @@ export function useAiCoachKey() {
         .maybeSingle();
 
       if (error) {
-        setHasKey(readConfirmed());
+        setHasKey(GROQ_ENABLED || readConfirmed());
         const m = readConfirmedModel();
         if (m) setModel(m);
         return;
@@ -135,11 +141,11 @@ export function useAiCoachKey() {
       // added a key is never re-prompted; a brand-new user (cache empty) still
       // correctly sees the prompt.
       const cached = readConfirmed();
-      setHasKey(cached);
+      setHasKey(GROQ_ENABLED || cached);
       const m = readConfirmedModel();
       if (m) setModel(m);
     } catch {
-      setHasKey(readConfirmed());
+      setHasKey(GROQ_ENABLED || readConfirmed());
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveApiUser } from '@/lib/apiAuth';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
 export async function GET(req: NextRequest) {
   const { user, supabase } = await resolveApiUser(req);
@@ -16,7 +16,10 @@ export async function GET(req: NextRequest) {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  return NextResponse.json({ hasKey: !!row, model: row?.model || DEFAULT_MODEL });
+  // With a shared Groq key configured server-side, the coach is usable even
+  // without the user having their own Gemini key.
+  const groqAvailable = !!process.env.GROQ_API_KEY;
+  return NextResponse.json({ hasKey: !!row || groqAvailable, model: row?.model || DEFAULT_MODEL, groqAvailable });
 }
 
 export async function POST(req: NextRequest) {
