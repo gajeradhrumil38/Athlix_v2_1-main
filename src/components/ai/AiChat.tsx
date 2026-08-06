@@ -864,55 +864,89 @@ const VolumeBlock: React.FC<{ rows: VolumeRow[] }> = ({ rows }) => (
   </div>
 );
 
-// One exercise rendered in the workout-logger's visual language: numbered step
-// pill, name, sets count, and weight/reps as big display numbers with micro
-// labels — so a plan reads like the app's set cards, not a wall of text.
-const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean }> = ({ row, index, done }) => (
-  <div
-    className="relative overflow-hidden rounded-2xl border"
-    style={{ background: 'var(--bg-base)', borderColor: done ? 'rgba(200,255,0,0.16)' : 'var(--border)' }}
-  >
-    <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: 'var(--accent)', opacity: done ? 1 : 0.5 }} />
-    <div className="flex items-center justify-between px-4 pt-3 pb-2 pl-5 gap-2">
-      <div className="flex items-center gap-2 min-w-0">
-        <span
-          className="rounded-lg px-2 py-[3px] text-[10px] font-bold tracking-[0.14em] uppercase shrink-0 tabular-nums"
-          style={done
-            ? { border: '1px solid rgba(200,255,0,0.28)', color: 'var(--accent)', background: 'transparent' }
-            : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-        >
-          {done ? 'Logged' : String(index ?? 1).padStart(2, '0')}
-        </span>
-        <span className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{row.name}</span>
-      </div>
-      {done
-        ? <Check className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
-        : <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>{row.sets} sets</span>}
-    </div>
-    <div className="flex items-stretch border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-      {row.weight && (
-        <div className="flex-1 flex flex-col items-center justify-center py-3" style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}>
-          <span className="font-victory tabular-nums text-[26px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.weight}</span>
-          <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>{(row.unit || 'lb').toUpperCase()}</span>
-        </div>
-      )}
-      <div className="flex-1 flex flex-col items-center justify-center py-3">
-        <span className="font-victory tabular-nums text-[26px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.reps}</span>
-        <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>reps</span>
-      </div>
-    </div>
-  </div>
-);
+type WeightMap = Record<string, { weight: number; unit: string }>;
 
-const ExercisePlanBlock: React.FC<{ rows: ExRow[] }> = ({ rows }) => (
+// One exercise in the logger's visual language. When the move is weighted, both
+// weight + reps cells fill the card; when the coach gave no weight we fill it
+// from the user's last logged weight for that lift ("· last"). Bodyweight moves
+// (no weight anywhere) collapse to a compact single row so there's no big empty
+// box.
+const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean; lastWeight?: { weight: number; unit: string } }> = ({ row, index, done, lastWeight }) => {
+  const weightVal = row.weight ?? (lastWeight ? String(lastWeight.weight) : undefined);
+  const unit = (row.unit ?? lastWeight?.unit ?? 'lb').toUpperCase();
+  const fromHistory = !row.weight && !!lastWeight;
+
+  const IndexPill = (
+    <span
+      className="rounded-lg px-2 py-[3px] text-[10px] font-bold tracking-[0.14em] uppercase shrink-0 tabular-nums"
+      style={done
+        ? { border: '1px solid rgba(200,255,0,0.28)', color: 'var(--accent)', background: 'transparent' }
+        : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+    >
+      {done ? 'Logged' : String(index ?? 1).padStart(2, '0')}
+    </span>
+  );
+
+  // Bodyweight → compact single row (name left, big reps right).
+  if (!weightVal) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl border" style={{ background: 'var(--bg-base)', borderColor: done ? 'rgba(200,255,0,0.16)' : 'var(--border)' }}>
+        <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: 'var(--accent)', opacity: done ? 1 : 0.5 }} />
+        <div className="flex items-center gap-3 px-4 py-3 pl-5">
+          {IndexPill}
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-bold truncate leading-tight" style={{ color: 'var(--text-primary)' }}>{row.name}</p>
+            <p className="text-[10px] font-semibold tracking-[0.08em] uppercase mt-0.5" style={{ color: 'var(--text-muted)' }}>{row.sets} sets · bodyweight</p>
+          </div>
+          <div className="flex flex-col items-end shrink-0">
+            <span className="font-victory tabular-nums text-[28px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.reps}</span>
+            <span className="mt-1 text-[9px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>reps</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Weighted → two cells fill the card.
+  return (
+    <div className="relative overflow-hidden rounded-2xl border" style={{ background: 'var(--bg-base)', borderColor: done ? 'rgba(200,255,0,0.16)' : 'var(--border)' }}>
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: 'var(--accent)', opacity: done ? 1 : 0.5 }} />
+      <div className="flex items-center justify-between px-4 pt-2.5 pb-2 pl-5 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {IndexPill}
+          <span className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{row.name}</span>
+        </div>
+        {done
+          ? <Check className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+          : <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>{row.sets} sets</span>}
+      </div>
+      <div className="flex items-stretch border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="flex-1 flex flex-col items-center justify-center py-2.5" style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+          <span className="font-victory tabular-nums text-[26px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{weightVal}</span>
+          <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>
+            {unit}{fromHistory && <span style={{ color: 'var(--text-muted)', letterSpacing: 0 }}> · last</span>}
+          </span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center py-2.5">
+          <span className="font-victory tabular-nums text-[26px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.reps}</span>
+          <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>reps</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ExercisePlanBlock: React.FC<{ rows: ExRow[]; weights?: WeightMap }> = ({ rows, weights }) => (
   <div className="my-2 space-y-2">
-    {rows.map((r, i) => <ExercisePlanCard key={i} row={r} index={i + 1} />)}
+    {rows.map((r, i) => (
+      <ExercisePlanCard key={i} row={r} index={i + 1} lastWeight={weights?.[r.name.toLowerCase()]} />
+    ))}
   </div>
 );
 
 // Render coach text, promoting consecutive exercise prescriptions into a tidy
 // plan block and leaving prose as-is.
-function renderText(raw: string): React.ReactNode[] {
+function renderText(raw: string, weights?: WeightMap): React.ReactNode[] {
   const lines = raw.split('\n');
   const out: React.ReactNode[] = [];
   let exGroup: ExRow[] = [];
@@ -938,7 +972,7 @@ function renderText(raw: string): React.ReactNode[] {
   };
   const flushEx = () => {
     if (!exGroup.length) return;
-    out.push(<ExercisePlanBlock key={`e${bk++}`} rows={exGroup} />);
+    out.push(<ExercisePlanBlock key={`e${bk++}`} rows={exGroup} weights={weights} />);
     exGroup = [];
   };
   const flushVol = () => {
@@ -1861,6 +1895,39 @@ export const AiChat: React.FC = () => {
     navigate('/log?plan=1');
   }, [close, navigate]);
 
+  // Turn exercises the coach listed in chat into a saved plan and open the
+  // logger — "add these to today's log" straight from the conversation.
+  const handleAddPlanToLog = useCallback(async (rows: ExRow[]) => {
+    if (!user?.id || !rows.length) return;
+    const lastWeightFor = (name: string): number => {
+      const low = name.toLowerCase();
+      for (const w of [...workouts].sort((a, b) => parseWorkoutDate(b.date).getTime() - parseWorkoutDate(a.date).getTime())) {
+        for (const ex of w.exercises || []) {
+          if (ex.name.toLowerCase() === low && (Number(ex.weight) || 0) > 0) return Number(ex.weight);
+        }
+      }
+      return 0;
+    };
+    const exercises = rows.slice(0, 12).map((r, i) => ({
+      name: r.name,
+      muscle_group: null,
+      default_sets: Math.max(1, Math.min(20, parseInt(r.sets, 10) || 3)),
+      default_reps: Math.max(1, Math.min(100, parseInt(r.reps, 10) || 10)),
+      default_weight: Math.max(0, Number(r.weight) || lastWeightFor(r.name)),
+      exercise_db_id: null,
+      order_index: i,
+    }));
+    try {
+      await saveTemplate(user.id, { title: 'Coach Plan', exercises });
+      window.dispatchEvent(new CustomEvent('athlix:template-saved'));
+      toast.success('Added — opening your log');
+      close();
+      navigate('/log?plan=1');
+    } catch {
+      toast.error('Could not add to log');
+    }
+  }, [user?.id, workouts, close, navigate]);
+
   /* ── Chat session history ─────────────────────────────────────────── */
   const handleShowHistory = useCallback(() => {
     setSessions(getSessions(user?.id));
@@ -1895,6 +1962,17 @@ export const AiChat: React.FC = () => {
     if (g.done) continue;
     const p = computeGoalProgress(g, workouts, prs, recentRuns, profile);
     if (p) goalProgress[g.id] = p;
+  }
+
+  // Most-recent logged weight per exercise, so a prescribed weighted move with
+  // no weight can still show a real number ("· last") instead of an empty box.
+  const exerciseWeights: WeightMap = {};
+  for (const w of [...workouts].sort((a, b) => parseWorkoutDate(b.date).getTime() - parseWorkoutDate(a.date).getTime())) {
+    for (const ex of w.exercises || []) {
+      const key = ex.name.toLowerCase();
+      const weight = Number(ex.weight) || 0;
+      if (weight > 0 && !exerciseWeights[key]) exerciseWeights[key] = { weight, unit: ex.unit || 'lb' };
+    }
   }
 
   // A measurable goal is only completed once the LOGGED work actually reaches
@@ -2004,9 +2082,11 @@ export const AiChat: React.FC = () => {
                 streak={coachStreak(memory, workouts)}
                 todayFeeling={getTodayFeeling()}
                 goalProgress={goalProgress}
+                exerciseWeights={exerciseWeights}
                 sessions={sessions}
                 showHistory={showHistory}
                 activeSessionId={activeSessionId}
+                onAddPlanToLog={handleAddPlanToLog}
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
                 onStartTemplate={handleStartTemplate}
@@ -2066,9 +2146,11 @@ export const AiChat: React.FC = () => {
                 streak={coachStreak(memory, workouts)}
                 todayFeeling={getTodayFeeling()}
                 goalProgress={goalProgress}
+                exerciseWeights={exerciseWeights}
                 sessions={sessions}
                 showHistory={showHistory}
                 activeSessionId={activeSessionId}
+                onAddPlanToLog={handleAddPlanToLog}
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
                 onStartTemplate={handleStartTemplate}
@@ -2110,73 +2192,78 @@ const CHART_ACCENT = '#C8FF00';
 // Concentric Apple-style rings (SVG stroke-dasharray), animated on mount, with
 // a legend beside them. Same idiom as the app's ThreeRingHero / HealthRings.
 const CoachRingCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
-  const rings = chart.rings || [];
+  // Cap at two rings — three concentric rings are hard to read and their center
+  // text gets cramped. Two keeps them legible with a clear center readout.
+  const rings = (chart.rings || []).slice(0, 2);
   if (!rings.length) return null;
-  const size = 132;
+  const size = 150;
   const cx = size / 2;
-  const stroke = 12;
-  const gap = 4;
+  const stroke = 13;
+  const gap = 5;
 
   return (
     <div
-      className="mt-2"
+      className="mt-2 flex flex-col items-center"
       style={{ borderRadius: 16, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', padding: '14px 16px' }}
     >
-      <p className="text-[10px] font-medium uppercase mb-3" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+      <p className="self-start text-[10px] font-medium uppercase mb-3" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
         {chart.title}
       </p>
-      <div className="flex items-center gap-4">
-        <div className="relative shrink-0" style={{ width: size, height: size }}>
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
-            {rings.map((ring, i) => {
-              const r = (size / 2 - stroke / 2) - i * (stroke + gap);
-              const circ = 2 * Math.PI * r;
-              const pct = Math.max(0, Math.min(1, ring.value / ring.max));
-              return (
-                <g key={i}>
-                  <circle cx={cx} cy={cx} r={r} fill="none" stroke={ring.color} strokeOpacity={0.14} strokeWidth={stroke} />
-                  <motion.circle
-                    cx={cx} cy={cx} r={r}
-                    fill="none"
-                    stroke={ring.color}
-                    strokeWidth={stroke}
-                    strokeLinecap="round"
-                    strokeDasharray={circ}
-                    initial={{ strokeDashoffset: circ }}
-                    animate={{ strokeDashoffset: circ * (1 - pct) }}
-                    transition={{ duration: 1.1, ease: 'easeOut', delay: i * 0.12 }}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-          {chart.centerValue && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[19px] font-bold tabular-nums leading-none" style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                {chart.centerValue}
+
+      {/* Ring first — centered, with the headline reading inside */}
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+          {rings.map((ring, i) => {
+            const r = (size / 2 - stroke / 2) - i * (stroke + gap);
+            const circ = 2 * Math.PI * r;
+            const pct = Math.max(0, Math.min(1, ring.value / ring.max));
+            return (
+              <g key={i}>
+                <circle cx={cx} cy={cx} r={r} fill="none" stroke={ring.color} strokeOpacity={0.14} strokeWidth={stroke} />
+                <motion.circle
+                  cx={cx} cy={cx} r={r}
+                  fill="none"
+                  stroke={ring.color}
+                  strokeWidth={stroke}
+                  strokeLinecap="round"
+                  strokeDasharray={circ}
+                  initial={{ strokeDashoffset: circ }}
+                  animate={{ strokeDashoffset: circ * (1 - pct) }}
+                  transition={{ duration: 1.1, ease: 'easeOut', delay: i * 0.12 }}
+                />
+              </g>
+            );
+          })}
+        </svg>
+        {chart.centerValue && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[22px] font-bold tabular-nums leading-none" style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              {chart.centerValue}
+            </span>
+            {chart.centerLabel && (
+              <span className="text-[9px] uppercase mt-1" style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+                {chart.centerLabel}
               </span>
-              {chart.centerLabel && (
-                <span className="text-[8.5px] uppercase mt-1" style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-                  {chart.centerLabel}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex-1 min-w-0 space-y-2.5">
-          {rings.map((r, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="shrink-0" style={{ width: 9, height: 9, borderRadius: 999, background: r.color }} />
-              <span className="flex-1 text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>{r.label}</span>
-              <span className="text-[12px] font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                {r.display ?? `${Math.round((r.value / r.max) * 100)}%`}
-              </span>
-            </div>
-          ))}
-        </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Labels below — full width so nothing truncates */}
+      <div className="w-full mt-3.5 space-y-2">
+        {rings.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="shrink-0" style={{ width: 9, height: 9, borderRadius: 999, background: r.color }} />
+            <span className="flex-1 text-[12px]" style={{ color: 'var(--text-secondary)' }}>{r.label}</span>
+            <span className="text-[12px] font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+              {r.display ?? `${Math.round((r.value / r.max) * 100)}%`}
+            </span>
+          </div>
+        ))}
+      </div>
+
       {chart.subtitle && (
-        <p className="text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>{chart.subtitle}</p>
+        <p className="self-start text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>{chart.subtitle}</p>
       )}
     </div>
   );
@@ -2629,9 +2716,11 @@ interface ChatContentProps {
   streak: number;
   todayFeeling: string | null;
   goalProgress: Record<string, GoalProgress>;
+  exerciseWeights: WeightMap;
   sessions: ChatSession[];
   showHistory: boolean;
   activeSessionId: string | null;
+  onAddPlanToLog: (rows: ExRow[]) => void;
   onCheckIn: (feeling: string) => void;
   onCompleteGoal: (id: string) => void;
   onStartTemplate: () => void;
@@ -2660,9 +2749,9 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress,
+  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress, exerciseWeights,
   sessions, showHistory, activeSessionId, input, loading, loadingPhase, streamingText, copiedIdx,
-  inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate,
+  inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate, onAddPlanToLog,
   onShowHistory, onNewSession, onOpenSession, onCloseHistory, onDeleteSession,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onCopy, onPlotSuggestion,
@@ -2670,6 +2759,14 @@ const ChatContent: React.FC<ChatContentProps> = ({
   const [expandedThought, setExpandedThought] = useState<number | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const activeGoals = memory.goals.filter((g) => !g.done);
+
+  // Context-aware actions from the coach's latest reply: if it laid out
+  // exercises, offer to add them to today's log and to plot the main lift.
+  const lastModelMsg = [...messages].reverse().find((m) => m.role === 'model');
+  const planRows: ExRow[] = lastModelMsg
+    ? (lastModelMsg.text.split('\n').map(parseExerciseLine).filter(Boolean) as ExRow[])
+    : [];
+  const planTopExercise = planRows[0]?.name;
 
   return (
   <>
@@ -3046,7 +3143,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
                       wordBreak: 'break-word',
                     }}
                   >
-                    {renderText(m.text)}
+                    {renderText(m.text, exerciseWeights)}
                   </div>
                 )}
 
@@ -3181,15 +3278,16 @@ const ChatContent: React.FC<ChatContentProps> = ({
                   maxWidth: '78%',
                 }}
               >
-                {renderText(streamingText)}
+                {renderText(streamingText, exerciseWeights)}
               </div>
             </div>
           )}
           <div ref={bottomRef} />
         </div>
 
-        {/* Follow-up question chips — scroll horizontally, tap to continue the chat */}
-        {messages.length > 0 && !loading && followUps.length > 0 && (
+        {/* Action + follow-up chips — scroll horizontally. Actions (add to log,
+            plot the lift) come first when the coach just laid out a plan. */}
+        {messages.length > 0 && !loading && (planRows.length > 0 || followUps.length > 0) && (
           <div
             className="hide-scrollbar shrink-0 flex gap-2 overflow-x-auto"
             style={{
@@ -3198,6 +3296,44 @@ const ChatContent: React.FC<ChatContentProps> = ({
               scrollSnapType: 'x proximity',
             }}
           >
+            {planRows.length > 0 && (
+              <button
+                onClick={() => onAddPlanToLog(planRows)}
+                className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 transition-all active:scale-95"
+                style={{
+                  padding: '9px 14px',
+                  borderRadius: 12,
+                  background: 'var(--accent)',
+                  border: 'none',
+                  color: '#000',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  scrollSnapAlign: 'start',
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add to today's log
+              </button>
+            )}
+            {planTopExercise && (
+              <button
+                onClick={() => onSuggest(`Show my ${planTopExercise} progress`)}
+                className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 transition-all active:scale-95"
+                style={{
+                  padding: '9px 14px',
+                  borderRadius: 12,
+                  background: 'rgba(200,255,0,0.08)',
+                  border: '1px solid rgba(200,255,0,0.22)',
+                  color: '#C8FF00',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  scrollSnapAlign: 'start',
+                }}
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+                {planTopExercise} trend
+              </button>
+            )}
             {followUps.map((q) => (
               <button
                 key={q}
