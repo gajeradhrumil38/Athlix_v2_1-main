@@ -25,6 +25,7 @@ import {
   logBodyWeight,
   upsertDopamineEntry,
   saveWorkout,
+  saveTemplate,
   searchExerciseLibrary,
   type LocalWorkout,
   type LocalExercise,
@@ -220,6 +221,32 @@ const FUNCTION_DECLARATIONS = [
     },
   },
   {
+    name: 'create_template',
+    description: "Build and save a reusable workout template for the user. Use ONLY when they ask you to create/build/make/save an actual workout or plan they can DO (e.g. 'make me a push day', 'build a full-body dumbbell workout and save it', 'create a leg day'). Respect their remembered constraints (injuries, available equipment, schedule) and recovery status. Pick real exercises with sensible sets/reps. Do NOT use this for the generic 'what should I train today?' question — that stays a text answer.",
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short template name, e.g. "Push Day A", "Full-Body Dumbbell".' },
+        exercises: {
+          type: 'array',
+          description: 'Ordered list of exercises in the workout.',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Exercise name, properly capitalized (e.g. "Bench Press").' },
+              muscle_group: { type: 'string', description: 'Primary muscle group, e.g. "Chest", "Back", "Legs".' },
+              sets: { type: 'number', description: 'Number of sets (e.g. 3).' },
+              reps: { type: 'number', description: 'Target reps per set (e.g. 8).' },
+              weight: { type: 'number', description: 'Optional suggested weight; use 0 if unsure / bodyweight.' },
+            },
+            required: ['name', 'sets', 'reps'],
+          },
+        },
+      },
+      required: ['title', 'exercises'],
+    },
+  },
+  {
     name: 'show_nutrition_summary',
     description: "Triggered when user asks about their diet, macros, calories, or food intake. Read the NUTRITION section already in your context and provide a data-driven response. Do NOT call this if no NUTRITION section exists in context.",
     parameters: { type: 'object', properties: {}, required: [] },
@@ -244,6 +271,7 @@ interface ToolResult {
   suggestions?: string[];   // exercise name suggestions when not found
   showForm?: boolean;       // show inline exercise form
   formInitialName?: string; // pre-fill exercise name in form
+  templateAction?: { id: string; title: string }; // coach built & saved a workout template
 }
 
 type CoachChartKind = 'bar' | 'line';
@@ -273,6 +301,7 @@ interface Message {
   exerciseFormInitialName?: string; // pre-fill exercise name
   chart?: CoachChart;
   suggestedChart?: CoachChart;
+  templateAction?: { id: string; title: string };
 }
 
 interface ApiUsage {
@@ -794,6 +823,30 @@ async function executeTool(
     return { success: true, message: `Nice work — goal marked complete.` };
   }
 
+  if (name === 'create_template') {
+    const title = ((args.title as string) || 'Coach Plan').trim();
+    const rawExercises = Array.isArray(args.exercises) ? args.exercises : [];
+    if (!rawExercises.length) return { success: false, message: 'No exercises to save.' };
+
+    const exercises = rawExercises.slice(0, 12).map((ex: any, i: number) => ({
+      name: String(ex.name || '').trim() || `Exercise ${i + 1}`,
+      muscle_group: (ex.muscle_group as string) || null,
+      default_sets: Math.max(1, Math.min(20, Number(ex.sets) || 3)),
+      default_reps: Math.max(1, Math.min(100, Number(ex.reps) || 10)),
+      default_weight: Math.max(0, Math.min(9999, Number(ex.weight) || 0)),
+      exercise_db_id: null,
+      order_index: i,
+    }));
+
+    const templateId = await saveTemplate(userId, { title, exercises });
+    window.dispatchEvent(new CustomEvent('athlix:template-saved'));
+    return {
+      success: true,
+      message: `Saved **${title}** — ${exercises.length} exercise${exercises.length === 1 ? '' : 's'}.`,
+      templateAction: { id: String(templateId || ''), title },
+    };
+  }
+
   if (name === 'show_nutrition_summary') {
     return { success: true, message: '' };
   }
@@ -1313,7 +1366,7 @@ export const AiChat: React.FC = () => {
           const aiText2 = finalParts.filter((p) => !p.thought).map((p) => p.text).join('').trim() || 'Done!';
 
           setStreamingText('');
-          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart }]);
+          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart, templateAction: toolResult.templateAction }]);
           return;
         }
 
@@ -1388,6 +1441,13 @@ export const AiChat: React.FC = () => {
     setMemory(completeCoachGoal(user?.id, id));
     toast.success('Goal completed 🎉');
   }, [user?.id]);
+
+  // Start a coach-built template — open the logger's plan sheet where the new
+  // template is ready to pick.
+  const handleStartTemplate = useCallback(() => {
+    close();
+    navigate('/log?plan=1');
+  }, [close, navigate]);
 
   /* ── Direct exercise log (from form submit) ─────────────────────── */
   const handleLogExercise = useCallback(async (name: string, sets: SetEntry[], unit: 'kg' | 'lbs') => {
@@ -1479,6 +1539,7 @@ export const AiChat: React.FC = () => {
                 todayFeeling={getTodayFeeling()}
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
+                onStartTemplate={handleStartTemplate}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1532,6 +1593,7 @@ export const AiChat: React.FC = () => {
                 todayFeeling={getTodayFeeling()}
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
+                onStartTemplate={handleStartTemplate}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1935,6 +1997,7 @@ interface ChatContentProps {
   todayFeeling: string | null;
   onCheckIn: (feeling: string) => void;
   onCompleteGoal: (id: string) => void;
+  onStartTemplate: () => void;
   input: string;
   loading: boolean;
   loadingPhase: number;
@@ -1957,7 +2020,7 @@ interface ChatContentProps {
 
 const ChatContent: React.FC<ChatContentProps> = ({
   hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, input, loading, loadingPhase, streamingText, copiedIdx,
-  inputRef, bottomRef, onCheckIn, onCompleteGoal,
+  inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onClear, onCopy, onPlotSuggestion,
 }) => {
@@ -2283,6 +2346,26 @@ const ChatContent: React.FC<ChatContentProps> = ({
 
                 {m.role === 'model' && m.chart && (
                   <CoachChartCard chart={m.chart} />
+                )}
+
+                {m.role === 'model' && m.templateAction && (
+                  <button
+                    type="button"
+                    onClick={onStartTemplate}
+                    className="self-start inline-flex items-center gap-1.5 mt-1.5 transition-all active:scale-95"
+                    style={{
+                      padding: '8px 13px',
+                      borderRadius: 10,
+                      background: 'var(--accent)',
+                      border: 'none',
+                      color: '#000',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Start workout
+                  </button>
                 )}
 
                 {m.role === 'model' && !m.chart && m.suggestedChart && (
