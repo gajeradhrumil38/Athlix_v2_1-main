@@ -2832,7 +2832,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
 
     {/* Chat history overlay — browse past days' sessions */}
     {showHistory && (
-      <div className="absolute inset-0 z-[210] flex flex-col" style={{ background: 'var(--bg-surface)' }}>
+      <div className="absolute inset-0 z-[210] flex flex-col" style={{ background: 'var(--bg-base)' }}>
         <div
           className="flex items-center justify-between shrink-0"
           style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}
