@@ -54,6 +54,7 @@ import {
   completeCoachGoal,
   recordCheckIn,
   coachStreak,
+  syncCoachMemory,
 } from '../../lib/coachMemory';
 import { getTodayFeeling, setTodayFeeling } from '../../lib/dailyBriefing';
 
@@ -1047,11 +1048,13 @@ export const AiChat: React.FC = () => {
   useEffect(() => { hasKeyRef.current = hasKey; }, [hasKey]);
   const [streamingText, setStreamingText] = useState('');
 
-  // Load the coach's memory for the signed-in user, and keep it in sync when a
-  // tool writes to the store (event fired by coachMemory.save).
+  // Load the coach's memory for the signed-in user (local mirror first for an
+  // instant paint, then reconcile with the cloud row so it follows across
+  // devices), and keep it in sync when a tool writes to the store.
   useEffect(() => {
     const load = () => setMemory(getCoachMemory(user?.id));
     load();
+    if (user?.id) syncCoachMemory(user.id).then(setMemory).catch(() => {});
     window.addEventListener('athlix:coach-memory', load);
     return () => window.removeEventListener('athlix:coach-memory', load);
   }, [user?.id]);

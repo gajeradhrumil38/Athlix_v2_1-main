@@ -1,8 +1,13 @@
 import { format } from 'date-fns';
+import { supabase } from './supabase';
 
-// Persistent "what the coach knows about you" store. Offline-first in
-// localStorage (same pattern as the daily-briefing cache), keyed per user so
-// accounts sharing a device don't bleed. Holds three things the coach reads on
+// Persistent "what the coach knows about you" store. Cloud-backed in Supabase
+// (public.coach_memory, one row per user) so it follows the user across
+// devices, with a localStorage mirror for instant/offline reads. Reads/writes
+// stay synchronous against the local mirror; every write also pushes to the
+// cloud (write-through), and syncCoachMemory() reconciles on load
+// (last-write-wins by updatedAt, union of check-ins so no streak day is lost).
+// Holds three things the coach reads on
 // every turn and can write to via function calls:
 //   - goals: things the user is working toward (with optional structured target)
 //   - facts: durable preferences / schedule / constraints ("trains MWF",
@@ -49,11 +54,82 @@ export function getCoachMemory(uid?: string | null): CoachMemory {
   }
 }
 
+// A real signed-in user id (not the anonymous local key) — only these sync to
+// the cloud, and only these satisfy the RLS policy.
+const isCloudUser = (uid?: string | null): uid is string => !!uid && uid !== 'anon';
+
+function writeLocal(uid: string | null | undefined, m: CoachMemory) {
+  try { localStorage.setItem(key(uid), JSON.stringify(m)); } catch { /* ignore */ }
+  try { window.dispatchEvent(new CustomEvent('athlix:coach-memory')); } catch { /* ignore */ }
+}
+
+async function pushCoachMemory(uid: string, m: CoachMemory): Promise<void> {
+  try {
+    await supabase.from('coach_memory').upsert(
+      {
+        user_id: uid,
+        goals: m.goals,
+        facts: m.facts,
+        check_ins: m.checkIns,
+        updated_at: m.updatedAt || new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    );
+  } catch { /* offline / RLS — the local mirror is still authoritative */ }
+}
+
+export async function pullCoachMemory(uid: string): Promise<CoachMemory | null> {
+  try {
+    const { data, error } = await supabase
+      .from('coach_memory')
+      .select('goals, facts, check_ins, updated_at')
+      .eq('user_id', uid)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      goals: Array.isArray(data.goals) ? data.goals : [],
+      facts: Array.isArray(data.facts) ? data.facts : [],
+      checkIns: Array.isArray(data.check_ins) ? data.check_ins : [],
+      updatedAt: data.updated_at || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 function save(uid: string | null | undefined, m: CoachMemory): CoachMemory {
   const next = { ...m, updatedAt: new Date().toISOString() };
-  try { localStorage.setItem(key(uid), JSON.stringify(next)); } catch { /* ignore */ }
-  try { window.dispatchEvent(new CustomEvent('athlix:coach-memory')); } catch { /* ignore */ }
+  writeLocal(uid, next);
+  if (isCloudUser(uid)) void pushCoachMemory(uid, next);
   return next;
+}
+
+// Reconcile the local mirror with the cloud row on sign-in / mount. Cloud and
+// local both win on whichever has the newer updatedAt, except check-ins, which
+// are unioned so a streak day recorded on another device isn't dropped.
+export async function syncCoachMemory(uid?: string | null): Promise<CoachMemory> {
+  const local = getCoachMemory(uid);
+  if (!isCloudUser(uid)) return local;
+
+  const cloud = await pullCoachMemory(uid);
+  if (!cloud) {
+    // First time on the cloud — seed it from whatever is local.
+    if (local.goals.length || local.facts.length || local.checkIns.length) {
+      const seeded = { ...local, updatedAt: local.updatedAt || new Date().toISOString() };
+      void pushCoachMemory(uid, seeded);
+    }
+    return local;
+  }
+
+  const localTime = Date.parse(local.updatedAt || '') || 0;
+  const cloudTime = Date.parse(cloud.updatedAt || '') || 0;
+  const base = cloudTime >= localTime ? cloud : local;
+  const checkIns = Array.from(new Set([...local.checkIns, ...cloud.checkIns])).sort().slice(-120);
+  const merged: CoachMemory = { ...base, checkIns, updatedAt: new Date().toISOString() };
+
+  writeLocal(uid, merged);
+  void pushCoachMemory(uid, merged); // converge both sides
+  return merged;
 }
 
 export function addCoachGoal(uid: string | null | undefined, goal: Omit<CoachGoal, 'id' | 'createdAt'>): CoachMemory {
