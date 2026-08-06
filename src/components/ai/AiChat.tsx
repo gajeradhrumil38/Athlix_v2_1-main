@@ -673,34 +673,42 @@ function buildCoachChart(
 ): CoachChart | undefined {
   if (!CHART_REQUEST_RE.test(text) && !CHART_AUTO_RE.test(text)) return undefined;
 
-  // Recovery / readiness → rings.
-  if (/\b(recovery|recovered|readiness|ready to train|sleep|strain|hrv|whoop|fatigue|rest day)\b/i.test(text)) {
-    return buildRecoveryRingChart(whoopData) || buildWeeklyRingChart(workouts, whoopData);
-  }
-  // Nutrition composition → donut (falls back to the bar/day chart).
+  // 1. A specific exercise the user named → its progression line. This wins
+  //    over everything so "plot my bench" is never hijacked by a ring.
+  const exChart = buildExerciseVolumeChart(workouts, text, unit);
+  if (exChart) return exChart;
+
+  // 2. Nutrition composition → donut.
   if (/\b(macro|macros|protein|carb|fat|nutrition|diet)\b/i.test(text)) {
     return buildMacroDonut(foodScans) || buildNutritionChart(foodScans, text);
   }
-  // Weekly overview → rings.
+  // 3. Running → run chart.
+  if (/\b(run|running|pace|mileage|distance|cardio)\b/i.test(text)) {
+    return buildRunChart(recentRuns, text);
+  }
+  // 4. Volume / training-load trend → bars (an explicit "plot my volume").
+  if (/\b(volume|tonnage|training load|sets|workload|month|monthly|per (?:day|session)|logged)\b/i.test(text)) {
+    return buildLoggedWorkoutVolumeChart(workouts, unit) || buildVolumeChart(workouts, text);
+  }
+  // 5. Recovery / readiness → rings (only when genuinely about recovery, and
+  //    only if there's WHOOP data — otherwise fall through).
+  if (/\b(recovery|recovered|readiness|ready to train|sleep|strain|hrv|whoop|fatigue|rest day)\b/i.test(text)) {
+    const ring = buildRecoveryRingChart(whoopData);
+    if (ring) return ring;
+  }
+  // 6. Weekly overview → rings.
   if (/\b(this week|weekly|overview|summary|how am i|how'?s my (?:week|training|progress)|consistency|on track|balance)\b/i.test(text)) {
     return buildWeeklyRingChart(workouts, whoopData) || buildVolumeChart(workouts, text);
-  }
-  if (/\b(improvement|score|logged|log|workout|session)\b/i.test(text)) {
-    return buildExerciseVolumeChart(workouts, text, unit)
-      || buildLoggedWorkoutVolumeChart(workouts, unit);
   }
   if (/\b(food|calorie)\b/i.test(text)) {
     return buildNutritionChart(foodScans, text);
   }
-  if (/\b(run|running|pace|mileage|distance|cardio)\b/i.test(text)) {
-    return buildRunChart(recentRuns, text);
-  }
-  if (/\b(volume|muscle|sets|month|monthly)\b/i.test(text)) {
+  if (/\b(muscle)\b/i.test(text)) {
     return buildVolumeChart(workouts, text);
   }
 
-  return buildExerciseVolumeChart(workouts, text, unit)
-    || buildLoggedWorkoutVolumeChart(workouts, unit)
+  // Default: a volume trend is the most broadly useful.
+  return buildLoggedWorkoutVolumeChart(workouts, unit)
     || buildVolumeChart(workouts, text)
     || buildNutritionChart(foodScans, text)
     || buildRunChart(recentRuns, text);
@@ -1623,7 +1631,10 @@ export const AiChat: React.FC = () => {
 
       try {
         const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id));
-        const chartIntentText = history.slice(-6).map((m) => m.text).join('\n');
+        // Route the chart off the user's CURRENT message only — not the whole
+        // recent window — so words from earlier turns (e.g. the coach mentioning
+        // "recovery") don't hijack a fresh "plot my volume" request.
+        const chartIntentText = text;
         const responseChart = buildCoachChart(
           chartIntentText,
           workouts,
@@ -2366,6 +2377,13 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
   const axisTick = { fill: 'rgba(255,255,255,0.32)', fontSize: 10 } as const;
   // Thin out x labels so they never overlap: aim for at most ~6 visible ticks.
   const xInterval = chart.data.length > 7 ? Math.ceil(chart.data.length / 6) : 0;
+  // Tight, "nice" y-max just above the peak so bars fill the height (no big
+  // dead zone above the tallest bar) while ticks stay round.
+  const yNiceMax = (() => {
+    const m = Math.max(peak, 1);
+    const magHalf = Math.pow(10, Math.floor(Math.log10(m))) / 2;
+    return Math.max(magHalf, Math.ceil((m * 1.1) / magHalf) * magHalf);
+  })();
 
   return (
     <div
@@ -2401,7 +2419,7 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
           </span>
         </div>
       </div>
-      <div style={{ width: '100%', height: 158, padding: '4px 6px 6px 0' }}>
+      <div style={{ width: '100%', height: 176, padding: '4px 6px 6px 0' }}>
         <ResponsiveContainer width="100%" height="100%">
           {chart.kind === 'line' ? (
             <AreaChart data={chart.data} margin={{ top: 10, right: 14, bottom: 8, left: -8 }}>
@@ -2413,7 +2431,7 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
               </defs>
               <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
               <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} dy={4} interval={xInterval} minTickGap={10} />
-              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={46} tickFormatter={fmt} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={46} tickFormatter={fmt} domain={[0, yNiceMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
                 separator=""
@@ -2431,17 +2449,17 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
               />
             </AreaChart>
           ) : (
-            <BarChart data={chart.data} margin={{ top: 10, right: 10, bottom: 8, left: -8 }} barCategoryGap="26%">
+            <BarChart data={chart.data} margin={{ top: 10, right: 10, bottom: 8, left: -8 }} barCategoryGap="16%">
               <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
               <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} dy={4} interval={xInterval} minTickGap={10} />
-              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={46} tickFormatter={fmt} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={46} tickFormatter={fmt} domain={[0, yNiceMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
                 separator=""
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                 formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
               />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={34}>
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={46}>
                 {chart.data.map((d, index) => (
                   <Cell
                     key={`cell-${index}`}
