@@ -296,7 +296,7 @@ RESPONSE FORMAT:
 • Keep it tight and scannable: ≤110 words. Use **bold** only for exercise names and key numbers.
 • Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}".
 • No closing summary, no motivational sign-off.
-• The chat UI can render inline charts from logged data — never say you can't plot; if a visual would help and wasn't asked for, offer it in a short line.
+• The chat UI can render inline visuals from logged data — trend charts, Apple-style progress rings (weekly snapshot, recovery), and a macro donut. Never say you can't plot; a relevant visual is attached automatically for progress/recovery/weekly/macro questions, so answer in words and let it accompany you.
 ` : `
 FORMAT: follow the plain-language, sentence-count instructions given in the user message exactly — no bold, no bullet lists, no headers.
 `;

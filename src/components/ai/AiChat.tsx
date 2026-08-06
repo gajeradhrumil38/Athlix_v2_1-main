@@ -8,6 +8,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -284,12 +286,20 @@ interface ToolResult {
   templateAction?: { id: string; title: string }; // coach built & saved a workout template
 }
 
-type CoachChartKind = 'bar' | 'line';
+type CoachChartKind = 'bar' | 'line' | 'ring' | 'donut';
 
 interface CoachChartPoint {
   label: string;
   value: number;
   secondary?: number;
+}
+
+interface CoachRing {
+  label: string;
+  value: number;
+  max: number;
+  color: string;
+  display?: string;   // pre-formatted readout (e.g. "3/4", "72%")
 }
 
 interface CoachChart {
@@ -299,7 +309,10 @@ interface CoachChart {
   valueLabel: string;
   secondaryLabel?: string;
   color?: string;
-  data: CoachChartPoint[];
+  data: CoachChartPoint[];   // bar / line / donut
+  rings?: CoachRing[];       // kind 'ring'
+  centerValue?: string;      // ring / donut center headline
+  centerLabel?: string;
 }
 
 interface Message {
@@ -548,26 +561,135 @@ function buildRunChart(runs: SavedRun[], text: string): CoachChart | undefined {
   };
 }
 
+// Apple-style ring / accent palette shared by rings + donut.
+const VIZ_COLORS = ['#C8FF00', '#7c6cf5', '#38bdf8', '#fbbf24', '#f87171', '#4ade80'];
+const recoveryColor = (v: number) => (v >= 67 ? '#4ade80' : v >= 34 ? '#fbbf24' : '#f87171');
+
+// "How's my week" → a 2–3 ring snapshot (sessions, muscle balance, recovery),
+// with overall completion in the center.
+function buildWeeklyRingChart(workouts: WorkoutWithExercises[], whoopData: WhoopAllData | null): CoachChart | undefined {
+  const week = workouts.filter((w) => calDaysSince(w.date) <= 6);
+  const sessions = week.length;
+  const muscles = new Set<string>();
+  for (const w of week) for (const mg of (w.muscle_groups || [])) muscles.add(String(mg).toLowerCase());
+  if (!sessions) return undefined;
+
+  const SESSION_TARGET = 4;
+  const MUSCLE_TARGET = 6;
+  const rings: CoachRing[] = [
+    { label: 'Sessions', value: sessions, max: SESSION_TARGET, color: VIZ_COLORS[0], display: `${sessions}/${SESSION_TARGET}` },
+    { label: 'Muscle balance', value: muscles.size, max: MUSCLE_TARGET, color: VIZ_COLORS[1], display: `${muscles.size}/${MUSCLE_TARGET}` },
+  ];
+  const rec = whoopData?.recovery?.[0]?.recovery_score;
+  if (typeof rec === 'number' && rec > 0) {
+    rings.push({ label: 'Recovery', value: rec, max: 100, color: VIZ_COLORS[2], display: `${Math.round(rec)}%` });
+  }
+  const avgPct = Math.round(rings.reduce((s, r) => s + Math.min(1, r.value / r.max), 0) / rings.length * 100);
+  return {
+    kind: 'ring',
+    title: 'This Week',
+    subtitle: 'Training snapshot',
+    valueLabel: '',
+    data: [],
+    rings,
+    centerValue: `${avgPct}%`,
+    centerLabel: 'on target',
+  };
+}
+
+// Recovery / readiness → WHOOP recovery, sleep and strain rings.
+function buildRecoveryRingChart(whoopData: WhoopAllData | null): CoachChart | undefined {
+  const rec = whoopData?.recovery?.[0]?.recovery_score;
+  const sleep = whoopData?.sleep?.[0]?.sleep_performance_percentage;
+  const cyc = whoopData?.cycles?.[0] as Record<string, unknown> | undefined;
+  const strain = (cyc?.strain_score ?? cyc?.day_strain) as number | undefined;
+
+  const rings: CoachRing[] = [];
+  if (typeof rec === 'number' && rec > 0) rings.push({ label: 'Recovery', value: rec, max: 100, color: recoveryColor(rec), display: `${Math.round(rec)}%` });
+  if (typeof sleep === 'number' && sleep > 0) rings.push({ label: 'Sleep', value: sleep, max: 100, color: VIZ_COLORS[2], display: `${Math.round(sleep)}%` });
+  if (typeof strain === 'number' && strain > 0) rings.push({ label: 'Strain', value: strain, max: 21, color: VIZ_COLORS[1], display: strain.toFixed(1) });
+  if (!rings.length) return undefined;
+
+  return {
+    kind: 'ring',
+    title: 'Recovery Today',
+    subtitle: 'From WHOOP',
+    valueLabel: '',
+    data: [],
+    rings,
+    centerValue: typeof rec === 'number' ? `${Math.round(rec)}%` : undefined,
+    centerLabel: 'recovery',
+  };
+}
+
+// Macros → a composition donut (protein / carbs / fat) with total kcal center.
+function buildMacroDonut(foodScans: FoodScan[]): CoachChart | undefined {
+  if (!foodScans.length) return undefined;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const recent = foodScans.filter((s) => new Date(s.scan_date) >= cutoff);
+  if (!recent.length) return undefined;
+
+  const totals = recent.reduce(
+    (acc, s) => ({
+      protein: acc.protein + (Number(s.total_protein) || 0),
+      carbs: acc.carbs + (Number(s.total_carbs) || 0),
+      fat: acc.fat + (Number(s.total_fat) || 0),
+    }),
+    { protein: 0, carbs: 0, fat: 0 },
+  );
+  const data = [
+    { label: 'Protein', value: Math.round(totals.protein) },
+    { label: 'Carbs', value: Math.round(totals.carbs) },
+    { label: 'Fat', value: Math.round(totals.fat) },
+  ].filter((d) => d.value > 0);
+  if (data.length < 2) return undefined;
+
+  const kcal = Math.round(totals.protein * 4 + totals.carbs * 4 + totals.fat * 9);
+  return {
+    kind: 'donut',
+    title: 'Macro Split',
+    subtitle: 'Last 7 days',
+    valueLabel: 'g',
+    data,
+    centerValue: kcal >= 1000 ? `${(kcal / 1000).toFixed(1)}k` : `${kcal}`,
+    centerLabel: 'kcal',
+  };
+}
+
 function buildCoachChart(
   text: string,
   workouts: WorkoutWithExercises[],
   foodScans: FoodScan[],
   recentRuns: SavedRun[],
+  whoopData: WhoopAllData | null,
   unit: string,
 ): CoachChart | undefined {
   if (!CHART_REQUEST_RE.test(text) && !CHART_AUTO_RE.test(text)) return undefined;
 
-  if (/\b(improvement|score|readiness|ml|model|logged|log|workout|session)\b/i.test(text)) {
+  // Recovery / readiness → rings.
+  if (/\b(recovery|recovered|readiness|ready to train|sleep|strain|hrv|whoop|fatigue|rest day)\b/i.test(text)) {
+    return buildRecoveryRingChart(whoopData) || buildWeeklyRingChart(workouts, whoopData);
+  }
+  // Nutrition composition → donut (falls back to the bar/day chart).
+  if (/\b(macro|macros|protein|carb|fat|nutrition|diet)\b/i.test(text)) {
+    return buildMacroDonut(foodScans) || buildNutritionChart(foodScans, text);
+  }
+  // Weekly overview → rings.
+  if (/\b(this week|weekly|overview|summary|how am i|how'?s my (?:week|training|progress)|consistency|on track|balance)\b/i.test(text)) {
+    return buildWeeklyRingChart(workouts, whoopData) || buildVolumeChart(workouts, text);
+  }
+  if (/\b(improvement|score|logged|log|workout|session)\b/i.test(text)) {
     return buildExerciseVolumeChart(workouts, text, unit)
       || buildLoggedWorkoutVolumeChart(workouts, unit);
   }
-  if (/\b(food|nutrition|macro|protein|carb|fat|calorie|diet)\b/i.test(text)) {
+  if (/\b(food|calorie)\b/i.test(text)) {
     return buildNutritionChart(foodScans, text);
   }
   if (/\b(run|running|pace|mileage|distance|cardio)\b/i.test(text)) {
     return buildRunChart(recentRuns, text);
   }
-  if (/\b(volume|muscle|sets|weekly|month|monthly)\b/i.test(text)) {
+  if (/\b(volume|muscle|sets|month|monthly)\b/i.test(text)) {
     return buildVolumeChart(workouts, text);
   }
 
@@ -806,12 +928,13 @@ function buildFollowUps(
   }
 
   // General fill — the usual next things a lifter wants to know
+  push('How am I doing this week?');
   push('What should I train today?');
   if (top) push(`How's my ${top} progressing?`);
-  push("How's my weekly volume?");
   push('Which muscle am I neglecting?');
+  if (hasFood) push("How's my macro split?");
   if (hasRuns) push("How's my running trending?");
-  if (hasWhoop) push('Am I recovered enough to train?');
+  if (hasWhoop) push("How's my recovery?");
 
   return out.slice(0, 6);
 }
@@ -1349,6 +1472,7 @@ export const AiChat: React.FC = () => {
           workouts,
           foodScans,
           recentRuns,
+          whoopData,
           profile?.unit_preference || 'lbs',
         );
         const suggestedChart = responseChart ? undefined : buildSuggestedCoachChart(
@@ -1840,7 +1964,154 @@ export const AiChat: React.FC = () => {
 
 const CHART_ACCENT = '#C8FF00';
 
+// Concentric Apple-style rings (SVG stroke-dasharray), animated on mount, with
+// a legend beside them. Same idiom as the app's ThreeRingHero / HealthRings.
+const CoachRingCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
+  const rings = chart.rings || [];
+  if (!rings.length) return null;
+  const size = 132;
+  const cx = size / 2;
+  const stroke = 12;
+  const gap = 4;
+
+  return (
+    <div
+      className="mt-2"
+      style={{ borderRadius: 16, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', padding: '14px 16px' }}
+    >
+      <p className="text-[10px] font-medium uppercase mb-3" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+        {chart.title}
+      </p>
+      <div className="flex items-center gap-4">
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+            {rings.map((ring, i) => {
+              const r = (size / 2 - stroke / 2) - i * (stroke + gap);
+              const circ = 2 * Math.PI * r;
+              const pct = Math.max(0, Math.min(1, ring.value / ring.max));
+              return (
+                <g key={i}>
+                  <circle cx={cx} cy={cx} r={r} fill="none" stroke={ring.color} strokeOpacity={0.14} strokeWidth={stroke} />
+                  <motion.circle
+                    cx={cx} cy={cx} r={r}
+                    fill="none"
+                    stroke={ring.color}
+                    strokeWidth={stroke}
+                    strokeLinecap="round"
+                    strokeDasharray={circ}
+                    initial={{ strokeDashoffset: circ }}
+                    animate={{ strokeDashoffset: circ * (1 - pct) }}
+                    transition={{ duration: 1.1, ease: 'easeOut', delay: i * 0.12 }}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+          {chart.centerValue && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[19px] font-bold tabular-nums leading-none" style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                {chart.centerValue}
+              </span>
+              {chart.centerLabel && (
+                <span className="text-[8.5px] uppercase mt-1" style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+                  {chart.centerLabel}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0 space-y-2.5">
+          {rings.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="shrink-0" style={{ width: 9, height: 9, borderRadius: 999, background: r.color }} />
+              <span className="flex-1 text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>{r.label}</span>
+              <span className="text-[12px] font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                {r.display ?? `${Math.round((r.value / r.max) * 100)}%`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {chart.subtitle && (
+        <p className="text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>{chart.subtitle}</p>
+      )}
+    </div>
+  );
+};
+
+// Composition donut (macros) with a legend + center total.
+const CoachDonutCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
+  if (!chart.data.length) return null;
+  const total = chart.data.reduce((s, d) => s + d.value, 0) || 1;
+  const tooltipStyle: React.CSSProperties = {
+    background: 'rgba(18,20,24,0.92)', backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255,255,255,0.10)', borderRadius: 10, color: 'var(--text-primary)',
+    fontSize: 11, padding: '6px 10px',
+  };
+
+  return (
+    <div
+      className="mt-2"
+      style={{ borderRadius: 16, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', padding: '14px 16px' }}
+    >
+      <p className="text-[10px] font-medium uppercase mb-2" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+        {chart.title}
+      </p>
+      <div className="flex items-center gap-3">
+        <div className="relative shrink-0" style={{ width: 128, height: 128 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chart.data}
+                dataKey="value"
+                nameKey="label"
+                innerRadius={42}
+                outerRadius={60}
+                paddingAngle={2}
+                stroke="none"
+                startAngle={90}
+                endAngle={-270}
+              >
+                {chart.data.map((_, i) => <Cell key={i} fill={VIZ_COLORS[i % VIZ_COLORS.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v: unknown, n: unknown) => [`${Number(v).toLocaleString()} ${chart.valueLabel}`, String(n)]} />
+            </PieChart>
+          </ResponsiveContainer>
+          {chart.centerValue && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-[17px] font-bold tabular-nums leading-none" style={{ color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                {chart.centerValue}
+              </span>
+              {chart.centerLabel && (
+                <span className="text-[8.5px] uppercase mt-1" style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+                  {chart.centerLabel}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0 space-y-2.5">
+          {chart.data.map((d, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="shrink-0" style={{ width: 9, height: 9, borderRadius: 999, background: VIZ_COLORS[i % VIZ_COLORS.length] }} />
+              <span className="flex-1 text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>{d.label}</span>
+              <span className="text-[12px] font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                {d.value}{chart.valueLabel} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {Math.round((d.value / total) * 100)}%</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {chart.subtitle && (
+        <p className="text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>{chart.subtitle}</p>
+      )}
+    </div>
+  );
+};
+
 const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
+  if (chart.kind === 'ring') return <CoachRingCard chart={chart} />;
+  if (chart.kind === 'donut') return <CoachDonutCard chart={chart} />;
   if (!chart.data.length) return null;
 
   const accent = chart.color || CHART_ACCENT;
