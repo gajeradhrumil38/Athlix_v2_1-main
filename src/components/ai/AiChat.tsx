@@ -1789,6 +1789,24 @@ export const AiChat: React.FC = () => {
     if (p) goalProgress[g.id] = p;
   }
 
+  // A measurable goal is only completed once the LOGGED work actually reaches
+  // its target — never on creation, never by a premature tap. Reconciles when
+  // workouts/PRs load or change.
+  useEffect(() => {
+    if (!user?.id) return;
+    let changed = false;
+    for (const g of memory.goals) {
+      if (g.done) continue;
+      const p = computeGoalProgress(g, workouts, prs, recentRuns, profile);
+      if (p && p.pct >= 100) {
+        completeCoachGoal(user.id, g.id);
+        toast.success(`Goal achieved — ${g.text} 🎉`);
+        changed = true;
+      }
+    }
+    if (changed) setMemory(getCoachMemory(user.id));
+  }, [workouts, prs, recentRuns, memory.goals, user?.id, profile]);
+
   /* ── Direct exercise log (from form submit) ─────────────────────── */
   const handleLogExercise = useCallback(async (name: string, sets: SetEntry[], unit: 'kg' | 'lbs') => {
     if (!user?.id) return;
@@ -2707,20 +2725,38 @@ const ChatContent: React.FC<ChatContentProps> = ({
                         }}
                       >
                         <div className="flex items-center gap-2.5">
-                          <button
-                            onClick={() => onCompleteGoal(g.id)}
-                            title="Mark complete"
-                            className="shrink-0 flex items-center justify-center transition-colors"
-                            style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 999,
-                              border: '1.5px solid var(--text-muted)',
-                              background: 'transparent',
-                            }}
-                          >
-                            <Check className="w-2.5 h-2.5" style={{ color: 'var(--text-muted)' }} />
-                          </button>
+                          {prog ? (
+                            // Measurable goal — completes automatically once logged
+                            // work hits the target. Non-interactive target marker.
+                            <span
+                              title="Completes when your logged sets hit the target"
+                              className="shrink-0 flex items-center justify-center"
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: `1.5px solid ${prog.pct >= 100 ? '#C8FF00' : 'rgba(200,255,0,0.35)'}`,
+                                background: 'transparent',
+                              }}
+                            >
+                              <span style={{ width: 6, height: 6, borderRadius: 999, background: prog.pct >= 100 ? '#C8FF00' : 'rgba(200,255,0,0.35)' }} />
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => onCompleteGoal(g.id)}
+                              title="Mark complete"
+                              className="shrink-0 flex items-center justify-center transition-colors"
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: '1.5px solid var(--text-muted)',
+                                background: 'transparent',
+                              }}
+                            >
+                              <Check className="w-2.5 h-2.5" style={{ color: 'var(--text-muted)' }} />
+                            </button>
+                          )}
                           <span className="flex-1 text-[12.5px]" style={{ color: 'var(--text-primary)' }}>
                             {g.text}
                             {prog == null && g.target != null && (
