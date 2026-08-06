@@ -41,10 +41,12 @@ export async function POST(req: NextRequest) {
     const groqBody: Record<string, unknown> = { ...translateToGroq(body, GROQ_MODEL), stream: !!stream };
     if (stream) groqBody.stream_options = { include_usage: true };
 
-    // Retry transient failures (rate-limit / TPM / 5xx) with backoff before
-    // giving up — this is what made "some chats work, some don't".
+    // IMPORTANT: do NOT retry a 429. Retrying a rate/token-limit immediately
+    // only amplifies it (server-retries × client-retries = a burst of 429s).
+    // A 429 falls straight through to the Gemini overflow instead. Only a true
+    // server error (5xx) / network blip is retried once.
     let groqErr: { status: number; message: string } | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const gres = await fetch(GROQ_URL, {
           method: 'POST',
@@ -59,16 +61,15 @@ export async function POST(req: NextRequest) {
 
         const eb = await gres.json().catch(() => ({}));
         groqErr = { status: gres.status, message: eb?.error?.message || `Groq error ${gres.status}` };
-        const transient = gres.status === 429 || gres.status >= 500;
-        if (transient && attempt < 2) {
-          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        if (gres.status >= 500 && attempt < 1) {
+          await new Promise((r) => setTimeout(r, 600));
           continue;
         }
-        break; // non-transient (e.g. 400 bad request) → don't retry
+        break; // 429 or 4xx → fall through to Gemini, don't hammer Groq
       } catch (e) {
         groqErr = { status: 502, message: e instanceof Error ? e.message : 'Groq request failed' };
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        if (attempt < 1) {
+          await new Promise((r) => setTimeout(r, 600));
           continue;
         }
       }
