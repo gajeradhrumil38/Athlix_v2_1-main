@@ -2649,41 +2649,34 @@ const ChatContent: React.FC<ChatContentProps> = ({
     ) : (
       <>
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-4">
           {/* Empty state */}
           {messages.length === 0 && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-0 px-5" style={{ minHeight: '60%' }}>
-              {/* Aurora icon */}
-              <div
-                className="ai-aurora-static flex items-center justify-center"
-                style={{ width: 52, height: 52, borderRadius: 8, border: '1.5px solid transparent', marginBottom: 14 }}
-              >
-                <Sparkles className="w-[22px] h-[22px]" style={{ color: 'var(--accent)' }} />
-              </div>
-              <p className="text-[17px] font-bold text-center mb-[6px]" style={{ color: 'var(--text-primary)' }}>
-                Your AI fitness coach
-              </p>
-              <p className="text-[13px] text-center leading-relaxed mb-5 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
-                Ask about training, or tell me to log something — weight, check-in, anything.
-              </p>
-
-              {/* Streak */}
-              {streak >= 1 && (
+            <div className="flex flex-col px-1 pt-4 pb-1">
+              {/* Compact hero */}
+              <div className="flex flex-col items-center text-center mb-5">
                 <div
-                  className="inline-flex items-center gap-1.5 mb-4"
-                  style={{
-                    padding: '5px 11px',
-                    borderRadius: 999,
-                    background: 'rgba(200,255,0,0.10)',
-                    border: '1px solid rgba(200,255,0,0.22)',
-                    color: '#C8FF00',
-                    fontSize: 12,
-                    fontWeight: 700,
-                  }}
+                  className="ai-aurora-static flex items-center justify-center mb-2.5"
+                  style={{ width: 46, height: 46, borderRadius: 10, border: '1.5px solid transparent' }}
                 >
-                  🔥 {streak}-day streak
+                  <Sparkles className="w-5 h-5" style={{ color: 'var(--accent)' }} />
                 </div>
-              )}
+                <p className="text-[16px] font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                  Your AI fitness coach
+                </p>
+                {streak >= 1 ? (
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    style={{ padding: '4px 10px', borderRadius: 999, background: 'rgba(200,255,0,0.10)', border: '1px solid rgba(200,255,0,0.22)', color: '#C8FF00', fontSize: 11.5, fontWeight: 700 }}
+                  >
+                    🔥 {streak}-day streak
+                  </span>
+                ) : (
+                  <p className="text-[12.5px] leading-relaxed max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
+                    Ask about training, or log something — weight, a set, anything.
+                  </p>
+                )}
+              </div>
 
               {/* Daily check-in */}
               {!todayFeeling && (
@@ -2801,25 +2794,26 @@ const ChatContent: React.FC<ChatContentProps> = ({
                 </div>
               )}
 
-              {/* 2-col chip grid */}
-              <div className="w-full grid grid-cols-2 gap-2">
+              {/* Starter prompts — one scannable column */}
+              <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>Try asking</p>
+              <div className="space-y-1.5">
                 {suggestions.map((q) => (
                   <button
                     key={q}
                     onClick={() => onSuggest(q)}
-                    className="text-left transition-all"
+                    className="w-full flex items-center gap-2.5 text-left transition-colors active:scale-[0.99]"
                     style={{
-                      padding: '10px 12px',
-                      borderRadius: 8,
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-secondary)',
-                      fontSize: 12,
+                      padding: '11px 13px',
+                      borderRadius: 12,
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      color: 'var(--text-primary)',
+                      fontSize: 13,
                       fontWeight: 500,
-                      lineHeight: 1.4,
                     }}
                   >
-                    {q}
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent)', opacity: 0.7 }} />
+                    <span className="flex-1">{q}</span>
                   </button>
                 ))}
               </div>
