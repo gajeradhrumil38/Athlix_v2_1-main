@@ -3,10 +3,12 @@ import { resolveApiUser } from '@/lib/apiAuth';
 import { GROQ_URL, containsImage, translateToGroq, groqToGeminiResponse, groqStreamToGemini } from '@/lib/groqBridge';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-// Flash-Lite: highest free-tier daily quota (~1,000 req/day). Retired/low-quota
-// models the client might still send are coerced here as a safety net.
+// Flash-Lite: highest free-tier daily quota (~1,000 req/day). Any non-current
+// model the client might still send (low-quota, retired, or a dead preview
+// snapshot like gemini-2.5-flash-preview-05-20) is coerced to a valid one so
+// the Gemini fallback never 404s on a stale model.
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
-const LOW_QUOTA_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']);
+const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 
 // Groq is primary (much larger free daily quota, very fast); Gemini is the
 // fallback. Configured with a single shared server key.
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest) {
   }
 
   const requested = (typeof model === 'string' && model) || DEFAULT_MODEL;
-  const targetModel = LOW_QUOTA_MODELS.has(requested) ? DEFAULT_MODEL : requested;
+  const targetModel = ALLOWED_MODELS.has(requested) ? requested : DEFAULT_MODEL;
 
   const endpoint = stream
     ? `${GEMINI_BASE}/${targetModel}:streamGenerateContent?alt=sse`

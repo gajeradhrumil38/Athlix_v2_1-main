@@ -7,11 +7,13 @@ import { supabase } from '../lib/supabase';
 // stops hitting "quota exceeded". Same key, same API.
 export const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
-// Migrate anyone still on a low-quota or retired model to Flash-Lite on read,
-// so existing users benefit without a DB write or re-entering their key.
-const LOW_QUOTA_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']);
+// Allowlist of currently-valid Gemini models. Anything else — low-quota
+// (2.5-flash), retired (2.0/1.5-flash), or dead preview snapshots like
+// gemini-2.5-flash-preview-05-20 — is migrated to Flash-Lite on read, so a
+// stale stored model can never 404 the coach.
+const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 export const normalizeModel = (m?: string | null): string =>
-  !m || LOW_QUOTA_MODELS.has(m) ? DEFAULT_MODEL : m;
+  m && ALLOWED_MODELS.has(m) ? m : DEFAULT_MODEL;
 
 // Set when a shared Groq key is configured server-side (GROQ_API_KEY). With Groq
 // as the primary provider, the coach works even if the user has no Gemini key,

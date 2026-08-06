@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   // Validate the key against Gemini before persisting it — same one-token
   // probe request the old client-side ApiKeySetupModal used to make.
-  const validateRes = await fetch(`${GEMINI_BASE}/gemini-2.5-flash:generateContent`, {
+  const validateRes = await fetch(`${GEMINI_BASE}/gemini-2.5-flash-lite:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': trimmed },
     body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
