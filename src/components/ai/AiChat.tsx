@@ -284,6 +284,7 @@ interface ToolResult {
   showForm?: boolean;       // show inline exercise form
   formInitialName?: string; // pre-fill exercise name in form
   templateAction?: { id: string; title: string }; // coach built & saved a workout template
+  loggedExercise?: { name: string; sets: number; reps: number; weight?: number; unit?: string };
 }
 
 type CoachChartKind = 'bar' | 'line' | 'ring' | 'donut';
@@ -325,6 +326,7 @@ interface Message {
   chart?: CoachChart;
   suggestedChart?: CoachChart;
   templateAction?: { id: string; title: string };
+  loggedExercise?: { name: string; sets: number; reps: number; weight?: number; unit?: string };
 }
 
 interface ApiUsage {
@@ -779,25 +781,27 @@ function parseExerciseLine(line: string): ExRow | null {
 // One exercise rendered in the workout-logger's visual language: numbered step
 // pill, name, sets count, and weight/reps as big display numbers with micro
 // labels — so a plan reads like the app's set cards, not a wall of text.
-const ExercisePlanCard: React.FC<{ row: ExRow; index: number }> = ({ row, index }) => (
+const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean }> = ({ row, index, done }) => (
   <div
     className="relative overflow-hidden rounded-2xl border"
-    style={{ background: 'var(--bg-base)', borderColor: 'var(--border)' }}
+    style={{ background: 'var(--bg-base)', borderColor: done ? 'rgba(200,255,0,0.16)' : 'var(--border)' }}
   >
-    <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: 'var(--accent)', opacity: 0.5 }} />
+    <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: 'var(--accent)', opacity: done ? 1 : 0.5 }} />
     <div className="flex items-center justify-between px-4 pt-3 pb-2 pl-5 gap-2">
       <div className="flex items-center gap-2 min-w-0">
         <span
           className="rounded-lg px-2 py-[3px] text-[10px] font-bold tracking-[0.14em] uppercase shrink-0 tabular-nums"
-          style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+          style={done
+            ? { border: '1px solid rgba(200,255,0,0.28)', color: 'var(--accent)', background: 'transparent' }
+            : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
         >
-          {String(index).padStart(2, '0')}
+          {done ? 'Logged' : String(index ?? 1).padStart(2, '0')}
         </span>
         <span className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{row.name}</span>
       </div>
-      <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
-        {row.sets} sets
-      </span>
+      {done
+        ? <Check className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+        : <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>{row.sets} sets</span>}
     </div>
     <div className="flex items-stretch border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
       {row.weight && (
@@ -1076,8 +1080,11 @@ async function executeTool(
     });
 
     window.dispatchEvent(new CustomEvent('athlix:workout-logged'));
-    const weightStr = weight > 0 ? ` @ ${weight}${unit}` : '';
-    return { success: true, message: `${best.name} — ${sets}×${reps}${weightStr} logged${date === today ? ' for today' : ` for ${date}`}` };
+    return {
+      success: true,
+      message: `${best.name} logged${date === today ? ' for today' : ` for ${date}`}`,
+      loggedExercise: { name: best.name, sets, reps, weight: weight > 0 ? weight : undefined, unit },
+    };
   }
 
   if (name === 'show_exercise_form') {
@@ -1670,7 +1677,7 @@ export const AiChat: React.FC = () => {
           const aiText2 = finalParts.filter((p) => !p.thought).map((p) => p.text).join('').trim() || 'Done!';
 
           setStreamingText('');
-          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart, templateAction: toolResult.templateAction }]);
+          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart, templateAction: toolResult.templateAction, loggedExercise: toolResult.loggedExercise }]);
           return;
         }
 
@@ -2868,8 +2875,24 @@ const ChatContent: React.FC<ChatContentProps> = ({
                     )}
                   </div>
                 )}
-                {/* Action confirmation card */}
-                {m.role === 'model' && m.action && m.action.message && (
+                {/* Logged exercise — the same set card as the logger, marked done */}
+                {m.role === 'model' && m.loggedExercise && (
+                  <div className="mb-1">
+                    <ExercisePlanCard
+                      done
+                      row={{
+                        name: m.loggedExercise.name,
+                        sets: String(m.loggedExercise.sets),
+                        reps: String(m.loggedExercise.reps),
+                        weight: m.loggedExercise.weight != null ? String(m.loggedExercise.weight) : undefined,
+                        unit: m.loggedExercise.unit,
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Action confirmation card — skipped when a richer logged card shows it */}
+                {m.role === 'model' && m.action && m.action.message && !m.loggedExercise && (
                   <div
                     className="flex items-center gap-2 px-3 py-2 mb-1"
                     style={{
