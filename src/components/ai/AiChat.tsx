@@ -1698,7 +1698,7 @@ export const AiChat: React.FC = () => {
             const errMsg: string = errBody?.error?.message || `Request failed (${res.status})`;
 
             if (res.status === 400 && errBody?.error?.code === 'NO_KEY') {
-              throw new Error('INVALID_KEY: No Gemini API key configured. Set one up in Settings.');
+              throw new Error('INVALID_KEY: No AI provider is available. Set GROQ_API_KEY on the server (recommended), or add a personal Gemini key in Settings.');
             }
             if (res.status === 429 && errMsg.includes('quota')) {
               throw new Error('QUOTA: Your API key\'s project has billing enabled, which sets the free tier limit to 0.\n\nFix: Go to aistudio.google.com/app/apikey → "Create API key in new project" (no billing) → paste the new key in Settings.');

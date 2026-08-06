@@ -78,7 +78,9 @@ export function useAiCoachKey() {
 
   const remove = useCallback(async () => {
     await aiCoachFetch('/api/ai-coach/keys', { method: 'DELETE' });
-    setHasKey(false);
+    // Removing the personal Gemini key doesn't disable the coach when a shared
+    // Groq key is serving it.
+    setHasKey(GROQ_ENABLED ? true : false);
     writeConfirmed(false);
   }, []);
 
