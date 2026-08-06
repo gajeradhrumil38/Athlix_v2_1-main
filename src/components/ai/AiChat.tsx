@@ -2206,12 +2206,12 @@ const ChatContent: React.FC<ChatContentProps> = ({
                 onClick={() => onSuggest(q)}
                 className="shrink-0 whitespace-nowrap transition-all active:scale-95"
                 style={{
-                  padding: '7px 12px',
-                  borderRadius: 999,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-secondary)',
-                  fontSize: 12,
+                  padding: '9px 14px',
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.045)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'var(--text-primary)',
+                  fontSize: 12.5,
                   fontWeight: 500,
                   scrollSnapAlign: 'start',
                 }}
