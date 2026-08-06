@@ -11,6 +11,7 @@ import { getRuns } from '../../features/running/utils/storage';
 import { whoopService, whoopWindowRange } from '../../features/whoop/services/whoopService';
 import { getFoodScans } from '../../lib/foodData';
 import { buildSystemPrompt, parseSkincareStats, type WorkoutWithExercises } from '../../lib/aiCoach';
+import { getCoachMemory } from '../../lib/coachMemory';
 import type { WorkoutComparison } from '../../lib/supabaseData';
 import { useAiCoachKey } from '../../hooks/useAiCoachKey';
 import { buildBriefingPrompt, buildFallbackBriefing, getCachedBriefing, setCachedBriefing, getTodayFeeling } from '../../lib/dailyBriefing';
@@ -220,7 +221,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
       const whoopData = whoopRes.status === 'fulfilled' ? whoopRes.value : null;
       const food = (foodRes.status === 'fulfilled' ? foodRes.value : []) as FoodScan[];
 
-      const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight');
+      const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight', getCoachMemory(user.id));
       const userTurn = buildInsightPrompt(detail);
 
       // Thinking disabled: this is a short 2-3 sentence summary, not a
@@ -321,7 +322,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), ANALYZING_TIMEOUT_MS);
     try {
-      const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight');
+      const systemPrompt = buildSystemPrompt(profile, workouts, prs, food, getRuns(), whoopData as any, parseSkincareStats(), 'insight', getCoachMemory(user.id));
       const buildBody = (targetModel: string) => ({
         model: targetModel,
         stream: false,

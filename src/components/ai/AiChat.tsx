@@ -44,6 +44,17 @@ import {
   parseSkincareStats,
 } from '../../lib/aiCoach';
 import { useAiCoachKey, DEFAULT_MODEL } from '../../hooks/useAiCoachKey';
+import {
+  type CoachGoal,
+  type CoachMemory,
+  getCoachMemory,
+  addCoachGoal,
+  addCoachFact,
+  completeCoachGoal,
+  recordCheckIn,
+  coachStreak,
+} from '../../lib/coachMemory';
+import { getTodayFeeling, setTodayFeeling } from '../../lib/dailyBriefing';
 
 /* ── Per-set data type ────────────────────────────────────────────── */
 interface SetEntry { reps: number; weight: number; }
@@ -170,6 +181,43 @@ const FUNCTION_DECLARATIONS = [
     name: 'navigate_to_run',
     description: "Open the GPS run tracker. Use when user says 'start a run', 'let\\'s go running', 'open the run tracker', 'I want to track my run'.",
     parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'set_goal',
+    description: "Remember a fitness goal the user states they're working toward. Use when they say things like 'my goal is to bench 100kg', 'I want to hit a 5k under 25 min', 'trying to lose 5kg', 'want bigger arms'. Capture a structured target when there's a clear number.",
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Short natural-language goal, e.g. "Bench press 100kg" or "Run 5k under 25 min".' },
+        metric: { type: 'string', enum: ['weight', 'e1rm', 'bodyweight', 'runs', 'sessions'], description: 'Optional: what the target measures.' },
+        exercise: { type: 'string', description: 'Optional exercise name the goal is about, e.g. "Bench Press".' },
+        target: { type: 'number', description: 'Optional numeric target value.' },
+        unit: { type: 'string', description: "Optional unit for the target, e.g. 'kg', 'lbs', 'min'." },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'remember',
+    description: "Remember a durable preference, schedule, or constraint about the user so future coaching respects it. Use for things like 'I train Monday Wednesday Friday', 'I have a bad shoulder, no overhead pressing', 'I only have dumbbells', 'I'm vegetarian'. Do NOT use for one-off logging or transient state.",
+    parameters: {
+      type: 'object',
+      properties: {
+        fact: { type: 'string', description: 'The durable fact to remember, phrased concisely in third person, e.g. "Trains Mon/Wed/Fri" or "Bad left shoulder — avoid overhead pressing".' },
+      },
+      required: ['fact'],
+    },
+  },
+  {
+    name: 'complete_goal',
+    description: "Mark a previously set goal as achieved. Use when the user says they hit a goal, e.g. 'I finally benched 100kg!', 'hit my 5k target'. Match against their active goals.",
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Words identifying which goal was achieved, e.g. "bench 100kg".' },
+      },
+      required: ['text'],
+    },
   },
   {
     name: 'show_nutrition_summary',
@@ -720,6 +768,32 @@ async function executeTool(
     return { success: true, message: 'Starting run tracker…' };
   }
 
+  if (name === 'set_goal') {
+    const text = (args.text as string) || '';
+    if (!text.trim()) return { success: false, message: 'No goal to save.' };
+    addCoachGoal(userId, {
+      text,
+      metric: args.metric as CoachGoal['metric'],
+      exercise: (args.exercise as string) || undefined,
+      target: args.target != null ? Number(args.target) : undefined,
+      unit: (args.unit as string) || undefined,
+    });
+    return { success: true, message: `Goal saved: ${text}` };
+  }
+
+  if (name === 'remember') {
+    const fact = (args.fact as string) || '';
+    if (!fact.trim()) return { success: false, message: 'Nothing to remember.' };
+    addCoachFact(userId, fact);
+    return { success: true, message: `Got it — I'll remember that.` };
+  }
+
+  if (name === 'complete_goal') {
+    const text = (args.text as string) || '';
+    completeCoachGoal(userId, text);
+    return { success: true, message: `Nice work — goal marked complete.` };
+  }
+
   if (name === 'show_nutrition_summary') {
     return { success: true, message: '' };
   }
@@ -908,6 +982,7 @@ export const AiChat: React.FC = () => {
   const [recentRuns, setRecentRuns] = useState<SavedRun[]>([]);
   const [whoopData, setWhoopData] = useState<WhoopAllData | null>(null);
   const [skincareStats, setSkincareStats] = useState<{ weekPercent: number; streak: number } | null>(null);
+  const [memory, setMemory] = useState<CoachMemory>(() => getCoachMemory(null));
   const [showKeySetup, setShowKeySetup] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -918,6 +993,15 @@ export const AiChat: React.FC = () => {
   const hasKeyRef = useRef(hasKey);
   useEffect(() => { hasKeyRef.current = hasKey; }, [hasKey]);
   const [streamingText, setStreamingText] = useState('');
+
+  // Load the coach's memory for the signed-in user, and keep it in sync when a
+  // tool writes to the store (event fired by coachMemory.save).
+  useEffect(() => {
+    const load = () => setMemory(getCoachMemory(user?.id));
+    load();
+    window.addEventListener('athlix:coach-memory', load);
+    return () => window.removeEventListener('athlix:coach-memory', load);
+  }, [user?.id]);
 
   /* ── Persist chat history across mount/unmount (e.g. visiting /log) so
      reopening the coach resumes the real conversation instead of a blank
@@ -1038,9 +1122,11 @@ export const AiChat: React.FC = () => {
       setInput('');
       setLoading(true);
       setStreamingText('');
+      // Engaging with the coach counts toward the daily streak.
+      setMemory(recordCheckIn(user?.id));
 
       try {
-        const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats);
+        const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id));
         const chartIntentText = history.slice(-6).map((m) => m.text).join('\n');
         const responseChart = buildCoachChart(
           chartIntentText,
@@ -1197,6 +1283,10 @@ export const AiChat: React.FC = () => {
           } catch (e: any) {
             toolResult = { success: false, message: e.message || 'Action failed' };
           }
+          // Memory-writing tools update the persisted store — reflect it in the UI.
+          if (toolName === 'set_goal' || toolName === 'remember' || toolName === 'complete_goal') {
+            setMemory(getCoachMemory(user.id));
+          }
 
           if (toolResult.showForm) {
             setStreamingText('');
@@ -1286,6 +1376,19 @@ export const AiChat: React.FC = () => {
     )));
   }, []);
 
+  // Daily check-in: record the feeling (tunes today's briefing), mark the
+  // streak, and let the coach react to it.
+  const handleCheckIn = useCallback((feeling: string) => {
+    setTodayFeeling(feeling);
+    setMemory(recordCheckIn(user?.id));
+    send(`Quick check-in — I'm feeling ${feeling} today. What should I do?`);
+  }, [send, user?.id]);
+
+  const handleCompleteGoal = useCallback((id: string) => {
+    setMemory(completeCoachGoal(user?.id, id));
+    toast.success('Goal completed 🎉');
+  }, [user?.id]);
+
   /* ── Direct exercise log (from form submit) ─────────────────────── */
   const handleLogExercise = useCallback(async (name: string, sets: SetEntry[], unit: 'kg' | 'lbs') => {
     if (!user?.id) return;
@@ -1371,6 +1474,11 @@ export const AiChat: React.FC = () => {
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
+                memory={memory}
+                streak={coachStreak(memory, workouts)}
+                todayFeeling={getTodayFeeling()}
+                onCheckIn={handleCheckIn}
+                onCompleteGoal={handleCompleteGoal}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1419,6 +1527,11 @@ export const AiChat: React.FC = () => {
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
+                memory={memory}
+                streak={coachStreak(memory, workouts)}
+                todayFeeling={getTodayFeeling()}
+                onCheckIn={handleCheckIn}
+                onCompleteGoal={handleCompleteGoal}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1817,6 +1930,11 @@ interface ChatContentProps {
   messages: Message[];
   suggestions: string[];
   followUps: string[];
+  memory: CoachMemory;
+  streak: number;
+  todayFeeling: string | null;
+  onCheckIn: (feeling: string) => void;
+  onCompleteGoal: (id: string) => void;
   input: string;
   loading: boolean;
   loadingPhase: number;
@@ -1838,13 +1956,14 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  hasKey, messages, suggestions, followUps, input, loading, loadingPhase, streamingText, copiedIdx,
-  inputRef, bottomRef,
+  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, input, loading, loadingPhase, streamingText, copiedIdx,
+  inputRef, bottomRef, onCheckIn, onCompleteGoal,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onClear, onCopy, onPlotSuggestion,
 }) => {
   const [expandedThought, setExpandedThought] = useState<number | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const activeGoals = memory.goals.filter((g) => !g.done);
 
   return (
   <>
@@ -1935,9 +2054,99 @@ const ChatContent: React.FC<ChatContentProps> = ({
               <p className="text-[17px] font-bold text-center mb-[6px]" style={{ color: 'var(--text-primary)' }}>
                 Your AI fitness coach
               </p>
-              <p className="text-[13px] text-center leading-relaxed mb-6 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
+              <p className="text-[13px] text-center leading-relaxed mb-5 max-w-[260px]" style={{ color: 'var(--text-secondary)' }}>
                 Ask about training, or tell me to log something — weight, check-in, anything.
               </p>
+
+              {/* Streak */}
+              {streak >= 1 && (
+                <div
+                  className="inline-flex items-center gap-1.5 mb-4"
+                  style={{
+                    padding: '5px 11px',
+                    borderRadius: 999,
+                    background: 'rgba(200,255,0,0.10)',
+                    border: '1px solid rgba(200,255,0,0.22)',
+                    color: '#C8FF00',
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  🔥 {streak}-day streak
+                </div>
+              )}
+
+              {/* Daily check-in */}
+              {!todayFeeling && (
+                <div className="w-full mb-4">
+                  <p className="text-[11px] text-center mb-2" style={{ color: 'var(--text-muted)' }}>
+                    How are you feeling today?
+                  </p>
+                  <div className="flex gap-2 justify-center flex-wrap">
+                    {[['Fresh', '💪'], ['Good', '🙂'], ['Tired', '😮‍💨'], ['Sore', '🥵']].map(([f, e]) => (
+                      <button
+                        key={f}
+                        onClick={() => onCheckIn(f.toLowerCase())}
+                        className="transition-all active:scale-95"
+                        style={{
+                          padding: '8px 13px',
+                          borderRadius: 12,
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-primary)',
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {e} {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Active goals */}
+              {activeGoals.length > 0 && (
+                <div className="w-full mb-5">
+                  <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>Your goals</p>
+                  <div className="space-y-1.5">
+                    {activeGoals.map((g) => (
+                      <div
+                        key={g.id}
+                        className="flex items-center gap-2.5"
+                        style={{
+                          padding: '9px 11px',
+                          borderRadius: 10,
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.07)',
+                        }}
+                      >
+                        <button
+                          onClick={() => onCompleteGoal(g.id)}
+                          title="Mark complete"
+                          className="shrink-0 flex items-center justify-center transition-colors"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 999,
+                            border: '1.5px solid var(--text-muted)',
+                            background: 'transparent',
+                          }}
+                        >
+                          <Check className="w-2.5 h-2.5" style={{ color: 'var(--text-muted)' }} />
+                        </button>
+                        <span className="flex-1 text-[12.5px]" style={{ color: 'var(--text-primary)' }}>
+                          {g.text}
+                          {g.target != null && (
+                            <span style={{ color: 'var(--text-muted)' }}> · {g.target}{g.unit || ''}</span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* 2-col chip grid */}
               <div className="w-full grid grid-cols-2 gap-2">
                 {suggestions.map((q) => (

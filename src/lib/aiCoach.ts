@@ -6,6 +6,7 @@ import type { WhoopAllData } from '../features/whoop/services/whoopService';
 import { buildDailyLoads, computeLoadMetrics } from '../features/whoop/services/loadMetrics';
 import { computeCardiacHealth } from '../features/whoop/services/cardiacHealth';
 import { buildImprovementModel, buildImprovementModelSection } from './improvementModel';
+import { buildCoachMemorySection, type CoachMemory } from './coachMemory';
 
 export type WorkoutWithExercises = LocalWorkout & { exercises?: LocalExercise[] };
 
@@ -240,6 +241,7 @@ export function buildSystemPrompt(
   skincareStats: { weekPercent: number; streak: number } | null,
   // 'insight' drops the structured RESPONSE FORMAT block, which otherwise conflicts with the pill's own plain-sentence prompt.
   variant: 'chat' | 'insight' = 'chat',
+  memory: CoachMemory | null = null,
 ): string {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
   const name = profile?.full_name || 'Athlete';
@@ -340,5 +342,5 @@ COACHING RULES:
 6. When discussing exercise progress, prefer total volume per logged session unless the user explicitly asks for best weight, reps, or estimated 1RM
 7. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
-${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildSkincareSection(skincareStats)}`;
+${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildSkincareSection(skincareStats)}`;
 }
