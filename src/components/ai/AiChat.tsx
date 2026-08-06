@@ -608,28 +608,118 @@ function defaultWorkoutTitle(): string {
 }
 
 /* ── Simple markdown → React (bold, bullets, newlines) ─────────────── */
-function renderText(raw: string) {
-  return raw.split('\n').map((line, li) => {
-    const parts: React.ReactNode[] = [];
-    let rest = line;
-    let key = 0;
-    while (rest.length) {
-      const m = rest.match(/\*\*(.+?)\*\*/);
-      if (!m || m.index === undefined) {
-        parts.push(rest);
-        break;
-      }
-      if (m.index > 0) parts.push(rest.slice(0, m.index));
-      parts.push(<strong key={key++}>{m[1]}</strong>);
-      rest = rest.slice(m.index + m[0].length);
-    }
-    return (
-      <span key={li}>
-        {parts}
-        {li < raw.split('\n').length - 1 && <br />}
-      </span>
+interface ExRow { name: string; sets: string; reps: string; weight?: string; unit?: string }
+
+// **bold** → <strong>, everything else plain.
+function renderInline(line: string, keyBase: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let rest = line;
+  let key = 0;
+  while (rest.length) {
+    const m = rest.match(/\*\*(.+?)\*\*/);
+    if (!m || m.index === undefined) { parts.push(rest); break; }
+    if (m.index > 0) parts.push(rest.slice(0, m.index));
+    parts.push(<strong key={`${keyBase}-${key++}`}>{m[1]}</strong>);
+    rest = rest.slice(m.index + m[0].length);
+  }
+  return parts;
+}
+
+// Detect a workout-prescription line ("· Bench Press: 3×8 @ 80lbs", "Squat: 4
+// sets of 5 reps at 100kg") so it can render as a clean row instead of dense
+// prose. Requires a leading bullet or a "Name:" prefix to avoid eating normal
+// sentences that happen to contain numbers.
+function parseExerciseLine(line: string): ExRow | null {
+  const hadBullet = /^\s*[-*•·]\s+/.test(line);
+  const s = line.replace(/^\s*[-*•·]\s*/, '').replace(/\*\*/g, '').trim();
+  if (!s) return null;
+  const hasColon = /^[^:]{1,40}:\s*\S/.test(s);
+  if (!hadBullet && !hasColon) return null;
+
+  const sr = s.match(/(\d+)\s*(?:sets?|s)?\s*[x×]\s*(\d+(?:\s*[-–]\s*\d+)?)/i)
+    || s.match(/(\d+)\s*sets?\s+(?:of\s+)?(\d+(?:\s*[-–]\s*\d+)?)\s*reps?/i);
+  if (!sr || sr.index === undefined) return null;
+
+  const wm = s.match(/(?:@|at)\s*([\d.]+)\s*(kg|lbs?)\b/i) || s.match(/\b([\d.]+)\s*(kg|lbs?)\b/i);
+  let name = s.slice(0, sr.index).replace(/[:\-–—]\s*$/, '').trim();
+  if (!name) name = s.split(/[:\-–—]/)[0].trim();
+  if (!name || name.length > 40 || /^\d/.test(name)) return null;
+
+  return {
+    name,
+    sets: sr[1],
+    reps: sr[2].replace(/\s+/g, ''),
+    weight: wm ? wm[1] : undefined,
+    unit: wm ? (/^lb/i.test(wm[2]) ? 'lb' : 'kg') : undefined,
+  };
+}
+
+const ExercisePlanBlock: React.FC<{ rows: ExRow[] }> = ({ rows }) => (
+  <div
+    className="my-1.5 overflow-hidden"
+    style={{ borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+  >
+    {rows.map((r, i) => (
+      <div
+        key={i}
+        className="flex items-center justify-between gap-3"
+        style={{ padding: '9px 12px', borderTop: i ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
+      >
+        <span className="text-[12.5px] font-medium min-w-0 truncate" style={{ color: 'var(--text-primary)' }}>
+          {r.name}
+        </span>
+        <span className="shrink-0 inline-flex items-center gap-2 tabular-nums" style={{ fontSize: 11.5 }}>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+            {r.sets}<span style={{ color: 'var(--text-muted)', margin: '0 1px' }}>×</span>{r.reps}
+          </span>
+          {r.weight && (
+            <span style={{ color: 'var(--text-muted)' }}>{r.weight}{r.unit}</span>
+          )}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+// Render coach text, promoting consecutive exercise prescriptions into a tidy
+// plan block and leaving prose as-is.
+function renderText(raw: string): React.ReactNode[] {
+  const lines = raw.split('\n');
+  const out: React.ReactNode[] = [];
+  let exGroup: ExRow[] = [];
+  let txtGroup: string[] = [];
+  let bk = 0;
+
+  const flushTxt = () => {
+    if (!txtGroup.length) return;
+    const arr = txtGroup;
+    const k = bk++;
+    out.push(
+      <p key={`t${k}`} style={{ margin: 0 }}>
+        {arr.map((l, i) => (
+          <React.Fragment key={i}>
+            {renderInline(l, `t${k}-${i}`)}
+            {i < arr.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </p>,
     );
-  });
+    txtGroup = [];
+  };
+  const flushEx = () => {
+    if (!exGroup.length) return;
+    out.push(<ExercisePlanBlock key={`e${bk++}`} rows={exGroup} />);
+    exGroup = [];
+  };
+
+  for (const line of lines) {
+    const ex = parseExerciseLine(line);
+    if (ex) { flushTxt(); exGroup.push(ex); }
+    else { flushEx(); txtGroup.push(line); }
+  }
+  flushEx();
+  flushTxt();
+  return out;
 }
 
 /* ── Context-aware suggestions ──────────────────────────────────────── */
@@ -2554,7 +2644,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
                     }}
                   >
                     <BarChart2 className="w-3 h-3" />
-                    Plot volume
+                    Show {m.suggestedChart.title.toLowerCase()}
                   </button>
                 )}
 
