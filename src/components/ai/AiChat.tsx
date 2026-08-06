@@ -1620,7 +1620,9 @@ export const AiChat: React.FC = () => {
           generationConfig: {
             temperature: 1,
             maxOutputTokens: 2048,
-            ...(/^gemini-2\.5/.test(targetModel) && { thinkingConfig: { thinkingBudget: 1024 } }),
+            // No "thinking" tokens — the coach's answers are short and grounded
+            // in the system context, so thinking just burns tokens + latency.
+            ...(/^gemini-2\.5/.test(targetModel) && { thinkingConfig: { thinkingBudget: 0 } }),
           },
         });
 
@@ -1630,7 +1632,7 @@ export const AiChat: React.FC = () => {
           msg.toLowerCase().includes('overloaded') ||
           msg.toLowerCase().includes('try again');
 
-        const FALLBACK_MODEL = 'gemini-1.5-flash';
+        const FALLBACK_MODEL = 'gemini-2.5-flash';
         const RETRY_DELAYS = [1200, 2500]; // ms between attempts
 
         // Shared retry/fallback-model policy: given a way to make one

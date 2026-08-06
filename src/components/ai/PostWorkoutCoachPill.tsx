@@ -17,7 +17,7 @@ import { useAiCoachKey } from '../../hooks/useAiCoachKey';
 import { buildBriefingPrompt, buildFallbackBriefing, getCachedBriefing, setCachedBriefing, getTodayFeeling } from '../../lib/dailyBriefing';
 import { COACH_CONTEXTS, contextFiredToday, markContextFired } from '../../lib/contextCoach';
 
-const FALLBACK_MODEL = 'gemini-1.5-flash';
+const FALLBACK_MODEL = 'gemini-2.5-flash';
 const ANALYZING_TIMEOUT_MS = 10_000;
 const COOLDOWN_MS = 60_000;
 const COLLAPSED_AUTO_DISMISS_MS = 30_000;

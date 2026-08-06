@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveApiUser } from '@/lib/apiAuth';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Flash-Lite: highest free-tier daily quota (~1,000 req/day). Retired/low-quota
+// models the client might still send are coerced here as a safety net.
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+const LOW_QUOTA_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']);
 
 export async function POST(req: NextRequest) {
   const { user, supabase } = await resolveApiUser(req);
@@ -21,7 +24,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { model, stream, ...body } = await req.json();
-  const targetModel = (typeof model === 'string' && model) || DEFAULT_MODEL;
+  const requested = (typeof model === 'string' && model) || DEFAULT_MODEL;
+  const targetModel = LOW_QUOTA_MODELS.has(requested) ? DEFAULT_MODEL : requested;
 
   const endpoint = stream
     ? `${GEMINI_BASE}/${targetModel}:streamGenerateContent?alt=sse`

@@ -2,7 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { aiCoachFetch } from '../lib/aiCoachFetch';
 import { supabase } from '../lib/supabase';
 
-export const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Flash-Lite has by far the most generous free-tier daily quota (≈1,000 req/day
+// vs ~250 for 2.5-flash, and as low as 20/day on fresh projects), so the coach
+// stops hitting "quota exceeded". Same key, same API.
+export const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+
+// Migrate anyone still on a low-quota or retired model to Flash-Lite on read,
+// so existing users benefit without a DB write or re-entering their key.
+const LOW_QUOTA_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']);
+export const normalizeModel = (m?: string | null): string =>
+  !m || LOW_QUOTA_MODELS.has(m) ? DEFAULT_MODEL : m;
 
 const LEGACY_KEY_STORAGE = 'athlix:gemini_api_key';
 const LEGACY_MODEL_STORAGE = 'athlix:gemini_model';
@@ -26,7 +35,10 @@ const writeConfirmed = (has: boolean, model?: string) => {
   } catch { /* storage unavailable — best-effort only */ }
 };
 const readConfirmedModel = (): string | null => {
-  try { return localStorage.getItem(CONFIRMED_MODEL_STORAGE); } catch { return null; }
+  try {
+    const m = localStorage.getItem(CONFIRMED_MODEL_STORAGE);
+    return m ? normalizeModel(m) : null;
+  } catch { return null; }
 };
 
 interface SaveResult {
@@ -97,7 +109,7 @@ export function useAiCoachKey() {
 
       if (data) {
         // Found — authoritative positive. Update state + cache.
-        const modelValue = (data.model as string | undefined) || DEFAULT_MODEL;
+        const modelValue = normalizeModel(data.model as string | undefined);
         setHasKey(true);
         setModel(modelValue);
         writeConfirmed(true, modelValue);
