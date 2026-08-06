@@ -26,18 +26,21 @@ export type Database = {
       ai_coach_keys: {
         Row: {
           user_id: string;
-          gemini_api_key: string;
+          gemini_api_key: string | null;
+          groq_api_key: string | null;
           model: string;
           updated_at: string;
         };
         Insert: {
           user_id: string;
-          gemini_api_key: string;
+          gemini_api_key?: string | null;
+          groq_api_key?: string | null;
           model?: string;
           updated_at?: string;
         };
         Update: {
-          gemini_api_key?: string;
+          gemini_api_key?: string | null;
+          groq_api_key?: string | null;
           model?: string;
           updated_at?: string;
         };

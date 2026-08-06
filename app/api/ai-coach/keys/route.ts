@@ -12,14 +12,22 @@ export async function GET(req: NextRequest) {
 
   const { data: row } = await supabase
     .from('ai_coach_keys')
-    .select('model')
+    .select('model, gemini_api_key, groq_api_key')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // With a shared Groq key configured server-side, the coach is usable even
-  // without the user having their own Gemini key.
-  const groqAvailable = !!process.env.GROQ_API_KEY;
-  return NextResponse.json({ hasKey: !!row || groqAvailable, model: row?.model || DEFAULT_MODEL, groqAvailable });
+  const hasGeminiKey = !!row?.gemini_api_key;
+  const hasGroqKey = !!row?.groq_api_key;
+  // The coach is usable if the user has any personal key OR a shared Groq key is
+  // configured server-side.
+  const groqAvailable = hasGroqKey || !!process.env.GROQ_API_KEY;
+  return NextResponse.json({
+    hasKey: hasGeminiKey || groqAvailable,
+    hasGeminiKey,
+    hasGroqKey,
+    groqAvailable,
+    model: row?.model || DEFAULT_MODEL,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -28,9 +36,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Not signed in' } }, { status: 401 });
   }
 
-  const { apiKey, model } = await req.json();
+  const { apiKey, groqApiKey, model } = await req.json();
   const trimmed = (typeof apiKey === 'string' ? apiKey : '').trim();
+  const trimmedGroq = (typeof groqApiKey === 'string' ? groqApiKey : '').trim();
   const targetModel = (typeof model === 'string' && model) || DEFAULT_MODEL;
+
+  // ── Groq key path ── validate against Groq, then persist. Groq is the coach's
+  // primary provider, so this is all a user needs to enable it.
+  if (trimmedGroq) {
+    const groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    const probe = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${trimmedGroq}` },
+      body: JSON.stringify({ model: groqModel, messages: [{ role: 'user', content: 'hi' }], max_completion_tokens: 1 }),
+    });
+    if (!probe.ok) {
+      const eb = await probe.json().catch(() => ({}));
+      const msg: string = eb?.error?.message || `Error ${probe.status}`;
+      const friendly = probe.status === 401 ? 'Invalid Groq key — check and try again.' : msg;
+      return NextResponse.json({ success: false, error: { message: friendly } }, { status: 400 });
+    }
+    const { error } = await supabase
+      .from('ai_coach_keys')
+      .upsert({ user_id: user.id, groq_api_key: trimmedGroq, model: targetModel, updated_at: new Date().toISOString() });
+    if (error) {
+      return NextResponse.json({ success: false, error: { message: 'Could not save Groq key. Try again.' } }, { status: 500 });
+    }
+    return NextResponse.json({ success: true });
+  }
 
   if (!trimmed) {
     // No new key submitted — allow a model-only change for a user who

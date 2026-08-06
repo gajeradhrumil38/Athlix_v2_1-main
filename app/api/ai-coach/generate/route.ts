@@ -11,8 +11,9 @@ const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 
 // Groq is primary (much larger free daily quota, very fast); Gemini is the
-// fallback. Configured with a single shared server key.
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+// fallback. Each user can save their own Groq key (own quota, no shared-key
+// rate-limit); otherwise a single shared server key is used if present.
+const SHARED_GROQ_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 const SSE_HEADERS = {
@@ -29,15 +30,18 @@ export async function POST(req: NextRequest) {
 
   const { data: keyRow } = await supabase
     .from('ai_coach_keys')
-    .select('gemini_api_key')
+    .select('gemini_api_key, groq_api_key')
     .eq('user_id', user.id)
     .maybeSingle();
+
+  // The user's own Groq key wins over the shared server key.
+  const groqKey = keyRow?.groq_api_key || SHARED_GROQ_KEY;
 
   const { model, stream, ...body } = await req.json();
 
   // ── Groq (primary) — text-only. Image requests (food scanner) skip to Gemini
   // since Groq's text models can't see images.
-  if (GROQ_API_KEY && !containsImage(body.contents)) {
+  if (groqKey && !containsImage(body.contents)) {
     const groqBody: Record<string, unknown> = { ...translateToGroq(body, GROQ_MODEL), stream: !!stream };
     if (stream) groqBody.stream_options = { include_usage: true };
 
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest) {
       try {
         const gres = await fetch(GROQ_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
           body: JSON.stringify(groqBody),
         });
 
@@ -89,7 +93,7 @@ export async function POST(req: NextRequest) {
   // ── Gemini (fallback) — needs the user's own key.
   if (!keyRow?.gemini_api_key) {
     return NextResponse.json(
-      { error: { code: 'NO_KEY', message: 'No AI provider available. Set GROQ_API_KEY on the server, or add a Gemini key in Settings.' } },
+      { error: { code: 'NO_KEY', message: 'No AI provider available. Add a Groq API key in Settings (recommended), or a Gemini key.' } },
       { status: 400 },
     );
   }

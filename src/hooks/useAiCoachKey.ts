@@ -78,6 +78,24 @@ export function useAiCoachKey() {
     return { success: true };
   }, []);
 
+  // Save a personal Groq key — the coach's primary provider. Once set, the coach
+  // runs on the user's own Groq quota (no shared-key rate-limit, no reliance on
+  // the Gemini fallback).
+  const saveGroq = useCallback(async (groqApiKey: string): Promise<SaveResult> => {
+    const res = await aiCoachFetch('/api/ai-coach/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groqApiKey }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      return { success: false, error: data?.error?.message || 'Could not validate Groq key.' };
+    }
+    setHasKey(true);
+    writeConfirmed(true, model);
+    return { success: true };
+  }, [model]);
+
   const remove = useCallback(async () => {
     await aiCoachFetch('/api/ai-coach/keys', { method: 'DELETE' });
     // Removing the personal Gemini key doesn't disable the coach when a shared
@@ -159,5 +177,5 @@ export function useAiCoachKey() {
     refresh();
   }, [refresh]);
 
-  return { hasKey, model, loading, refresh, save, remove };
+  return { hasKey, model, loading, refresh, save, saveGroq, remove };
 }

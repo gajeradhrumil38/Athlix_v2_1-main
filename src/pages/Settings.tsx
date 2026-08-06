@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { convertWeight, type WeightUnit } from '../lib/units';
 import { whoopService } from '../features/whoop/services/whoopService';
 import { useAiCoachKey } from '../hooks/useAiCoachKey';
+import { aiCoachFetch } from '../lib/aiCoachFetch';
 
 /* ── WHOOP connect sub-section ─────────────────────────────── */
 const WhoopConnect: React.FC<{ userId: string }> = ({ userId }) => {
@@ -289,13 +290,46 @@ export const Settings: React.FC = () => {
   const [defaultView, setDefaultView] = useState<'Day' | 'Week'>(
     () => (localStorage.getItem('defaultView') as 'Day' | 'Week') || 'Week'
   );
-  const { hasKey: hasGeminiKey, model: savedGeminiModel, loading: geminiKeyLoading, save: saveAiCoachKey, remove: removeAiCoachKey } = useAiCoachKey();
+  const { hasKey: hasGeminiKey, model: savedGeminiModel, loading: geminiKeyLoading, save: saveAiCoachKey, saveGroq, remove: removeAiCoachKey } = useAiCoachKey();
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
-  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash-lite');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [geminiSaving, setGeminiSaving] = useState(false);
   const [geminiError, setGeminiError] = useState('');
   const [geminiSaved, setGeminiSaved] = useState(false);
+
+  // Groq — the coach's primary provider (bigger free quota, no per-user model
+  // restrictions). Presence read from the keys route for display.
+  const [groqKeyInput, setGroqKeyInput] = useState('');
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [groqSaving, setGroqSaving] = useState(false);
+  const [groqError, setGroqError] = useState('');
+  const [groqSaved, setGroqSaved] = useState(false);
+  const [hasGroqKey, setHasGroqKey] = useState(false);
+
+  useEffect(() => {
+    aiCoachFetch('/api/ai-coach/keys')
+      .then((r) => r.json())
+      .then((d) => setHasGroqKey(!!d?.hasGroqKey))
+      .catch(() => {});
+  }, []);
+
+  const saveGroqKey = async () => {
+    const trimmed = groqKeyInput.trim();
+    if (!trimmed) return;
+    setGroqSaving(true);
+    setGroqError('');
+    const result = await saveGroq(trimmed);
+    setGroqSaving(false);
+    if (!result.success) {
+      setGroqError(result.error || 'Could not save Groq key.');
+      return;
+    }
+    setGroqKeyInput('');
+    setHasGroqKey(true);
+    setGroqSaved(true);
+    setTimeout(() => setGroqSaved(false), 2000);
+  };
 
   useEffect(() => {
     if (!geminiKeyLoading) setGeminiModel(savedGeminiModel);
@@ -789,6 +823,64 @@ export const Settings: React.FC = () => {
       {/* ── AI Assistant ──────────────────────── */}
       <SectionCard title="AI Assistant">
         <div className="px-5 py-5 space-y-3">
+          {/* Groq — primary provider */}
+          <div className="flex items-center gap-2 mb-1">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: 'linear-gradient(135deg, #C8FF00, #7bd400)' }}
+            >
+              <Sparkles className="w-3.5 h-3.5" style={{ color: '#0a0a0a' }} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[13px] font-medium text-[var(--text-primary)]">
+                Groq API Key <span className="text-[10px] font-bold uppercase align-middle ml-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(200,255,0,0.12)', color: '#C8FF00' }}>Recommended</span>
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Free, no card, big daily quota — get one at console.groq.com/keys
+              </p>
+            </div>
+          </div>
+          <div className="relative">
+            <input
+              type={showGroqKey ? 'text' : 'password'}
+              value={groqKeyInput}
+              onChange={(e) => { setGroqKeyInput(e.target.value); setGroqError(''); }}
+              onKeyDown={(e) => e.key === 'Enter' && saveGroqKey()}
+              placeholder={hasGroqKey ? 'Key configured — paste a new one to replace it' : 'gsk_…'}
+              className="w-full h-10 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl px-3.5 pr-10 text-[13px] text-[var(--text-primary)] outline-none focus:border-[rgba(200,255,0,0.5)] transition-colors placeholder:text-[var(--text-muted)]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowGroqKey((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              {showGroqKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          {groqError && <p className="text-[12px] text-red-400">{groqError}</p>}
+          <button
+            onClick={saveGroqKey}
+            disabled={groqSaving || !groqKeyInput.trim()}
+            className="w-full h-10 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 transition-opacity disabled:opacity-50"
+            style={{ background: '#C8FF00', color: '#0a0a0a', opacity: groqSaved ? 0.7 : 1 }}
+          >
+            {groqSaving ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Validating…</>
+            ) : groqSaved ? (
+              <><CheckCircle className="w-4 h-4" /> Saved!</>
+            ) : (
+              <><Save className="w-3.5 h-3.5" /> {hasGroqKey ? 'Update Groq Key' : 'Save Groq Key'}</>
+            )}
+          </button>
+          {hasGroqKey && (
+            <p className="text-[11px] flex items-center gap-1.5" style={{ color: '#C8FF00' }}>
+              <CheckCircle className="w-3.5 h-3.5" /> Groq is powering your coach.
+            </p>
+          )}
+
+          <div className="h-px my-1" style={{ background: 'var(--border)' }} />
+
+          {/* Gemini — optional fallback (also required for the food scanner's image recognition) */}
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
@@ -797,9 +889,9 @@ export const Settings: React.FC = () => {
               <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
             <div>
-              <p className="text-[13px] font-medium text-[var(--text-primary)]">Gemini API Key</p>
+              <p className="text-[13px] font-medium text-[var(--text-primary)]">Gemini API Key <span className="text-[10px] text-[var(--text-muted)]">· optional</span></p>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Get a free key at aistudio.google.com
+                Fallback + food-scanner vision · aistudio.google.com
               </p>
             </div>
           </div>
@@ -810,9 +902,7 @@ export const Settings: React.FC = () => {
             </label>
             <div className="grid grid-cols-2 gap-1.5">
               {[
-                { id: 'gemini-2.5-flash', label: '2.5 Flash', note: '✦ Free · 250K tokens' },
-                { id: 'gemini-2.5-flash-preview-05-20', label: '2.5 Flash Preview', note: 'Free · Latest' },
-                { id: 'gemini-1.5-flash', label: '1.5 Flash', note: 'Free · 15 RPM' },
+                { id: 'gemini-2.5-flash-lite', label: '2.5 Flash-Lite', note: '✦ Free · biggest quota' },
                 { id: 'gemini-2.5-pro', label: '2.5 Pro', note: 'Paid only' },
               ].map((m) => (
                 <button
