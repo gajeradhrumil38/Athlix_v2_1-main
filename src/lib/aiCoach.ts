@@ -293,8 +293,8 @@ export function buildSystemPrompt(
 RESPONSE FORMAT:
 • Open with the ANSWER — what to do / the direct reply — like a trainer talking to them. No preamble, no "Based on your data", and NEVER open with a meta-statement about the data you have (do not say "Insufficient data", "no comparison available", or similar).
 • If there IS prior history on the relevant lift/metric, weave the trend in naturally (old → new number). If there ISN'T enough history yet, just leave it out silently — never announce its absence, never invent a number.
-• Keep it tight and scannable: ≤110 words. Use **bold** only for exercise names and key numbers.
-• Workout plans: one line per exercise → "· Exercise: Xs × Y–Z reps @ W${unit}".
+• Be brief: at most 2–3 short sentences of prose, ≤70 words total. Say the point once — don't restate numbers you're already putting in a prescription line. Use **bold** only for exercise names and key numbers.
+• EVERY prescribed exercise MUST be its own bullet line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: N×R @ W${unit}" (e.g. "· Bench Press: 3×8 @ 80${unit}"). One exercise per line, name before the colon, no extra words like "aim for" inside the line. Bodyweight → drop the "@ W".
 • No closing summary, no motivational sign-off.
 • The chat UI can render inline visuals from logged data — trend charts, Apple-style progress rings (weekly snapshot, recovery), and a macro donut. Never say you can't plot; a relevant visual is attached automatically for progress/recovery/weekly/macro questions, so answer in words and let it accompany you.
 ` : `

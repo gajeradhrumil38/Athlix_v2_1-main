@@ -473,25 +473,29 @@ function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string
 }
 
 function buildLoggedWorkoutVolumeChart(workouts: WorkoutWithExercises[], unit: string): CoachChart | undefined {
-  const data = [...workouts]
-    .sort((a, b) => parseWorkoutDate(a.date).getTime() - parseWorkoutDate(b.date).getTime())
-    .map((w) => {
-      const value = (w.exercises || []).reduce((sum, ex) => {
-        const sets = Number(ex.sets) || 0;
-        const reps = Number(ex.reps) || 0;
-        const weight = Number(ex.weight) || 0;
-        return sum + sets * reps * weight;
-      }, 0);
-      return { label: format(parseWorkoutDate(w.date), 'MMM d'), value };
-    })
-    .filter((p) => p.value > 0)
-    .slice(-14);
+  // Aggregate by DAY so two sessions on the same date don't produce two bars
+  // with an identical label.
+  const byDate = new Map<string, number>();
+  for (const w of workouts) {
+    const value = (w.exercises || []).reduce((sum, ex) => {
+      const sets = Number(ex.sets) || 0;
+      const reps = Number(ex.reps) || 0;
+      const weight = Number(ex.weight) || 0;
+      return sum + sets * reps * weight;
+    }, 0);
+    if (value > 0) byDate.set(w.date, (byDate.get(w.date) || 0) + value);
+  }
+
+  const data = Array.from(byDate.entries())
+    .sort(([a], [b]) => parseWorkoutDate(a).getTime() - parseWorkoutDate(b).getTime())
+    .slice(-10)
+    .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value: Math.round(value) }));
 
   if (data.length < 2) return undefined;
   return {
     kind: 'bar',
-    title: 'Logged Workout Volume',
-    subtitle: 'Total volume per logged session',
+    title: 'Training Volume',
+    subtitle: 'Total volume per day',
     valueLabel: `${unit} volume`,
     data,
   };
@@ -765,9 +769,11 @@ function parseExerciseLine(line: string): ExRow | null {
   if (!sr || sr.index === undefined) return null;
 
   const wm = s.match(/(?:@|at)\s*([\d.]+)\s*(kg|lbs?)\b/i) || s.match(/\b([\d.]+)\s*(kg|lbs?)\b/i);
-  let name = s.slice(0, sr.index).replace(/[:\-–—]\s*$/, '').trim();
-  if (!name) name = s.split(/[:\-–—]/)[0].trim();
-  if (!name || name.length > 40 || /^\d/.test(name)) return null;
+  // The exercise name is the label before the colon ("Squat: aim for 3×5" →
+  // "Squat"); fall back to the text before the numbers for bullet-only lines.
+  let name = hasColon ? s.slice(0, s.indexOf(':')).trim() : s.slice(0, sr.index).replace(/[:\-–—]\s*$/, '').trim();
+  if (!name) name = s.slice(0, sr.index).replace(/[:\-–—]\s*$/, '').trim();
+  if (!name || name.length > 34 || /^\d/.test(name)) return null;
 
   return {
     name,
@@ -1392,9 +1398,11 @@ export const AiChat: React.FC = () => {
   useEffect(() => {
     if (!open || dataReady || !user?.id) return;
     const load = async () => {
-      const startDate = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+      // Pull a full window from the server so charts/trends reflect all the
+      // user's data, not just the last handful of sessions.
+      const startDate = format(subDays(new Date(), 180), 'yyyy-MM-dd');
       const [workoutRes, prRes, foodRes, whoopRes] = await Promise.allSettled([
-        getWorkouts(user.id, { startDate, limit: 20, includeExercises: true }),
+        getWorkouts(user.id, { startDate, limit: 500, includeExercises: true }),
         getPersonalRecords(user.id),
         getFoodScans(user.id, 0, 90),
         whoopService.fetchAll('day').catch(() => null),
@@ -2176,6 +2184,8 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
     boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
   };
   const axisTick = { fill: 'rgba(255,255,255,0.32)', fontSize: 10 } as const;
+  // Thin out x labels so they never overlap: aim for at most ~6 visible ticks.
+  const xInterval = chart.data.length > 7 ? Math.ceil(chart.data.length / 6) : 0;
 
   return (
     <div
@@ -2211,10 +2221,10 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
           </span>
         </div>
       </div>
-      <div style={{ width: '100%', height: 150, padding: '4px 6px 6px 0' }}>
+      <div style={{ width: '100%', height: 158, padding: '4px 6px 6px 0' }}>
         <ResponsiveContainer width="100%" height="100%">
           {chart.kind === 'line' ? (
-            <AreaChart data={chart.data} margin={{ top: 10, right: 14, bottom: 6, left: -22 }}>
+            <AreaChart data={chart.data} margin={{ top: 10, right: 14, bottom: 8, left: -8 }}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={accent} stopOpacity={0.22} />
@@ -2222,10 +2232,11 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
-              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} dy={4} />
-              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={fmt} />
+              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} dy={4} interval={xInterval} minTickGap={10} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={46} tickFormatter={fmt} />
               <Tooltip
                 contentStyle={tooltipStyle}
+                separator=""
                 cursor={{ stroke: 'rgba(255,255,255,0.14)', strokeWidth: 1 }}
                 formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
               />
@@ -2240,12 +2251,13 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
               />
             </AreaChart>
           ) : (
-            <BarChart data={chart.data} margin={{ top: 10, right: 10, bottom: 6, left: -22 }} barCategoryGap="28%">
+            <BarChart data={chart.data} margin={{ top: 10, right: 10, bottom: 8, left: -8 }} barCategoryGap="26%">
               <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
-              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} interval={0} dy={4} />
-              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={fmt} />
+              <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} dy={4} interval={xInterval} minTickGap={10} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} width={46} tickFormatter={fmt} />
               <Tooltip
                 contentStyle={tooltipStyle}
+                separator=""
                 cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                 formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
               />
