@@ -784,6 +784,86 @@ function parseExerciseLine(line: string): ExRow | null {
   };
 }
 
+interface VolumeRow {
+  muscle: string;
+  sets: number;
+  status?: 'within' | 'below' | 'above';
+  min?: number;
+  max?: number;
+}
+
+// Detect a weekly-volume line: "Legs: 13 sets (within the recommended 12–20
+// sets/wk)". These read terribly as prose, so they get a compact range card.
+// Guard against prescription lines (those carry reps / × / @ and belong to the
+// exercise-card path).
+function parseVolumeLine(line: string): VolumeRow | null {
+  const s = line.replace(/^\s*[-*•·]\s*/, '').replace(/\*\*/g, '').trim();
+  if (!s) return null;
+  if (/\breps?\b/i.test(s) || /[x×]\s*\d/i.test(s) || /@/.test(s)) return null;
+
+  const m = s.match(/^([A-Za-z][A-Za-z /&-]{1,22}):\s*(\d+)\s*sets?\b/i);
+  if (!m) return null;
+  const muscle = m[1].trim();
+  const sets = parseInt(m[2], 10);
+
+  const rangeM = s.match(/(\d+)\s*[-–]\s*(\d+)\s*sets/i);
+  const min = rangeM ? parseInt(rangeM[1], 10) : undefined;
+  const max = rangeM ? parseInt(rangeM[2], 10) : undefined;
+
+  const statusM = s.match(/\b(within|below|under|above|over)\b/i);
+  let status: VolumeRow['status'];
+  if (statusM) {
+    const w = statusM[1].toLowerCase();
+    status = w === 'below' || w === 'under' ? 'below' : w === 'above' || w === 'over' ? 'above' : 'within';
+  } else if (min != null && max != null) {
+    status = sets < min ? 'below' : sets > max ? 'above' : 'within';
+  }
+  return { muscle, sets, status, min, max };
+}
+
+const VOLUME_STATUS_COLOR: Record<NonNullable<VolumeRow['status']>, string> = {
+  within: '#C8FF00',
+  below: '#fbbf24',
+  above: '#38bdf8',
+};
+
+const VolumeBlock: React.FC<{ rows: VolumeRow[] }> = ({ rows }) => (
+  <div
+    className="my-2 overflow-hidden"
+    style={{ borderRadius: 14, background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+  >
+    {rows.map((r, i) => {
+      const color = r.status ? VOLUME_STATUS_COLOR[r.status] : 'var(--text-secondary)';
+      const domainMax = r.max != null ? Math.max(r.max * 1.25, r.sets * 1.1) : r.sets * 1.2;
+      const pct = (v: number) => Math.max(0, Math.min(100, (v / domainMax) * 100));
+      return (
+        <div key={i} style={{ padding: '10px 13px', borderTop: i ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+          <div className="flex items-center justify-between mb-1.5 gap-3">
+            <span className="text-[12.5px] font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{r.muscle}</span>
+            <span className="shrink-0 text-[12.5px] font-bold tabular-nums" style={{ color }}>
+              {r.sets}<span className="text-[10px] font-medium ml-1" style={{ color: 'var(--text-muted)' }}>sets</span>
+            </span>
+          </div>
+          <div style={{ position: 'relative', height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }}>
+            {r.min != null && r.max != null && (
+              <div
+                style={{ position: 'absolute', top: 0, bottom: 0, left: `${pct(r.min)}%`, width: `${pct(r.max) - pct(r.min)}%`, background: 'rgba(200,255,0,0.16)', borderRadius: 999 }}
+              />
+            )}
+            <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${pct(r.sets)}%`, background: color, opacity: 0.5, borderRadius: 999 }} />
+            <div style={{ position: 'absolute', top: -1, height: 8, width: 3, left: `calc(${pct(r.sets)}% - 1.5px)`, background: color, borderRadius: 2 }} />
+          </div>
+          {r.min != null && r.max != null && (
+            <p className="mt-1 text-[9.5px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+              target {r.min}–{r.max}{r.status && r.status !== 'within' ? ` · ${r.status}` : ''}
+            </p>
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
+
 // One exercise rendered in the workout-logger's visual language: numbered step
 // pill, name, sets count, and weight/reps as big display numbers with micro
 // labels — so a plan reads like the app's set cards, not a wall of text.
@@ -836,6 +916,7 @@ function renderText(raw: string): React.ReactNode[] {
   const lines = raw.split('\n');
   const out: React.ReactNode[] = [];
   let exGroup: ExRow[] = [];
+  let volGroup: VolumeRow[] = [];
   let txtGroup: string[] = [];
   let bk = 0;
 
@@ -860,13 +941,23 @@ function renderText(raw: string): React.ReactNode[] {
     out.push(<ExercisePlanBlock key={`e${bk++}`} rows={exGroup} />);
     exGroup = [];
   };
+  const flushVol = () => {
+    if (!volGroup.length) return;
+    out.push(<VolumeBlock key={`v${bk++}`} rows={volGroup} />);
+    volGroup = [];
+  };
 
   for (const line of lines) {
     const ex = parseExerciseLine(line);
-    if (ex) { flushTxt(); exGroup.push(ex); }
-    else { flushEx(); txtGroup.push(line); }
+    if (ex) { flushTxt(); flushVol(); exGroup.push(ex); continue; }
+    const vol = parseVolumeLine(line);
+    if (vol) { flushTxt(); flushEx(); volGroup.push(vol); continue; }
+    flushEx();
+    flushVol();
+    txtGroup.push(line);
   }
   flushEx();
+  flushVol();
   flushTxt();
   return out;
 }
