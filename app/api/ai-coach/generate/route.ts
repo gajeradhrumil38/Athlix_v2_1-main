@@ -36,31 +36,57 @@ export async function POST(req: NextRequest) {
   // ── Groq (primary) — text-only. Image requests (food scanner) skip to Gemini
   // since Groq's text models can't see images.
   if (GROQ_API_KEY && !containsImage(body.contents)) {
-    try {
-      const groqBody: Record<string, unknown> = { ...translateToGroq(body, GROQ_MODEL), stream: !!stream };
-      if (stream) groqBody.stream_options = { include_usage: true };
+    const groqBody: Record<string, unknown> = { ...translateToGroq(body, GROQ_MODEL), stream: !!stream };
+    if (stream) groqBody.stream_options = { include_usage: true };
 
-      const gres = await fetch(GROQ_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
-        body: JSON.stringify(groqBody),
-      });
+    // Retry transient failures (rate-limit / TPM / 5xx) with backoff before
+    // giving up — this is what made "some chats work, some don't".
+    let groqErr: { status: number; message: string } | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const gres = await fetch(GROQ_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+          body: JSON.stringify(groqBody),
+        });
 
-      if (gres.ok && gres.body) {
-        if (stream) return new Response(groqStreamToGemini(gres.body), { status: 200, headers: SSE_HEADERS });
-        const gjson = await gres.json();
-        return NextResponse.json(groqToGeminiResponse(gjson));
+        if (gres.ok && gres.body) {
+          if (stream) return new Response(groqStreamToGemini(gres.body), { status: 200, headers: SSE_HEADERS });
+          return NextResponse.json(groqToGeminiResponse(await gres.json()));
+        }
+
+        const eb = await gres.json().catch(() => ({}));
+        groqErr = { status: gres.status, message: eb?.error?.message || `Groq error ${gres.status}` };
+        const transient = gres.status === 429 || gres.status >= 500;
+        if (transient && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        break; // non-transient (e.g. 400 bad request) → don't retry
+      } catch (e) {
+        groqErr = { status: 502, message: e instanceof Error ? e.message : 'Groq request failed' };
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
       }
-      // Not ok → fall through to Gemini.
-    } catch {
-      // Network/parse error → fall through to Gemini.
+    }
+
+    // Groq failed after retries. Prefer the Gemini fallback if there's a key;
+    // otherwise surface Groq's REAL error (not a misleading "no key") so the
+    // failure is diagnosable instead of silent.
+    if (!keyRow?.gemini_api_key && groqErr) {
+      return NextResponse.json(
+        { error: { code: 'PROVIDER_ERROR', message: `Coach service error — ${groqErr.message}` } },
+        { status: groqErr.status === 429 ? 429 : 502 },
+      );
     }
   }
 
   // ── Gemini (fallback) — needs the user's own key.
   if (!keyRow?.gemini_api_key) {
     return NextResponse.json(
-      { error: { code: 'NO_KEY', message: 'No AI provider available. Add a Gemini key in Settings, or set GROQ_API_KEY on the server.' } },
+      { error: { code: 'NO_KEY', message: 'No AI provider available. Set GROQ_API_KEY on the server, or add a Gemini key in Settings.' } },
       { status: 400 },
     );
   }
