@@ -307,34 +307,60 @@ function findExerciseNameForChart(workouts: WorkoutWithExercises[], text: string
   return scored[0]?.name || null;
 }
 
+type ExerciseMetricKey = 'weight' | 'e1rm' | 'reps' | 'volume';
+
+// Pick the y-axis metric from the user's wording. Default is the heaviest set,
+// the most intuitive "am I getting stronger" line — the query can switch it to
+// estimated 1RM, total reps, or tonnage.
+function pickExerciseMetric(text: string, unit: string): { key: ExerciseMetricKey; label: string; sub: string } {
+  const t = text.toLowerCase();
+  if (/\b(1rm|one[- ]?rep|estimated max|e1rm|1[- ]?rep max)\b/.test(t))
+    return { key: 'e1rm', label: `${unit} est. 1RM`, sub: 'Estimated 1-rep max per session' };
+  if (/\b(rep|reps|repetition)\b/.test(t))
+    return { key: 'reps', label: 'reps', sub: 'Total reps per session' };
+  if (/\b(volume|tonnage|total load|total weight)\b/.test(t))
+    return { key: 'volume', label: `${unit} volume`, sub: 'Total volume: sets × reps × weight' };
+  return { key: 'weight', label: unit, sub: 'Heaviest set per session' };
+}
+
 function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string, unit: string): CoachChart | undefined {
   const exerciseName = findExerciseNameForChart(workouts, text);
   if (!exerciseName) return undefined;
 
+  const metric = pickExerciseMetric(text, unit);
+  const isPeak = metric.key === 'weight' || metric.key === 'e1rm';
   const points = new Map<string, number>();
   const lowerName = exerciseName.toLowerCase();
+
   for (const w of [...workouts].sort((a, b) => parseWorkoutDate(a.date).getTime() - parseWorkoutDate(b.date).getTime())) {
     const matching = (w.exercises || []).filter((ex) => ex.name.toLowerCase() === lowerName);
     if (!matching.length) continue;
-    const volume = matching.reduce((sum, ex) => {
+
+    let sessionValue = 0;
+    for (const ex of matching) {
       const sets = Number(ex.sets) || 0;
       const reps = Number(ex.reps) || 0;
       const weight = Number(ex.weight) || 0;
-      return sum + sets * reps * weight;
-    }, 0);
-    if (volume > 0) points.set(w.date, (points.get(w.date) || 0) + volume);
+      if (metric.key === 'weight') sessionValue = Math.max(sessionValue, weight);
+      else if (metric.key === 'e1rm') sessionValue = Math.max(sessionValue, reps > 0 ? weight * (1 + reps / 30) : weight);
+      else if (metric.key === 'reps') sessionValue += sets * reps;
+      else sessionValue += sets * reps * weight;
+    }
+    if (sessionValue <= 0) continue;
+    const prev = points.get(w.date);
+    points.set(w.date, prev == null ? sessionValue : isPeak ? Math.max(prev, sessionValue) : prev + sessionValue);
   }
 
   const data = Array.from(points.entries())
     .slice(-12)
-    .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value }));
+    .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value: Math.round(value * 10) / 10 }));
 
   if (data.length < 2) return undefined;
   return {
     kind: 'line',
-    title: `${exerciseName} Volume`,
-    subtitle: 'Total volume per logged session',
-    valueLabel: `${unit} volume`,
+    title: exerciseName,
+    subtitle: metric.sub,
+    valueLabel: metric.label,
     data,
   };
 }
