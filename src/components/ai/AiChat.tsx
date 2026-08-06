@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, RotateCcw, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2 } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { format, subDays } from 'date-fns';
@@ -57,6 +57,16 @@ import {
   syncCoachMemory,
 } from '../../lib/coachMemory';
 import { getTodayFeeling, setTodayFeeling } from '../../lib/dailyBriefing';
+import {
+  type ChatSession,
+  type StoredChatMessage,
+  getSessions,
+  resolveActiveSession,
+  startFreshSession,
+  persistActiveMessages,
+  setActiveSession,
+  deleteSession,
+} from '../../lib/coachSessions';
 
 /* ── Per-set data type ────────────────────────────────────────────── */
 interface SetEntry { reps: number; weight: number; }
@@ -82,7 +92,6 @@ async function getLastExerciseSets(userId: string, exerciseName: string): Promis
 }
 
 const USAGE_STORAGE = 'athlix:api_usage';
-const CHAT_HISTORY_STORAGE = 'athlix:ai_chat_history';
 // Max conversation turns sent to API (keeps token usage low while preserving short-term memory)
 const MAX_HISTORY = 12;
 
@@ -717,6 +726,68 @@ function buildFollowUps(
   return out.slice(0, 6);
 }
 
+export interface GoalProgress { current: number; target: number; pct: number; unit: string; }
+
+function bestWeightForExercise(workouts: WorkoutWithExercises[], prs: LocalPersonalRecord[], name: string): number {
+  const low = name.toLowerCase();
+  let best = 0;
+  const pr = prs.find((p) => p.exercise_name.toLowerCase() === low);
+  if (pr?.best_weight) best = Number(pr.best_weight) || 0;
+  for (const w of workouts) for (const ex of w.exercises || []) {
+    if (ex.name.toLowerCase() === low) best = Math.max(best, Number(ex.weight) || 0);
+  }
+  return best;
+}
+
+function bestE1rmForExercise(workouts: WorkoutWithExercises[], name: string): number {
+  const low = name.toLowerCase();
+  let best = 0;
+  for (const w of workouts) for (const ex of w.exercises || []) {
+    if (ex.name.toLowerCase() !== low) continue;
+    const weight = Number(ex.weight) || 0;
+    const reps = Number(ex.reps) || 0;
+    best = Math.max(best, reps > 0 ? weight * (1 + reps / 30) : weight);
+  }
+  return best;
+}
+
+// Turn a structured goal into a live progress reading from the user's own logged
+// data. Only "more is better" goals get a bar — bodyweight is skipped because we
+// can't tell loss from gain from the target alone.
+function computeGoalProgress(
+  goal: CoachGoal,
+  workouts: WorkoutWithExercises[],
+  prs: LocalPersonalRecord[],
+  recentRuns: SavedRun[],
+  profile: any,
+): GoalProgress | null {
+  if (goal.target == null || goal.target <= 0) return null;
+  const unit = goal.unit || profile?.unit_preference || '';
+  let current = 0;
+  if (goal.metric === 'runs') current = recentRuns.length;
+  else if (goal.metric === 'sessions') current = workouts.filter((w) => calDaysSince(w.date) <= 6).length;
+  else if (goal.metric === 'bodyweight') return null;
+  else if (goal.exercise) {
+    current = goal.metric === 'e1rm'
+      ? bestE1rmForExercise(workouts, goal.exercise)
+      : bestWeightForExercise(workouts, prs, goal.exercise);
+  } else return null;
+
+  if (!current) return null;
+  const pct = Math.max(0, Math.min(100, Math.round((current / goal.target) * 100)));
+  return { current: Math.round(current * 10) / 10, target: goal.target, pct, unit };
+}
+
+function sessionDateLabel(dateStr: string): string {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  const yest = format(y, 'yyyy-MM-dd');
+  if (dateStr === today) return 'Today';
+  if (dateStr === yest) return 'Yesterday';
+  try { return format(new Date(`${dateStr}T00:00:00`), 'EEE, MMM d'); } catch { return dateStr; }
+}
+
 /* ── Execute a Gemini function call against Supabase ───────────────── */
 async function executeTool(
   userId: string,
@@ -1037,6 +1108,9 @@ export const AiChat: React.FC = () => {
   const [whoopData, setWhoopData] = useState<WhoopAllData | null>(null);
   const [skincareStats, setSkincareStats] = useState<{ weekPercent: number; streak: number } | null>(null);
   const [memory, setMemory] = useState<CoachMemory>(() => getCoachMemory(null));
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [showKeySetup, setShowKeySetup] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1059,33 +1133,23 @@ export const AiChat: React.FC = () => {
     return () => window.removeEventListener('athlix:coach-memory', load);
   }, [user?.id]);
 
-  /* ── Persist chat history across mount/unmount (e.g. visiting /log) so
-     reopening the coach resumes the real conversation instead of a blank
-     one — AiChat unmounts on every immersive route change. ───────────── */
+  /* ── Chat sessions: resume the active session on mount (a fresh one per
+     day), persist messages into it, and keep past days browsable via the
+     history menu. AiChat unmounts on every immersive route change, so this
+     also restores the conversation when reopening. ───────────────────── */
   const hydratedForUser = useRef<string | null>(null);
   useEffect(() => {
     if (!user?.id || hydratedForUser.current === user.id) return;
     hydratedForUser.current = user.id;
-    try {
-      const raw = sessionStorage.getItem(`${CHAT_HISTORY_STORAGE}:${user.id}`);
-      if (raw) setMessages(JSON.parse(raw));
-    } catch {
-      // corrupt/unavailable storage — start with an empty conversation
-    }
+    const active = resolveActiveSession(user.id);
+    setActiveSessionId(active.id);
+    if (active.messages.length) setMessages(active.messages as unknown as Message[]);
   }, [user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    try {
-      if (messages.length) {
-        sessionStorage.setItem(`${CHAT_HISTORY_STORAGE}:${user.id}`, JSON.stringify(messages));
-      } else {
-        sessionStorage.removeItem(`${CHAT_HISTORY_STORAGE}:${user.id}`);
-      }
-    } catch {
-      // storage full/unavailable — conversation still works in-memory
-    }
-  }, [messages, user?.id]);
+    if (!user?.id || !activeSessionId) return;
+    persistActiveMessages(user.id, activeSessionId, messages as unknown as StoredChatMessage[]);
+  }, [messages, user?.id, activeSessionId]);
 
   /* ── Load all data sources once chat opens ───────────────────────── */
   useEffect(() => {
@@ -1113,10 +1177,16 @@ export const AiChat: React.FC = () => {
     load();
   }, [open, user?.id, dataReady]);
 
-  /* ── Auto-scroll to latest message ───────────────────────────────── */
+  /* ── Scroll behaviour ─────────────────────────────────────────────── */
+  // On open: jump straight to the most recent message (no visible scroll from
+  // the top of the conversation).
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'auto' }));
+  }, [open]);
+  // While open: smoothly follow new messages / streaming.
   useEffect(() => {
     if (open) setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
-  }, [messages, open, loading]);
+  }, [messages, loading]);
 
   /* ── Focus input when modal opens ───────────────────────────────── */
   useEffect(() => {
@@ -1452,6 +1522,42 @@ export const AiChat: React.FC = () => {
     navigate('/log?plan=1');
   }, [close, navigate]);
 
+  /* ── Chat session history ─────────────────────────────────────────── */
+  const handleShowHistory = useCallback(() => {
+    setSessions(getSessions(user?.id));
+    setShowHistory(true);
+  }, [user?.id]);
+
+  const handleNewSession = useCallback(() => {
+    const fresh = startFreshSession(user?.id);
+    setActiveSessionId(fresh.id);
+    setMessages([]);
+    setShowHistory(false);
+  }, [user?.id]);
+
+  const handleOpenSession = useCallback((id: string) => {
+    const s = getSessions(user?.id).find((x) => x.id === id);
+    if (!s) return;
+    setActiveSession(user?.id, id);
+    setActiveSessionId(id);
+    setMessages(s.messages as unknown as Message[]);
+    setShowHistory(false);
+  }, [user?.id]);
+
+  const handleDeleteSession = useCallback((id: string) => {
+    deleteSession(user?.id, id);
+    setSessions(getSessions(user?.id));
+    if (id === activeSessionId) handleNewSession();
+  }, [user?.id, activeSessionId, handleNewSession]);
+
+  // Live progress toward each active goal, computed from logged data.
+  const goalProgress: Record<string, GoalProgress> = {};
+  for (const g of memory.goals) {
+    if (g.done) continue;
+    const p = computeGoalProgress(g, workouts, prs, recentRuns, profile);
+    if (p) goalProgress[g.id] = p;
+  }
+
   /* ── Direct exercise log (from form submit) ─────────────────────── */
   const handleLogExercise = useCallback(async (name: string, sets: SetEntry[], unit: 'kg' | 'lbs') => {
     if (!user?.id) return;
@@ -1540,9 +1646,18 @@ export const AiChat: React.FC = () => {
                 memory={memory}
                 streak={coachStreak(memory, workouts)}
                 todayFeeling={getTodayFeeling()}
+                goalProgress={goalProgress}
+                sessions={sessions}
+                showHistory={showHistory}
+                activeSessionId={activeSessionId}
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
                 onStartTemplate={handleStartTemplate}
+                onShowHistory={handleShowHistory}
+                onNewSession={handleNewSession}
+                onOpenSession={handleOpenSession}
+                onCloseHistory={() => setShowHistory(false)}
+                onDeleteSession={handleDeleteSession}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1558,7 +1673,6 @@ export const AiChat: React.FC = () => {
                 onShowFormWithName={handleShowFormWithName}
                 onClose={close}
                 onGoSettings={() => { close(); navigate('/settings'); }}
-                onClear={() => setMessages([])}
                 onCopy={handleCopy}
                 onPlotSuggestion={handlePlotSuggestion}
               />
@@ -1594,9 +1708,18 @@ export const AiChat: React.FC = () => {
                 memory={memory}
                 streak={coachStreak(memory, workouts)}
                 todayFeeling={getTodayFeeling()}
+                goalProgress={goalProgress}
+                sessions={sessions}
+                showHistory={showHistory}
+                activeSessionId={activeSessionId}
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
                 onStartTemplate={handleStartTemplate}
+                onShowHistory={handleShowHistory}
+                onNewSession={handleNewSession}
+                onOpenSession={handleOpenSession}
+                onCloseHistory={() => setShowHistory(false)}
+                onDeleteSession={handleDeleteSession}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1612,7 +1735,6 @@ export const AiChat: React.FC = () => {
                 onShowFormWithName={handleShowFormWithName}
                 onClose={close}
                 onGoSettings={() => { close(); navigate('/settings'); }}
-                onClear={() => setMessages([])}
                 onCopy={handleCopy}
                 onPlotSuggestion={handlePlotSuggestion}
               />
@@ -1998,9 +2120,18 @@ interface ChatContentProps {
   memory: CoachMemory;
   streak: number;
   todayFeeling: string | null;
+  goalProgress: Record<string, GoalProgress>;
+  sessions: ChatSession[];
+  showHistory: boolean;
+  activeSessionId: string | null;
   onCheckIn: (feeling: string) => void;
   onCompleteGoal: (id: string) => void;
   onStartTemplate: () => void;
+  onShowHistory: () => void;
+  onNewSession: () => void;
+  onOpenSession: (id: string) => void;
+  onCloseHistory: () => void;
+  onDeleteSession: (id: string) => void;
   input: string;
   loading: boolean;
   loadingPhase: number;
@@ -2016,16 +2147,17 @@ interface ChatContentProps {
   onShowFormWithName: (name: string) => void;
   onClose: () => void;
   onGoSettings: () => void;
-  onClear: () => void;
   onCopy: (text: string, idx: number) => void;
   onPlotSuggestion: (idx: number) => void;
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, input, loading, loadingPhase, streamingText, copiedIdx,
+  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress,
+  sessions, showHistory, activeSessionId, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate,
+  onShowHistory, onNewSession, onOpenSession, onCloseHistory, onDeleteSession,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
-  onClose, onGoSettings, onClear, onCopy, onPlotSuggestion,
+  onClose, onGoSettings, onCopy, onPlotSuggestion,
 }) => {
   const [expandedThought, setExpandedThought] = useState<number | null>(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -2055,14 +2187,22 @@ const ChatContent: React.FC<ChatContentProps> = ({
         </div>
       </div>
       <div className="flex items-center gap-1">
+        <button
+          onClick={onShowHistory}
+          title="Chat history"
+          className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          style={{ borderRadius: 8 }}
+        >
+          <Menu className="w-4 h-4" />
+        </button>
         {messages.length > 0 && (
           <button
-            onClick={onClear}
-            title="Clear chat"
+            onClick={onNewSession}
+            title="New chat"
             className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
             style={{ borderRadius: 8 }}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <MessageSquarePlus className="w-4 h-4" />
           </button>
         )}
         <button
@@ -2176,10 +2316,11 @@ const ChatContent: React.FC<ChatContentProps> = ({
                 <div className="w-full mb-5">
                   <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>Your goals</p>
                   <div className="space-y-1.5">
-                    {activeGoals.map((g) => (
+                    {activeGoals.map((g) => {
+                      const prog = goalProgress[g.id];
+                      return (
                       <div
                         key={g.id}
-                        className="flex items-center gap-2.5"
                         style={{
                           padding: '9px 11px',
                           borderRadius: 10,
@@ -2187,28 +2328,54 @@ const ChatContent: React.FC<ChatContentProps> = ({
                           border: '1px solid rgba(255,255,255,0.07)',
                         }}
                       >
-                        <button
-                          onClick={() => onCompleteGoal(g.id)}
-                          title="Mark complete"
-                          className="shrink-0 flex items-center justify-center transition-colors"
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 999,
-                            border: '1.5px solid var(--text-muted)',
-                            background: 'transparent',
-                          }}
-                        >
-                          <Check className="w-2.5 h-2.5" style={{ color: 'var(--text-muted)' }} />
-                        </button>
-                        <span className="flex-1 text-[12.5px]" style={{ color: 'var(--text-primary)' }}>
-                          {g.text}
-                          {g.target != null && (
-                            <span style={{ color: 'var(--text-muted)' }}> · {g.target}{g.unit || ''}</span>
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            onClick={() => onCompleteGoal(g.id)}
+                            title="Mark complete"
+                            className="shrink-0 flex items-center justify-center transition-colors"
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 999,
+                              border: '1.5px solid var(--text-muted)',
+                              background: 'transparent',
+                            }}
+                          >
+                            <Check className="w-2.5 h-2.5" style={{ color: 'var(--text-muted)' }} />
+                          </button>
+                          <span className="flex-1 text-[12.5px]" style={{ color: 'var(--text-primary)' }}>
+                            {g.text}
+                            {prog == null && g.target != null && (
+                              <span style={{ color: 'var(--text-muted)' }}> · {g.target}{g.unit || ''}</span>
+                            )}
+                          </span>
+                          {prog && (
+                            <span className="shrink-0 text-[11px] font-bold tabular-nums" style={{ color: prog.pct >= 100 ? '#C8FF00' : 'var(--text-secondary)' }}>
+                              {prog.pct}%
+                            </span>
                           )}
-                        </span>
+                        </div>
+                        {prog && (
+                          <div className="mt-2 pl-[28px]">
+                            <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  width: `${prog.pct}%`,
+                                  height: '100%',
+                                  borderRadius: 999,
+                                  background: prog.pct >= 100 ? '#C8FF00' : 'linear-gradient(90deg, rgba(200,255,0,0.55), #C8FF00)',
+                                  transition: 'width 0.5s ease',
+                                }}
+                              />
+                            </div>
+                            <p className="mt-1 text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                              {prog.current}{prog.unit ? ` ${prog.unit}` : ''} / {prog.target}{prog.unit ? ` ${prog.unit}` : ''}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2571,6 +2738,85 @@ const ChatContent: React.FC<ChatContentProps> = ({
           </button>
         </div>
       </>
+    )}
+
+    {/* Chat history overlay — browse past days' sessions */}
+    {showHistory && (
+      <div className="absolute inset-0 z-[210] flex flex-col" style={{ background: 'var(--bg-surface)' }}>
+        <div
+          className="flex items-center justify-between shrink-0"
+          style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}
+        >
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onCloseHistory}
+              className="w-8 h-8 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+              style={{ borderRadius: 8 }}
+            >
+              <X className="w-[15px] h-[15px]" />
+            </button>
+            <p className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>Chat history</p>
+          </div>
+          <button
+            onClick={onNewSession}
+            className="inline-flex items-center gap-1.5 active:scale-95 transition-all"
+            style={{
+              padding: '7px 12px',
+              borderRadius: 10,
+              background: 'var(--accent)',
+              color: '#000',
+              fontSize: 12.5,
+              fontWeight: 700,
+            }}
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5" />
+            New chat
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
+          {sessions.filter((s) => s.messages.length > 0).length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--text-muted)' }}>
+              <Menu className="w-6 h-6 opacity-40" />
+              <p className="text-[12.5px]">No past chats yet.</p>
+              <p className="text-[11px] text-center max-w-[220px]">A new session starts each day — your history will show up here.</p>
+            </div>
+          ) : (
+            sessions.filter((s) => s.messages.length > 0).map((s) => (
+              <div
+                key={s.id}
+                className="flex items-center gap-1"
+                style={{
+                  borderRadius: 12,
+                  background: s.id === activeSessionId ? 'rgba(200,255,0,0.06)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${s.id === activeSessionId ? 'rgba(200,255,0,0.22)' : 'rgba(255,255,255,0.07)'}`,
+                }}
+              >
+                <button
+                  onClick={() => onOpenSession(s.id)}
+                  className="flex-1 text-left min-w-0"
+                  style={{ padding: '10px 12px', background: 'none', border: 'none' }}
+                >
+                  <p className="text-[12.5px] font-medium truncate" style={{ color: s.id === activeSessionId ? '#C8FF00' : 'var(--text-primary)' }}>
+                    {s.title}
+                  </p>
+                  <p className="text-[10.5px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    {sessionDateLabel(s.date)} · {s.messages.length} message{s.messages.length === 1 ? '' : 's'}
+                  </p>
+                </button>
+                <button
+                  onClick={() => onDeleteSession(s.id)}
+                  title="Delete chat"
+                  className="shrink-0 w-8 h-8 mr-1 flex items-center justify-center text-[var(--text-muted)] hover:text-[#f87171] transition-colors"
+                  style={{ borderRadius: 8, background: 'none', border: 'none' }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     )}
   </>
   );
