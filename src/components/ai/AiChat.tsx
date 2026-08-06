@@ -776,30 +776,47 @@ function parseExerciseLine(line: string): ExRow | null {
   };
 }
 
-const ExercisePlanBlock: React.FC<{ rows: ExRow[] }> = ({ rows }) => (
+// One exercise rendered in the workout-logger's visual language: numbered step
+// pill, name, sets count, and weight/reps as big display numbers with micro
+// labels — so a plan reads like the app's set cards, not a wall of text.
+const ExercisePlanCard: React.FC<{ row: ExRow; index: number }> = ({ row, index }) => (
   <div
-    className="my-1.5 overflow-hidden"
-    style={{ borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+    className="relative overflow-hidden rounded-2xl border"
+    style={{ background: 'var(--bg-base)', borderColor: 'var(--border)' }}
   >
-    {rows.map((r, i) => (
-      <div
-        key={i}
-        className="flex items-center justify-between gap-3"
-        style={{ padding: '9px 12px', borderTop: i ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
-      >
-        <span className="text-[12.5px] font-medium min-w-0 truncate" style={{ color: 'var(--text-primary)' }}>
-          {r.name}
+    <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: 'var(--accent)', opacity: 0.5 }} />
+    <div className="flex items-center justify-between px-4 pt-3 pb-2 pl-5 gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className="rounded-lg px-2 py-[3px] text-[10px] font-bold tracking-[0.14em] uppercase shrink-0 tabular-nums"
+          style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+        >
+          {String(index).padStart(2, '0')}
         </span>
-        <span className="shrink-0 inline-flex items-center gap-2 tabular-nums" style={{ fontSize: 11.5 }}>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-            {r.sets}<span style={{ color: 'var(--text-muted)', margin: '0 1px' }}>×</span>{r.reps}
-          </span>
-          {r.weight && (
-            <span style={{ color: 'var(--text-muted)' }}>{r.weight}{r.unit}</span>
-          )}
-        </span>
+        <span className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{row.name}</span>
       </div>
-    ))}
+      <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>
+        {row.sets} sets
+      </span>
+    </div>
+    <div className="flex items-stretch border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+      {row.weight && (
+        <div className="flex-1 flex flex-col items-center justify-center py-3" style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+          <span className="font-victory tabular-nums text-[26px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.weight}</span>
+          <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>{(row.unit || 'lb').toUpperCase()}</span>
+        </div>
+      )}
+      <div className="flex-1 flex flex-col items-center justify-center py-3">
+        <span className="font-victory tabular-nums text-[26px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.reps}</span>
+        <span className="mt-1.5 text-[10px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>reps</span>
+      </div>
+    </div>
+  </div>
+);
+
+const ExercisePlanBlock: React.FC<{ rows: ExRow[] }> = ({ rows }) => (
+  <div className="my-2 space-y-2">
+    {rows.map((r, i) => <ExercisePlanCard key={i} row={r} index={i + 1} />)}
   </div>
 );
 
