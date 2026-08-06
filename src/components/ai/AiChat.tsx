@@ -253,6 +253,11 @@ function trackTokenUsage(tokens: number): void {
 
 const CHART_REQUEST_RE = /\b(chart|plot|graph|visual|visuali[sz]e|bar|line|trend|progression)\b/i;
 
+// Softer signal: the user is clearly asking an analytical/"how am I doing" data
+// question. When this matches we proactively show a chart even if they never
+// said "plot" — the coach visualizes when it's genuinely useful.
+const CHART_AUTO_RE = /\b(progress|progressing|trend|trending|improv\w*|getting (?:stronger|better|faster)|plateau\w*|over time|history|compare|comparison|how(?:'s| is| am| are)|last (?:week|month|\d+ days?)|this (?:week|month)|weekly|monthly|personal record|pr\b)\b/i;
+
 const titleCase = (s: string) =>
   s.split(/\s+/).filter(Boolean).map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
 
@@ -463,7 +468,7 @@ function buildCoachChart(
   recentRuns: SavedRun[],
   unit: string,
 ): CoachChart | undefined {
-  if (!CHART_REQUEST_RE.test(text)) return undefined;
+  if (!CHART_REQUEST_RE.test(text) && !CHART_AUTO_RE.test(text)) return undefined;
 
   if (/\b(improvement|score|readiness|ml|model|logged|log|workout|session)\b/i.test(text)) {
     return buildExerciseVolumeChart(workouts, text, unit)
@@ -572,6 +577,66 @@ function getSuggestions(
     'What should I train today?',
     hasRuns ? 'Analyse my recent runs' : 'Give me a beginner plan.',
   ];
+}
+
+function mostFrequentExerciseName(workouts: WorkoutWithExercises[]): string | null {
+  const counts = new Map<string, { name: string; n: number }>();
+  for (const w of workouts) {
+    for (const ex of w.exercises || []) {
+      const key = ex.name.toLowerCase();
+      const cur = counts.get(key) || { name: ex.name, n: 0 };
+      cur.n += 1;
+      counts.set(key, cur);
+    }
+  }
+  return Array.from(counts.values()).sort((a, b) => b.n - a.n)[0]?.name || null;
+}
+
+// Follow-up question chips shown under an ongoing chat. They react to the topic
+// of the last exchange, then fall back to broadly useful prompts — always
+// grounded in what data the user actually has.
+function buildFollowUps(
+  messages: Message[],
+  workouts: WorkoutWithExercises[],
+  foodScans: FoodScan[],
+  recentRuns: SavedRun[],
+  whoopData: WhoopAllData | null,
+): string[] {
+  if (!messages.length) return [];
+  const lastModel = [...messages].reverse().find((m) => m.role === 'model')?.text?.toLowerCase() || '';
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.text?.toLowerCase() || '';
+  const ctx = `${lastModel} ${lastUser}`;
+  const top = mostFrequentExerciseName(workouts);
+  const hasFood = foodScans.length > 0;
+  const hasRuns = recentRuns.length > 0;
+  const hasWhoop = !!whoopData;
+
+  const out: string[] = [];
+  const push = (q: string) => { if (q && !out.includes(q)) out.push(q); };
+
+  // Topic-aware, based on what the last messages were about
+  if (/\b(run|running|pace|mile|distance|cardio)\b/.test(ctx) && hasRuns) {
+    push('Plot my run pace'); push('How do I run faster?');
+  }
+  if (/\b(protein|carb|fat|calorie|macro|nutrition|food|eat|diet)\b/.test(ctx) && hasFood) {
+    push('Plot my macros this week'); push('Am I eating enough protein?');
+  }
+  if (/\b(recovery|sleep|strain|hrv|readiness|whoop|rest)\b/.test(ctx) && hasWhoop) {
+    push('Should I train hard today?'); push("How's my recovery trending?");
+  }
+  if (top && ctx.includes(top.toLowerCase())) {
+    push(`Plot my ${top} progress`); push(`Plot my ${top} 1RM`);
+  }
+
+  // General fill — the usual next things a lifter wants to know
+  push('What should I train today?');
+  if (top) push(`How's my ${top} progressing?`);
+  push("How's my weekly volume?");
+  push('Which muscle am I neglecting?');
+  if (hasRuns) push("How's my running trending?");
+  if (hasWhoop) push('Am I recovered enough to train?');
+
+  return out.slice(0, 6);
 }
 
 /* ── Execute a Gemini function call against Supabase ───────────────── */
@@ -1305,6 +1370,7 @@ export const AiChat: React.FC = () => {
                 hasKey={!!hasKey}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
+                followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1352,6 +1418,7 @@ export const AiChat: React.FC = () => {
                 hasKey={!!hasKey}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
+                followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
                 input={input}
                 loading={loading}
                 loadingPhase={loadingPhase}
@@ -1749,6 +1816,7 @@ interface ChatContentProps {
   hasKey: boolean;
   messages: Message[];
   suggestions: string[];
+  followUps: string[];
   input: string;
   loading: boolean;
   loadingPhase: number;
@@ -1770,7 +1838,7 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  hasKey, messages, suggestions, input, loading, loadingPhase, streamingText, copiedIdx,
+  hasKey, messages, suggestions, followUps, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onClear, onCopy, onPlotSuggestion,
@@ -2121,6 +2189,38 @@ const ChatContent: React.FC<ChatContentProps> = ({
           )}
           <div ref={bottomRef} />
         </div>
+
+        {/* Follow-up question chips — scroll horizontally, tap to continue the chat */}
+        {messages.length > 0 && !loading && followUps.length > 0 && (
+          <div
+            className="hide-scrollbar shrink-0 flex gap-2 overflow-x-auto"
+            style={{
+              padding: '8px 12px 2px',
+              WebkitOverflowScrolling: 'touch',
+              scrollSnapType: 'x proximity',
+            }}
+          >
+            {followUps.map((q) => (
+              <button
+                key={q}
+                onClick={() => onSuggest(q)}
+                className="shrink-0 whitespace-nowrap transition-all active:scale-95"
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: 999,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  scrollSnapAlign: 'start',
+                }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Input bar */}
         <div
