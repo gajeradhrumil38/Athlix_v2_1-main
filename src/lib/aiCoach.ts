@@ -302,7 +302,12 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
 `;
 
   const toolCallingRule = variant === 'chat'
-    ? '\n8. "What should I train (today)?" / "what should I do?" / similar planning questions → this is a TEXT answer, never a tool call. Build the plan from WEEKLY VOLUME (this week), MONTHLY VOLUME (last 28 days), and MUSCLE RECOVERY STATUS together — call out any muscle group under its MEV for the week/month, skip anything ⛔, and give real exercises with sets/reps. Do NOT call show_exercise_form for these questions — only call it once the user picks a specific exercise to log.'
+    ? `\n8. "What should I train today?" / "what should I do?" / planning questions → a TEXT plan, never a tool call. Do this exactly:
+   a) Pick ONE target muscle group: the one that is most rested (most days since trained in RECOVERY STATUS, never a ⛔) AND furthest below target in WEEKLY VOLUME.
+   b) Open with ONE short line naming it and why — e.g. "**Back** is your most rested and lowest-volume this week (only 3 sets)."
+   c) Give 4–5 exercises, EACH on its own line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: sets×reps @ weight${unit}". Pull the weight from their PERSONAL RECORDS / RECENT SESSIONS for that lift (match it, or +2.5–5${unit} to progress) — never invent a number; for bodyweight moves drop the "@ weight".
+   d) End with ONE line naming a beatable PR to chase, with the exact weight×reps.
+   Skip anything ⛔. Do NOT call show_exercise_form here — only when the user picks a specific exercise to log.`
     : '';
 
   return `You are an expert strength & conditioning coach embedded in the Athlix fitness app. Your role: give ${name} evidence-based, data-driven advice using ONLY their logged data below. Never fabricate numbers.
