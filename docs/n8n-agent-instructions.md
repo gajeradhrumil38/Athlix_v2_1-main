@@ -84,6 +84,55 @@ If you expose several narrower read tools instead of one store, give each its ow
 
 ---
 
+## Structured read tools (use these, NOT the vector store)
+
+The vector store (`documents`) only knows what you embed into it — it can't see
+your `workouts`/`exercises` tables. To answer from real logs, give the agent
+**HTTP Request tools** that hit Supabase's REST API (PostgREST). Base URL for
+this project:
+
+```
+https://mrntwydykqsdawpklumf.supabase.co/rest/v1
+```
+
+Every tool sends these **headers** (service-role pattern — server-side in n8n):
+```
+apikey:        <SUPABASE_SERVICE_ROLE_KEY>
+Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
+```
+> Service role bypasses RLS, so you MUST include `user_id=eq.{{USER_ID}}` in every
+> query. (Alternatively use the user's JWT instead of the service role and drop
+> the `user_id` filter — RLS scopes it automatically.)
+
+### Tool: `getWorkouts` (HTTP Request tool)
+- **Method:** GET
+- **URL:** `https://mrntwydykqsdawpklumf.supabase.co/rest/v1/workouts`
+- **Query parameters:**
+  - `select` = `date,title,duration_minutes,muscle_groups,exercises(name,muscle_group,sets,reps,weight,unit,order_index)`
+  - `user_id` = `eq.{{USER_ID}}`
+  - `order` = `date.desc`
+  - `limit` = `50`
+- **Tool description:** "Fetch the user's last 50 workout sessions with their sets. Call this for ANY question about training, recent sessions, volume, muscle groups, progress, plateaus, or 'what should I train'. Each exercise row is ONE set (so 3 rows of the same exercise on a date = 3 sets). Compute 'this week' / date ranges yourself from the returned `date` values."
+
+### Tool: `getPRs`
+- GET `…/rest/v1/personal_records`
+- Params: `select=exercise_name,best_weight,best_reps,achieved_date` · `user_id=eq.{{USER_ID}}` · `order=achieved_date.desc` · `limit=50`
+- Description: "The user's personal records. Call when they ask about maxes, PRs, or bests."
+
+### Tool: `getBodyWeight`
+- GET `…/rest/v1/body_weight_logs`
+- Params: `select=date,weight,unit` · `user_id=eq.{{USER_ID}}` · `order=date.desc` · `limit=30`
+- Description: "Body-weight history. Call for weight-trend / cutting / bulking questions."
+
+### Tool: `getFood`
+- GET `…/rest/v1/food_scans`
+- Params: `select=scan_date,total_calories,total_protein,total_carbs,total_fat` · `user_id=eq.{{USER_ID}}` · `order=scan_date.desc` · `limit=30`
+- Description: "Logged nutrition. Call for calorie / macro / protein / diet questions."
+
+> Because these fetch the recent rows and let the model do the date math, the
+> agent never has to compute dates for the query — it just filters what it needs
+> from `date`/`scan_date`.
+
 ## n8n setup notes
 
 1. **AI Agent node** → Chat Model: **Google Gemini** (`gemini-2.5-flash-lite` — biggest free quota; older Flash models are restricted on new API projects).
