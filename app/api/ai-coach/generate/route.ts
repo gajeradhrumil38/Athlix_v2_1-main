@@ -14,12 +14,15 @@ const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 // fallback. Each user can save their own Groq key (own quota, no shared-key
 // rate-limit); otherwise a single shared server key is used if present.
 const SHARED_GROQ_KEY = process.env.GROQ_API_KEY;
-// Free-tier TPM matters more than raw quality here: llama-3.3-70b free tier is
-// only ~12K TPM (each coach request is ~8K tokens → rate-limits after 1–2
-// calls). llama-3.1-8b-instant gets a far larger free TPM budget and is fast,
-// which keeps the coach usable. Override with GROQ_MODEL if you're on a paid
-// tier and want a bigger model.
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+// Model ladder: try the best model first, and on a rate-limit (429) or 5xx drop
+// to the next — so we use quality when there's TPM headroom and never hit the
+// wall. Primary llama-3.3-70b (better answers), fallback llama-3.1-8b-instant
+// (much larger free TPM budget). Both overridable; on a paid tier set
+// GROQ_MODEL=openai/gpt-oss-120b, etc.
+const GROQ_MODELS = Array.from(new Set([
+  process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+  process.env.GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant',
+]));
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream',
@@ -47,15 +50,14 @@ export async function POST(req: NextRequest) {
   // ── Groq (primary) — text-only. Image requests (food scanner) skip to Gemini
   // since Groq's text models can't see images.
   if (groqKey && !containsImage(body.contents)) {
-    const groqBody: Record<string, unknown> = { ...translateToGroq(body, GROQ_MODEL), stream: !!stream };
-    if (stream) groqBody.stream_options = { include_usage: true };
-
-    // IMPORTANT: do NOT retry a 429. Retrying a rate/token-limit immediately
-    // only amplifies it (server-retries × client-retries = a burst of 429s).
-    // A 429 falls straight through to the Gemini overflow instead. Only a true
-    // server error (5xx) / network blip is retried once.
+    // Walk the model ladder. On a 429 (TPM/rate-limit) or 5xx, drop to the next
+    // (smaller, higher-limit) model instead of retrying the SAME one — retrying
+    // a 429 immediately just amplifies it. A clean 4xx (bad request) stops the
+    // ladder. First OK response wins (stream starts only after a 200).
     let groqErr: { status: number; message: string } | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (const gmodel of GROQ_MODELS) {
+      const groqBody: Record<string, unknown> = { ...translateToGroq(body, gmodel), stream: !!stream };
+      if (stream) groqBody.stream_options = { include_usage: true };
       try {
         const gres = await fetch(GROQ_URL, {
           method: 'POST',
@@ -70,17 +72,11 @@ export async function POST(req: NextRequest) {
 
         const eb = await gres.json().catch(() => ({}));
         groqErr = { status: gres.status, message: eb?.error?.message || `Groq error ${gres.status}` };
-        if (gres.status >= 500 && attempt < 1) {
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-        break; // 429 or 4xx → fall through to Gemini, don't hammer Groq
+        if (gres.status === 429 || gres.status >= 500) continue; // try the next model
+        break; // 4xx bad request → don't try other models
       } catch (e) {
         groqErr = { status: 502, message: e instanceof Error ? e.message : 'Groq request failed' };
-        if (attempt < 1) {
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
+        continue; // network blip → try the next model
       }
     }
 
