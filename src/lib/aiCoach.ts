@@ -255,7 +255,10 @@ export function buildSystemPrompt(
   const unit = profile?.unit_preference || 'lbs';
   const improvementModel = buildImprovementModel(workouts, prs, foodScans, recentRuns, whoopData, 90);
 
-  const detailedSection = workouts.slice(0, 7).map((w) => {
+  // Kept intentionally lean — the system prompt rides on EVERY request, so a
+  // bloated one burns the free-tier token-per-minute budget and rate-limits the
+  // coach. 4 detailed sessions + a short older list is plenty of context.
+  const detailedSection = workouts.slice(0, 4).map((w) => {
     const age = calDaysSince(w.date);
     const label = age === 0 ? 'Today' : age === 1 ? 'Yesterday' : `${age}d ago`;
     const header = `${w.date} (${label}) — ${w.title} · ${w.duration_minutes ?? '?'} min`;
@@ -265,7 +268,7 @@ export function buildSystemPrompt(
     return exLines.length ? `  ${header}\n${exLines.join('\n')}` : `  ${header}`;
   }).join('\n');
 
-  const olderSection = workouts.slice(7, 20)
+  const olderSection = workouts.slice(4, 12)
     .map((w) => `  ${w.date} — ${w.title}${w.muscle_groups?.length ? ` [${w.muscle_groups.join(', ')}]` : ''}`)
     .join('\n');
 
@@ -285,7 +288,7 @@ export function buildSystemPrompt(
     })
     .join('\n');
 
-  const prSection = prs.slice(0, 30)
+  const prSection = prs.slice(0, 15)
     .map((p) => `  ${p.exercise_name}: ${p.best_weight}${unit} × ${p.best_reps} reps (set ${p.achieved_date})`)
     .join('\n');
 

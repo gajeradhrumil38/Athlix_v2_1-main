@@ -14,7 +14,12 @@ const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 // fallback. Each user can save their own Groq key (own quota, no shared-key
 // rate-limit); otherwise a single shared server key is used if present.
 const SHARED_GROQ_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+// Free-tier TPM matters more than raw quality here: llama-3.3-70b free tier is
+// only ~12K TPM (each coach request is ~8K tokens → rate-limits after 1–2
+// calls). llama-3.1-8b-instant gets a far larger free TPM budget and is fast,
+// which keeps the coach usable. Override with GROQ_MODEL if you're on a paid
+// tier and want a bigger model.
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream',
