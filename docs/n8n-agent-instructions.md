@@ -84,6 +84,33 @@ If you expose several narrower read tools instead of one store, give each its ow
 
 ---
 
+## ✅ Simplest fix — ONE tool that returns everything (recommended)
+
+There's a database function `athlix_agent_context(p_user_id)` that returns the
+athlete's whole training context as ready-to-read text (this week's sessions +
+sets by muscle, recent sessions, recent sets, PRs, body weight). Give the agent
+**one HTTP Request tool** for it and it can answer "how's my week", "how's my
+bench", "what should I train", etc. — no vector store, no joins.
+
+**Remove/disable the `documents` vector store tool** (it's empty and makes the
+agent say "no data"). Add this instead:
+
+- **Method:** POST
+- **URL:** `https://mrntwydykqsdawpklumf.supabase.co/rest/v1/rpc/athlix_agent_context`
+- **Headers:**
+  ```
+  apikey:        <SUPABASE_SERVICE_ROLE_KEY>
+  Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
+  Content-Type:  application/json
+  ```
+- **Body (JSON):** `{ "p_user_id": "{{USER_ID}}" }`
+- **Tool description:** "Get the athlete's full training context — this week's sessions and sets by muscle, recent sessions, recent sets, personal records and body weight. Call this FIRST for ANY question about the user's training, progress, week, volume, PRs, or what to train. It returns everything as text — read it and answer. Do not call it for general knowledge or small talk."
+
+That's it — the agent calls it once and answers from real logs. The per-table
+tools below are optional if you want finer-grained reads.
+
+---
+
 ## Structured read tools (use these, NOT the vector store)
 
 The vector store (`documents`) only knows what you embed into it — it can't see
