@@ -1868,11 +1868,14 @@ export const AiChat: React.FC = () => {
           return;
         }
         const raw: string = err?.message || 'Something went wrong.';
-        const display = raw.startsWith('QUOTA:')
-          ? raw.replace('QUOTA:', '⚠️ Quota issue —')
-          : raw.startsWith('INVALID_KEY:')
-            ? raw.replace('INVALID_KEY:', '🔑 Invalid key —')
-            : `⚠️ ${raw}`;
+        const isRateLimit = /rate limit|too many requests|tokens per minute|\bTPM\b|try again in/i.test(raw);
+        const display = isRateLimit
+          ? "⏳ The coach is busy right now — give it a few seconds and tap send again."
+          : raw.startsWith('QUOTA:')
+            ? raw.replace('QUOTA:', '⚠️ Quota issue —')
+            : raw.startsWith('INVALID_KEY:')
+              ? raw.replace('INVALID_KEY:', '🔑 Invalid key —')
+              : `⚠️ ${raw}`;
         setMessages((prev) => [...prev, { role: 'model', text: display }]);
       } finally {
         setLoading(false);
