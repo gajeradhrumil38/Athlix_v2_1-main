@@ -733,6 +733,23 @@ function buildSuggestedCoachChart(
       : undefined);
 }
 
+// Deterministic one-line caption for a chart — used when the model call fails
+// (rate-limit) so a "plot X" request still shows the chart with a real read of
+// the trend instead of an error.
+function chartCaption(chart: CoachChart): string {
+  const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${Math.round(n)}`);
+  if ((chart.kind === 'line' || chart.kind === 'bar') && chart.data.length >= 2) {
+    const first = chart.data[0].value;
+    const last = chart.data[chart.data.length - 1].value;
+    const arrow = last > first ? '📈' : last < first ? '📉' : '➡️';
+    return `**${chart.title}**: ${fmt(first)} → ${fmt(last)} ${chart.valueLabel} ${arrow}`;
+  }
+  if (chart.kind === 'ring' && chart.centerValue) {
+    return `Here's your **${chart.title}** — ${chart.centerValue} ${chart.centerLabel ?? ''}`.trim() + '.';
+  }
+  return `Here's your **${chart.title}**.`;
+}
+
 // Matches src/pages/Log.tsx's freeform-workout default (line ~222) — a
 // workout logged through chat has no plan/title of its own, so it should
 // get the same generic time-of-day name a freeform Log-page workout would,
@@ -1629,13 +1646,19 @@ export const AiChat: React.FC = () => {
       // Engaging with the coach counts toward the daily streak.
       setMemory(recordCheckIn(user?.id));
 
+      // Charts are computed client-side from logged data — they do NOT need the
+      // LLM. Declared out here so if the model call rate-limits, the catch can
+      // still show the chart (the whole point of a "plot X" request).
+      let responseChart: CoachChart | undefined;
+      let suggestedChart: CoachChart | undefined;
+
       try {
         const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id));
         // Route the chart off the user's CURRENT message only — not the whole
         // recent window — so words from earlier turns (e.g. the coach mentioning
         // "recovery") don't hijack a fresh "plot my volume" request.
         const chartIntentText = text;
-        const responseChart = buildCoachChart(
+        responseChart = buildCoachChart(
           chartIntentText,
           workouts,
           foodScans,
@@ -1643,7 +1666,7 @@ export const AiChat: React.FC = () => {
           whoopData,
           profile?.unit_preference || 'lbs',
         );
-        const suggestedChart = responseChart ? undefined : buildSuggestedCoachChart(
+        suggestedChart = responseChart ? undefined : buildSuggestedCoachChart(
           chartIntentText,
           workouts,
           foodScans,
@@ -1837,13 +1860,19 @@ export const AiChat: React.FC = () => {
           suggestedChart,
         }]);
       } catch (err: any) {
+        setStreamingText('');
+        // A chart was already computed client-side — show it regardless of the
+        // model failing, so "plot X" always works even when we're rate-limited.
+        if (responseChart) {
+          setMessages((prev) => [...prev, { role: 'model', text: chartCaption(responseChart!), chart: responseChart }]);
+          return;
+        }
         const raw: string = err?.message || 'Something went wrong.';
         const display = raw.startsWith('QUOTA:')
           ? raw.replace('QUOTA:', '⚠️ Quota issue —')
           : raw.startsWith('INVALID_KEY:')
             ? raw.replace('INVALID_KEY:', '🔑 Invalid key —')
             : `⚠️ ${raw}`;
-        setStreamingText('');
         setMessages((prev) => [...prev, { role: 'model', text: display }]);
       } finally {
         setLoading(false);
