@@ -26,6 +26,12 @@ const COLLAPSED_AUTO_DISMISS_MS = 30_000;
 // not something to dwell on.
 const BRIEFING_DISMISS_MS = 7_000;
 const CONTEXT_DISMISS_MS = 8_000;
+
+// The user can dismiss the auto-popping coach pill (X) to stop it appearing on
+// its own. The FAB stays, so they can still open the coach manually.
+const PROACTIVE_OPTOUT_KEY = 'athlix:coach_proactive_off';
+const isProactiveOptedOut = () => { try { return localStorage.getItem(PROACTIVE_OPTOUT_KEY) === '1'; } catch { return false; } };
+const setProactiveOptedOut = () => { try { localStorage.setItem(PROACTIVE_OPTOUT_KEY, '1'); } catch { /* ignore */ } };
 // Don't fire another contextual pill within this window — browsing around fast
 // shouldn't stack pills.
 const CONTEXT_COOLDOWN_MS = 60_000;
@@ -373,7 +379,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
   const briefingTriedRef = useRef(false);
   useEffect(() => {
     if (briefingTriedRef.current) return;
-    if (!hasKey || !user?.id || isImmersiveRoute) return;
+    if (!hasKey || !user?.id || isImmersiveRoute || isProactiveOptedOut()) return;
     briefingTriedRef.current = true;
     const cached = getCachedBriefing();
     const t = setTimeout(() => {
@@ -397,7 +403,7 @@ export const PostWorkoutCoachPill: React.FC = () => {
   // "how's the past, what's next" note (once per context per day, cooldown-
   // throttled, never over an already-open pill).
   useEffect(() => {
-    if (!hasKey || !user?.id || isImmersiveRoute) return;
+    if (!hasKey || !user?.id || isImmersiveRoute || isProactiveOptedOut()) return;
     if (viewRef.current !== 'closed') return;
     const ctx = COACH_CONTEXTS.find((c) => c.matches(location.pathname));
     if (!ctx || contextFiredToday(ctx.id)) return;
@@ -434,6 +440,15 @@ export const PostWorkoutCoachPill: React.FC = () => {
 
   const closeToClosed = (e?: React.MouseEvent) => {
     e?.stopPropagation();
+    clearDismissTimer();
+    setView('closed');
+  };
+
+  // X on the auto-pill: close it AND stop it auto-popping in future (the FAB
+  // stays, so the coach is still one tap away).
+  const dismissProactive = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setProactiveOptedOut();
     clearDismissTimer();
     setView('closed');
   };
@@ -603,7 +618,8 @@ export const PostWorkoutCoachPill: React.FC = () => {
             {view !== 'analyzing' && (
               <button
                 type="button"
-                onClick={closeToClosed}
+                onClick={view === 'no-key' ? closeToClosed : dismissProactive}
+                title={view === 'no-key' ? 'Dismiss' : "Dismiss — don't auto-show"}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -612,8 +628,10 @@ export const PostWorkoutCoachPill: React.FC = () => {
                   fontSize: 14,
                   padding: 4,
                   flexShrink: 0,
-                  opacity: view === 'collapsed' || view === 'no-key' ? 1 : 0,
-                  pointerEvents: view === 'collapsed' || view === 'no-key' ? 'auto' : 'none',
+                  // Visible while typing too, so the auto-briefing can be
+                  // dismissed the moment it appears.
+                  opacity: 1,
+                  pointerEvents: 'auto',
                   transition: 'opacity 0.3s ease',
                 }}
               >

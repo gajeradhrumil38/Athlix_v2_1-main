@@ -59,6 +59,7 @@ import {
   syncCoachMemory,
 } from '../../lib/coachMemory';
 import { getTodayFeeling, setTodayFeeling } from '../../lib/dailyBriefing';
+import type { ExerciseEntry, WorkoutState } from '../../pages/Log';
 import {
   type ChatSession,
   type StoredChatMessage,
@@ -1938,10 +1939,14 @@ export const AiChat: React.FC = () => {
     navigate('/log?plan=1');
   }, [close, navigate]);
 
-  // Turn exercises the coach listed in chat into a saved plan and open the
-  // logger — "add these to today's log" straight from the conversation.
-  const handleAddPlanToLog = useCallback(async (rows: ExRow[]) => {
-    if (!user?.id || !rows.length) return;
+  // "Add to today's log" → drop the coach's exercises straight into the logger
+  // as a LIVE draft session (pre-filled draft sets you can tap to check off),
+  // appending to any workout already in progress. Writes the same
+  // sessionStorage draft the logger resumes on mount.
+  const handleAddPlanToLog = useCallback((rows: ExRow[]) => {
+    if (!rows.length) return;
+    const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const num = (s?: string) => { const n = parseInt(s || '', 10); return Number.isFinite(n) ? n : 0; };
     const lastWeightFor = (name: string): number => {
       const low = name.toLowerCase();
       for (const w of [...workouts].sort((a, b) => parseWorkoutDate(b.date).getTime() - parseWorkoutDate(a.date).getTime())) {
@@ -1951,25 +1956,53 @@ export const AiChat: React.FC = () => {
       }
       return 0;
     };
-    const exercises = rows.slice(0, 12).map((r, i) => ({
-      name: r.name,
-      muscle_group: null,
-      default_sets: Math.max(1, Math.min(20, parseInt(r.sets, 10) || 3)),
-      default_reps: Math.max(1, Math.min(100, parseInt(r.reps, 10) || 10)),
-      default_weight: Math.max(0, Number(r.weight) || lastWeightFor(r.name)),
-      exercise_db_id: null,
-      order_index: i,
-    }));
+
+    const newExercises: ExerciseEntry[] = rows.slice(0, 12).map((r) => {
+      const setCount = Math.max(1, Math.min(10, num(r.sets) || 3));
+      const reps = Math.max(1, num(r.reps) || 10);
+      const weight = Math.max(0, Number(r.weight) || lastWeightFor(r.name));
+      return {
+        id: uid(),
+        name: r.name,
+        muscleGroup: '',
+        sets: Array.from({ length: setCount }, () => ({
+          id: uid(),
+          weight: weight > 0 ? weight : null,
+          reps,
+          done: false,
+          planned_weight: weight > 0 ? weight : null,
+          planned_reps: reps,
+        })),
+      };
+    });
+
+    // Append to an in-progress draft if one exists (< 8h old), else start fresh.
+    const DRAFT_KEY = 'athlix_active_workout';
+    const now = Date.now();
+    let draft: WorkoutState | null = null;
     try {
-      await saveTemplate(user.id, { title: 'Coach Plan', exercises });
-      window.dispatchEvent(new CustomEvent('athlix:template-saved'));
-      toast.success('Added — opening your log');
-      close();
-      navigate('/log?plan=1');
-    } catch {
-      toast.error('Could not add to log');
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      const parsed = raw ? (JSON.parse(raw) as WorkoutState) : null;
+      if (parsed && Array.isArray(parsed.exercises) && typeof parsed.startTime === 'number' && now - parsed.startTime < 8 * 60 * 60 * 1000) {
+        draft = parsed;
+      }
+    } catch { /* ignore corrupt draft */ }
+
+    const appended = !!draft;
+    if (draft) {
+      draft.exercises = [...draft.exercises, ...newExercises];
+    } else {
+      const d = new Date();
+      const p = (n: number) => String(n).padStart(2, '0');
+      const local = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+      draft = { title: '', startTime: now, startAt: local, endAt: local, elapsedSeconds: 0, exercises: newExercises, notes: '' };
     }
-  }, [user?.id, workouts, close, navigate]);
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* ignore */ }
+
+    toast.success(appended ? 'Added to your workout' : 'Draft ready — opening logger');
+    close();
+    navigate('/log?direct=1');
+  }, [workouts, close, navigate]);
 
   /* ── Chat session history ─────────────────────────────────────────── */
   const handleShowHistory = useCallback(() => {
