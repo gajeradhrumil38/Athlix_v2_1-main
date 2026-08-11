@@ -286,7 +286,10 @@ interface ToolResult {
   formInitialName?: string; // pre-fill exercise name in form
   templateAction?: { id: string; title: string }; // coach built & saved a workout template
   loggedExercise?: { name: string; sets: number; reps: number; weight?: number; unit?: string };
+  loggedStat?: LoggedStat;
 }
+
+interface LoggedStat { kind: 'weight' | 'checkin'; value: string; unit?: string; label: string; sub: string; good?: boolean }
 
 type CoachChartKind = 'bar' | 'line' | 'ring' | 'donut';
 
@@ -328,6 +331,7 @@ interface Message {
   suggestedChart?: CoachChart;
   templateAction?: { id: string; title: string };
   loggedExercise?: { name: string; sets: number; reps: number; weight?: number; unit?: string };
+  loggedStat?: LoggedStat;
 }
 
 interface ApiUsage {
@@ -970,6 +974,41 @@ const ExercisePlanBlock: React.FC<{ rows: ExRow[]; weights?: WeightMap }> = ({ r
   </div>
 );
 
+// A logged body-weight / check-in shown as a "done" card in the same visual
+// language as the set card — instead of a thin green text line.
+const StatConfirmCard: React.FC<{ stat: LoggedStat }> = ({ stat }) => {
+  const done = stat.kind === 'weight' || stat.good !== false;
+  const accent = done ? 'var(--accent)' : 'var(--text-muted)';
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border"
+      style={{ background: 'var(--bg-base)', borderColor: done ? 'rgba(200,255,0,0.16)' : 'var(--border)' }}
+    >
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: accent }} />
+      <div className="flex items-center gap-3 px-4 py-3 pl-5">
+        <span
+          className="rounded-lg px-2 py-[3px] text-[10px] font-bold tracking-[0.14em] uppercase shrink-0"
+          style={{ border: `1px solid ${done ? 'rgba(200,255,0,0.28)' : 'var(--border)'}`, color: accent }}
+        >
+          Logged
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-bold truncate leading-tight" style={{ color: 'var(--text-primary)' }}>{stat.label}</p>
+          <p className="text-[10px] font-semibold tracking-[0.08em] uppercase mt-0.5" style={{ color: 'var(--text-muted)' }}>{stat.sub}</p>
+        </div>
+        {stat.kind === 'weight' ? (
+          <div className="flex flex-col items-end shrink-0">
+            <span className="font-victory tabular-nums text-[28px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{stat.value}</span>
+            <span className="mt-1 text-[9px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>{(stat.unit || '').toUpperCase()}</span>
+          </div>
+        ) : (
+          <span className="shrink-0 leading-none" style={{ fontSize: 26 }}>{stat.value}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Render coach text, promoting consecutive exercise prescriptions into a tidy
 // plan block and leaving prose as-is.
 function renderText(raw: string, weights?: WeightMap): React.ReactNode[] {
@@ -1193,7 +1232,11 @@ async function executeTool(
     const unit = (args.unit as 'kg' | 'lbs') || 'kg';
     const date = (args.date as string) || today;
     await logBodyWeight(userId, { date, weight, unit });
-    return { success: true, message: `${weight} ${unit} logged${date === today ? ' for today' : ` for ${date}`}` };
+    return {
+      success: true,
+      message: `${weight} ${unit} logged${date === today ? ' for today' : ` for ${date}`}`,
+      loggedStat: { kind: 'weight', value: String(weight), unit, label: 'Body weight', sub: date === today ? 'Logged today' : `Logged for ${date}` },
+    };
   }
 
   if (name === 'log_dopamine') {
@@ -1203,7 +1246,11 @@ async function executeTool(
     const date = (args.date as string) || today;
     await upsertDopamineEntry(userId, { date, status, urge, note: note || undefined });
     const label = status === 'success' ? 'Stayed strong' : 'Check-in logged';
-    return { success: true, message: `${label}${date === today ? ' for today' : ` for ${date}`}` };
+    return {
+      success: true,
+      message: `${label}${date === today ? ' for today' : ` for ${date}`}`,
+      loggedStat: { kind: 'checkin', value: status === 'success' ? '💪' : '📝', label, sub: date === today ? 'Daily check-in · today' : `Check-in · ${date}`, good: status === 'success' },
+    };
   }
 
   if (name === 'log_exercise') {
@@ -1847,7 +1894,7 @@ export const AiChat: React.FC = () => {
           const aiText2 = finalParts.filter((p) => !p.thought).map((p) => p.text).join('').trim() || 'Done!';
 
           setStreamingText('');
-          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart, templateAction: toolResult.templateAction, loggedExercise: toolResult.loggedExercise }]);
+          setMessages((prev) => [...prev, { role: 'model', text: aiText2, action: toolResult, chart: responseChart, suggestedChart, templateAction: toolResult.templateAction, loggedExercise: toolResult.loggedExercise, loggedStat: toolResult.loggedStat }]);
           return;
         }
 
@@ -3170,8 +3217,15 @@ const ChatContent: React.FC<ChatContentProps> = ({
                   </div>
                 )}
 
+                {/* Logged weight / check-in — a proper done card in the logger's language */}
+                {m.role === 'model' && m.loggedStat && (
+                  <div className="mb-1">
+                    <StatConfirmCard stat={m.loggedStat} />
+                  </div>
+                )}
+
                 {/* Action confirmation card — skipped when a richer logged card shows it */}
-                {m.role === 'model' && m.action && m.action.message && !m.loggedExercise && (
+                {m.role === 'model' && m.action && m.action.message && !m.loggedExercise && !m.loggedStat && (
                   <div
                     className="flex items-center gap-2 px-3 py-2 mb-1"
                     style={{
