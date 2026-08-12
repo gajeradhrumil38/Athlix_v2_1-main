@@ -95,6 +95,16 @@ async function getLastExerciseSets(userId: string, exerciseName: string): Promis
 }
 
 const USAGE_STORAGE = 'athlix:api_usage';
+
+// Fast, low-drama entrance for the coach's "done" cards (M3 standardSpatialFast
+// — quick settle, no expressive bounce, right for routine UI).
+const CARD_POP = {
+  initial: { opacity: 0, y: 6, scale: 0.97 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  transition: { type: 'spring' as const, stiffness: 480, damping: 30 },
+};
+// Quick, slightly springy press for tappable chips (satisfying, ≤200ms feel).
+const CHIP_TAP = { type: 'spring' as const, stiffness: 600, damping: 20 };
 // Max conversation turns sent to API (keeps token usage low while preserving short-term memory)
 const MAX_HISTORY = 12;
 
@@ -1721,6 +1731,18 @@ export const AiChat: React.FC = () => {
           recentRuns,
           profile?.unit_preference || 'lbs',
         );
+
+        // Explicit "plot / chart / show me the trend" request → the chart is
+        // fully computed from local data, so render it INSTANTLY with a
+        // deterministic caption and skip the model entirely: zero tokens, zero
+        // latency, never rate-limited. (Analytical questions like "how am I
+        // doing" still go to the model with the chart attached.)
+        if (responseChart && CHART_REQUEST_RE.test(text)) {
+          setStreamingText('');
+          setMessages((prev) => [...prev, { role: 'model', text: chartCaption(responseChart!), chart: responseChart }]);
+          return;
+        }
+
         const trimmedHistory = history.slice(-MAX_HISTORY);
         const geminiContents = trimmedHistory.map((m) => ({
           role: m.role,
@@ -3203,7 +3225,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
                 )}
                 {/* Logged exercise — the same set card as the logger, marked done */}
                 {m.role === 'model' && m.loggedExercise && (
-                  <div className="mb-1">
+                  <motion.div className="mb-1" initial={CARD_POP.initial} animate={CARD_POP.animate} transition={CARD_POP.transition}>
                     <ExercisePlanCard
                       done
                       row={{
@@ -3214,14 +3236,14 @@ const ChatContent: React.FC<ChatContentProps> = ({
                         unit: m.loggedExercise.unit,
                       }}
                     />
-                  </div>
+                  </motion.div>
                 )}
 
                 {/* Logged weight / check-in — a proper done card in the logger's language */}
                 {m.role === 'model' && m.loggedStat && (
-                  <div className="mb-1">
+                  <motion.div className="mb-1" initial={CARD_POP.initial} animate={CARD_POP.animate} transition={CARD_POP.transition}>
                     <StatConfirmCard stat={m.loggedStat} />
-                  </div>
+                  </motion.div>
                 )}
 
                 {/* Action confirmation card — skipped when a richer logged card shows it */}
@@ -3434,9 +3456,11 @@ const ChatContent: React.FC<ChatContentProps> = ({
             }}
           >
             {planRows.length > 0 && (
-              <button
+              <motion.button
                 onClick={() => onAddPlanToLog(planRows)}
-                className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 transition-all active:scale-95"
+                whileTap={{ scale: 0.92 }}
+                transition={CHIP_TAP}
+                className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 transition-colors"
                 style={{
                   padding: '9px 14px',
                   borderRadius: 12,
@@ -3450,12 +3474,14 @@ const ChatContent: React.FC<ChatContentProps> = ({
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add to today's log
-              </button>
+              </motion.button>
             )}
             {planTopExercise && (
-              <button
+              <motion.button
                 onClick={() => onSuggest(`Show my ${planTopExercise} progress`)}
-                className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 transition-all active:scale-95"
+                whileTap={{ scale: 0.92 }}
+                transition={CHIP_TAP}
+                className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 transition-colors"
                 style={{
                   padding: '9px 14px',
                   borderRadius: 12,
@@ -3469,7 +3495,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
               >
                 <BarChart2 className="w-3.5 h-3.5" />
                 {planTopExercise} trend
-              </button>
+              </motion.button>
             )}
             {followUps.map((q) => (
               <button
