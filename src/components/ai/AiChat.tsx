@@ -342,6 +342,7 @@ interface Message {
   templateAction?: { id: string; title: string };
   loggedExercise?: { name: string; sets: number; reps: number; weight?: number; unit?: string };
   loggedStat?: LoggedStat;
+  logRouting?: { added: number; missing: string[] };
 }
 
 interface ApiUsage {
@@ -2008,14 +2009,16 @@ export const AiChat: React.FC = () => {
     navigate('/log?plan=1');
   }, [close, navigate]);
 
-  // "Add to today's log" → drop the coach's exercises straight into the logger
-  // as a LIVE draft session (pre-filled draft sets you can tap to check off),
-  // appending to any workout already in progress. Writes the same
-  // sessionStorage draft the logger resumes on mount.
-  const handleAddPlanToLog = useCallback((rows: ExRow[]) => {
-    if (!rows.length) return;
+  // "Add to today's log" → only REAL system exercises (matched against the
+  // exercise library) go into the live draft, with their canonical name +
+  // muscle group + db id so they track properly. Unknown names the coach may
+  // have invented are NOT added as broken entries — the user is routed to the
+  // exercise creator instead. Matched exercises are never lost in the process.
+  const handleAddPlanToLog = useCallback(async (rows: ExRow[]) => {
+    if (!user?.id || !rows.length) return;
     const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const num = (s?: string) => { const n = parseInt(s || '', 10); return Number.isFinite(n) ? n : 0; };
+    const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
     const lastWeightFor = (name: string): number => {
       const low = name.toLowerCase();
       for (const w of [...workouts].sort((a, b) => parseWorkoutDate(b.date).getTime() - parseWorkoutDate(a.date).getTime())) {
@@ -2026,52 +2029,89 @@ export const AiChat: React.FC = () => {
       return 0;
     };
 
-    const newExercises: ExerciseEntry[] = rows.slice(0, 12).map((r) => {
-      const setCount = Math.max(1, Math.min(10, num(r.sets) || 3));
-      const reps = Math.max(1, num(r.reps) || 10);
-      const weight = Math.max(0, Number(r.weight) || lastWeightFor(r.name));
-      return {
-        id: uid(),
-        name: r.name,
-        muscleGroup: '',
-        sets: Array.from({ length: setCount }, () => ({
-          id: uid(),
-          weight: weight > 0 ? weight : null,
-          reps,
-          done: false,
-          planned_weight: weight > 0 ? weight : null,
-          planned_reps: reps,
-        })),
-      };
-    });
-
-    // Append to an in-progress draft if one exists (< 8h old), else start fresh.
-    const DRAFT_KEY = 'athlix_active_workout';
-    const now = Date.now();
-    let draft: WorkoutState | null = null;
-    try {
-      const raw = sessionStorage.getItem(DRAFT_KEY);
-      const parsed = raw ? (JSON.parse(raw) as WorkoutState) : null;
-      if (parsed && Array.isArray(parsed.exercises) && typeof parsed.startTime === 'number' && now - parsed.startTime < 8 * 60 * 60 * 1000) {
-        draft = parsed;
-      }
-    } catch { /* ignore corrupt draft */ }
-
-    const appended = !!draft;
-    if (draft) {
-      draft.exercises = [...draft.exercises, ...newExercises];
-    } else {
-      const d = new Date();
-      const p = (n: number) => String(n).padStart(2, '0');
-      const local = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-      draft = { title: '', startTime: now, startAt: local, endAt: local, elapsedSeconds: 0, exercises: newExercises, notes: '' };
+    // Resolve every coach exercise against the library — matched vs unknown.
+    const matched: { row: ExRow; lib: LocalExerciseLibraryItem }[] = [];
+    const missing: string[] = [];
+    for (const r of rows.slice(0, 12)) {
+      let lib: LocalExerciseLibraryItem | undefined;
+      try {
+        const results = await searchExerciseLibrary(user.id, r.name);
+        const top = results[0];
+        if (top) {
+          const a = normName(r.name);
+          const b = normName(top.name);
+          // Accept a confident match: identical, or one name contains the other
+          // (e.g. coach "Row" → library "Barbell Row").
+          if (a && b && (a === b || a.includes(b) || b.includes(a))) lib = top;
+        }
+      } catch { /* treat as missing */ }
+      if (lib) matched.push({ row: r, lib }); else missing.push(r.name);
     }
-    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* ignore */ }
 
-    toast.success(appended ? 'Added to your workout' : 'Draft ready — opening logger');
-    close();
-    navigate('/log?direct=1');
-  }, [workouts, close, navigate]);
+    // Build/append the live draft from the matched (real) exercises only.
+    if (matched.length) {
+      const newExercises: ExerciseEntry[] = matched.map(({ row, lib }) => {
+        const setCount = Math.max(1, Math.min(10, num(row.sets) || 3));
+        const reps = Math.max(1, num(row.reps) || 10);
+        const weight = Math.max(0, Number(row.weight) || lastWeightFor(lib.name));
+        return {
+          id: uid(),
+          name: lib.name,
+          muscleGroup: lib.muscle_group || '',
+          exercise_db_id: lib.exercise_db_id || lib.id || undefined,
+          sets: Array.from({ length: setCount }, () => ({
+            id: uid(),
+            weight: weight > 0 ? weight : null,
+            reps,
+            done: false,
+            planned_weight: weight > 0 ? weight : null,
+            planned_reps: reps,
+          })),
+        };
+      });
+
+      const DRAFT_KEY = 'athlix_active_workout';
+      const now = Date.now();
+      let draft: WorkoutState | null = null;
+      try {
+        const raw = sessionStorage.getItem(DRAFT_KEY);
+        const parsed = raw ? (JSON.parse(raw) as WorkoutState) : null;
+        if (parsed && Array.isArray(parsed.exercises) && typeof parsed.startTime === 'number' && now - parsed.startTime < 8 * 60 * 60 * 1000) {
+          draft = parsed;
+        }
+      } catch { /* ignore corrupt draft */ }
+      if (draft) {
+        draft.exercises = [...draft.exercises, ...newExercises];
+      } else {
+        const d = new Date();
+        const p = (n: number) => String(n).padStart(2, '0');
+        const local = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+        draft = { title: '', startTime: now, startAt: local, endAt: local, elapsedSeconds: 0, exercises: newExercises, notes: '' };
+      }
+      try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* ignore */ }
+    }
+
+    // Happy path — everything matched → straight into the logger.
+    if (!missing.length) {
+      toast.success('Draft ready — opening logger');
+      close();
+      navigate('/log?direct=1');
+      return;
+    }
+
+    // Some/all unknown → stay in chat with a clear message + create route, so
+    // nothing broken is logged and the matched ones aren't lost.
+    setMessages((prev) => [...prev, {
+      role: 'model',
+      text: matched.length
+        ? `Added **${matched.length}** to your log draft. But **${missing.join('**, **')}** ${missing.length === 1 ? "isn't" : "aren't"} in your exercise library — create ${missing.length === 1 ? 'it' : 'them'} so they track properly.`
+        : `**${missing.join('**, **')}** ${missing.length === 1 ? "isn't" : "aren't"} in your exercise library yet. Create ${missing.length === 1 ? 'it' : 'them'} first, then add the plan.`,
+      logRouting: { added: matched.length, missing },
+    }]);
+  }, [user?.id, workouts, close, navigate]);
+
+  const handleOpenLogger = useCallback(() => { close(); navigate('/log?direct=1'); }, [close, navigate]);
+  const handleCreateMissing = useCallback(() => { close(); navigate('/log?add=1'); }, [close, navigate]);
 
   /* ── Chat session history ─────────────────────────────────────────── */
   const handleShowHistory = useCallback(() => {
@@ -2235,6 +2275,8 @@ export const AiChat: React.FC = () => {
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
                 onStartTemplate={handleStartTemplate}
+                onOpenLogger={handleOpenLogger}
+                onCreateMissing={handleCreateMissing}
                 onShowHistory={handleShowHistory}
                 onNewSession={handleNewSession}
                 onOpenSession={handleOpenSession}
@@ -2299,6 +2341,8 @@ export const AiChat: React.FC = () => {
                 onCheckIn={handleCheckIn}
                 onCompleteGoal={handleCompleteGoal}
                 onStartTemplate={handleStartTemplate}
+                onOpenLogger={handleOpenLogger}
+                onCreateMissing={handleCreateMissing}
                 onShowHistory={handleShowHistory}
                 onNewSession={handleNewSession}
                 onOpenSession={handleOpenSession}
@@ -2876,6 +2920,8 @@ interface ChatContentProps {
   onCheckIn: (feeling: string) => void;
   onCompleteGoal: (id: string) => void;
   onStartTemplate: () => void;
+  onOpenLogger: () => void;
+  onCreateMissing: () => void;
   onShowHistory: () => void;
   onNewSession: () => void;
   onOpenSession: (id: string) => void;
@@ -2904,6 +2950,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
   hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress, exerciseWeights,
   sessions, showHistory, activeSessionId, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate, onAddPlanToLog,
+  onOpenLogger, onCreateMissing,
   onShowHistory, onNewSession, onOpenSession, onCloseHistory, onDeleteSession,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
   onClose, onGoSettings, onCopy, onPlotSuggestion,
@@ -3328,6 +3375,32 @@ const ChatContent: React.FC<ChatContentProps> = ({
                     <Sparkles className="w-3.5 h-3.5" />
                     Start workout
                   </button>
+                )}
+
+                {/* Log-routing actions: some exercises weren't in the library */}
+                {m.role === 'model' && m.logRouting && (
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {m.logRouting.added > 0 && (
+                      <button
+                        type="button"
+                        onClick={onOpenLogger}
+                        className="inline-flex items-center gap-1.5 transition-all active:scale-95"
+                        style={{ padding: '8px 13px', borderRadius: 10, background: 'var(--accent)', border: 'none', color: '#000', fontSize: 12.5, fontWeight: 700 }}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Open logger
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={onCreateMissing}
+                      className="inline-flex items-center gap-1.5 transition-all active:scale-95"
+                      style={{ padding: '8px 13px', borderRadius: 10, background: 'rgba(200,255,0,0.08)', border: '1px solid rgba(200,255,0,0.22)', color: '#C8FF00', fontSize: 12.5, fontWeight: 700 }}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Create in logger
+                    </button>
+                  </div>
                 )}
 
                 {m.role === 'model' && !m.chart && m.suggestedChart && (
