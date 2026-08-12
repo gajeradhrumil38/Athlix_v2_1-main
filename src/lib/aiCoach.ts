@@ -275,10 +275,16 @@ export function buildSystemPrompt(
   const muscleAge: Record<string, number> = {};
   for (const w of workouts) {
     const age = calDaysSince(w.date);
-    for (const mg of (w.muscle_groups || [])) {
-      const k = mg.toLowerCase();
+    const bump = (mg?: string | null) => {
+      const k = (mg || '').trim().toLowerCase();
+      if (!k) return;
       if (muscleAge[k] === undefined || age < muscleAge[k]) muscleAge[k] = age;
-    }
+    };
+    // Use BOTH the workout-level muscle_groups AND each exercise's muscle_group
+    // so recovery status covers every muscle actually trained and agrees with
+    // the THIS WEEK "trained" list (which is exercise-level).
+    for (const mg of (w.muscle_groups || [])) bump(mg);
+    for (const ex of (w.exercises || [])) bump(ex.muscle_group);
   }
   const recoverySection = Object.entries(muscleAge)
     .sort((a, b) => a[1] - b[1])
@@ -287,6 +293,27 @@ export function buildSystemPrompt(
       return `  ${mg.charAt(0).toUpperCase() + mg.slice(1)}: ${d}d since last session — ${status}`;
     })
     .join('\n');
+
+  // One unambiguous, pre-computed fact so the model can't hallucinate which
+  // muscles were trained this week (e.g. claiming "you already did Back" when
+  // Back wasn't trained). Trained = muscles hit in the last 7 days; rested/due =
+  // everything else, most-rested first — the ONLY valid pool for "what to train".
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const weekTrained = new Set<string>();
+  for (const w of workouts) {
+    if (calDaysSince(w.date) > 6) continue;
+    for (const ex of (w.exercises || [])) {
+      const mg = (ex.muscle_group || '').trim().toLowerCase();
+      if (mg) weekTrained.add(mg);
+    }
+  }
+  const restedDue = Object.entries(muscleAge)
+    .filter(([mg]) => !weekTrained.has(mg))
+    .sort((a, b) => b[1] - a[1])
+    .map(([mg, d]) => `${cap(mg)} (${d}d ago)`);
+  const thisWeekSection =
+    `  Trained this week: ${weekTrained.size ? [...weekTrained].map(cap).join(', ') : 'nothing yet'}\n` +
+    `  Rested / due (recommend ONLY from these): ${restedDue.length ? restedDue.join(', ') : '— (train anything)'}`;
 
   const prSection = prs.slice(0, 15)
     .map((p) => `  ${p.exercise_name}: ${p.best_weight}${unit} × ${p.best_reps} reps (set ${p.achieved_date})`)
@@ -306,7 +333,7 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
 
   const toolCallingRule = variant === 'chat'
     ? `\n8. "What should I train today?" / "what should I do?" / planning questions → a TEXT plan, never a tool call. Do this exactly:
-   a) Pick ONE target muscle group: the one that is most rested (most days since trained in RECOVERY STATUS, never a ⛔) AND furthest below target in WEEKLY VOLUME.
+   a) Pick ONE target muscle group STRICTLY from the "Rested / due" line in THIS WEEK — never a muscle on the "Trained this week" line, and never a ⛔ in RECOVERY STATUS. Prefer the most-rested one that's below its weekly target. Do NOT claim a muscle was trained/rested contrary to the THIS WEEK data.
    b) Open with ONE short line naming it and why — e.g. "**Back** is your most rested and lowest-volume this week (only 3 sets)."
    c) Give 4–5 exercises, EACH on its own line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: sets×reps @ weight${unit}". Pull the weight from their PERSONAL RECORDS / RECENT SESSIONS for that lift (match it, or +2.5–5${unit} to progress) — never invent a number; for bodyweight moves drop the "@ weight".
    d) End with ONE line naming a beatable PR to chase, with the exact weight×reps.
@@ -322,6 +349,10 @@ UNDERSTANDING — answer the SPECIFIC thing ${name} asked, not a generic version
 TODAY: ${today}
 ATHLETE: ${name} | BW: ${bodyWeight} | Height: ${height} | Unit: ${unit}
 TRAINING PATTERN: ${workouts.length ? trainingStats(workouts) : 'no data'}
+
+━━ THIS WEEK (last 7 days) — AUTHORITATIVE ━━
+${thisWeekSection}
+(Treat this as fact: a muscle is "trained this week" ONLY if it's on the Trained line. Never claim otherwise.)
 
 ${buildImprovementModelSection(improvementModel)}
 
