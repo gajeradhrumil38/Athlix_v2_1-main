@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus, RotateCcw, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { format, subDays } from 'date-fns';
@@ -450,10 +450,19 @@ function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string
   const exerciseName = findExerciseNameForChart(workouts, text);
   if (!exerciseName) return undefined;
 
-  const metric = pickExerciseMetric(text, unit);
-  const isPeak = metric.key === 'weight' || metric.key === 'e1rm';
-  const points = new Map<string, number>();
   const lowerName = exerciseName.toLowerCase();
+
+  // Reps-only exercise (bodyweight / no load ever logged) → weight, est-1RM and
+  // volume are all ~0 and meaningless. Track REPS instead: top reps per session
+  // is the "am I getting stronger" signal for these.
+  const allSets = workouts.flatMap((w) => (w.exercises || []).filter((ex) => ex.name.toLowerCase() === lowerName));
+  const hasWeight = allSets.some((ex) => (Number(ex.weight) || 0) > 0);
+  const repsPeak = !hasWeight;
+  const metric = hasWeight
+    ? pickExerciseMetric(text, unit)
+    : { key: 'reps' as ExerciseMetricKey, label: 'reps', sub: 'Top reps per session' };
+  const isPeak = metric.key === 'weight' || metric.key === 'e1rm' || repsPeak;
+  const points = new Map<string, number>();
 
   for (const w of [...workouts].sort((a, b) => parseWorkoutDate(a.date).getTime() - parseWorkoutDate(b.date).getTime())) {
     const matching = (w.exercises || []).filter((ex) => ex.name.toLowerCase() === lowerName);
@@ -466,7 +475,7 @@ function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string
       const weight = Number(ex.weight) || 0;
       if (metric.key === 'weight') sessionValue = Math.max(sessionValue, weight);
       else if (metric.key === 'e1rm') sessionValue = Math.max(sessionValue, reps > 0 ? weight * (1 + reps / 30) : weight);
-      else if (metric.key === 'reps') sessionValue += sets * reps;
+      else if (metric.key === 'reps') sessionValue = repsPeak ? Math.max(sessionValue, reps) : sessionValue + sets * reps;
       else sessionValue += sets * reps * weight;
     }
     if (sessionValue <= 0) continue;
@@ -1981,6 +1990,12 @@ export const AiChat: React.FC = () => {
     });
   };
 
+  // Load a past message back into the input so the user can tweak it and resend.
+  const handleEditMessage = useCallback((text: string) => {
+    setInput(text);
+    setTimeout(() => inputRef.current?.focus(), 40);
+  }, []);
+
   const handlePlotSuggestion = useCallback((idx: number) => {
     setMessages((prev) => prev.map((m, i) => (
       i === idx && m.suggestedChart
@@ -2298,6 +2313,7 @@ export const AiChat: React.FC = () => {
                 onClose={close}
                 onGoSettings={() => { close(); navigate('/settings'); }}
                 onCopy={handleCopy}
+                onEditMessage={handleEditMessage}
                 onPlotSuggestion={handlePlotSuggestion}
               />
             )}
@@ -2364,6 +2380,7 @@ export const AiChat: React.FC = () => {
                 onClose={close}
                 onGoSettings={() => { close(); navigate('/settings'); }}
                 onCopy={handleCopy}
+                onEditMessage={handleEditMessage}
                 onPlotSuggestion={handlePlotSuggestion}
               />
             )}
@@ -2943,6 +2960,7 @@ interface ChatContentProps {
   onClose: () => void;
   onGoSettings: () => void;
   onCopy: (text: string, idx: number) => void;
+  onEditMessage: (text: string) => void;
   onPlotSuggestion: (idx: number) => void;
 }
 
@@ -2953,7 +2971,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
   onOpenLogger, onCreateMissing,
   onShowHistory, onNewSession, onOpenSession, onCloseHistory, onDeleteSession,
   onInput, onKey, onSend, onSuggest, onLogExercise, onShowFormWithName,
-  onClose, onGoSettings, onCopy, onPlotSuggestion,
+  onClose, onGoSettings, onCopy, onEditMessage, onPlotSuggestion,
 }) => {
   const [expandedThought, setExpandedThought] = useState<number | null>(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -3434,22 +3452,42 @@ const ChatContent: React.FC<ChatContentProps> = ({
                 )}
 
                 {m.role === 'model' && !m.exerciseForm && (
+                  <div className="self-start flex items-center gap-3">
+                    <button
+                      onClick={() => onCopy(m.text, i)}
+                      title="Copy response"
+                      className="flex items-center gap-1 transition-colors"
+                      style={{ padding: '2px 4px', borderRadius: 4, fontSize: 10, color: copiedIdx === i ? 'var(--accent)' : 'var(--text-muted)', background: 'none', border: 'none' }}
+                    >
+                      {copiedIdx === i
+                        ? <><Check className="w-[11px] h-[11px]" /> Copied</>
+                        : <><Copy className="w-[11px] h-[11px]" /> Copy</>}
+                    </button>
+                    {(() => {
+                      let userText = '';
+                      for (let j = i - 1; j >= 0; j--) { if (messages[j].role === 'user') { userText = messages[j].text; break; } }
+                      return userText ? (
+                        <button
+                          onClick={() => onSuggest(userText)}
+                          title="Ask again"
+                          className="flex items-center gap-1 transition-colors"
+                          style={{ padding: '2px 4px', borderRadius: 4, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none' }}
+                        >
+                          <RotateCcw className="w-[11px] h-[11px]" /> Retry
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+
+                {m.role === 'user' && !loading && (
                   <button
-                    onClick={() => onCopy(m.text, i)}
-                    title="Copy response"
-                    className="self-start flex items-center gap-1 transition-colors"
-                    style={{
-                      padding: '2px 4px',
-                      borderRadius: 4,
-                      fontSize: 10,
-                      color: copiedIdx === i ? 'var(--accent)' : 'var(--text-muted)',
-                      background: 'none',
-                      border: 'none',
-                    }}
+                    onClick={() => onEditMessage(m.text)}
+                    title="Edit & resend"
+                    className="self-end flex items-center gap-1 transition-colors"
+                    style={{ padding: '2px 4px', borderRadius: 4, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none' }}
                   >
-                    {copiedIdx === i
-                      ? <><Check className="w-[11px] h-[11px]" /> Copied</>
-                      : <><Copy className="w-[11px] h-[11px]" /> Copy</>}
+                    <Pencil className="w-[11px] h-[11px]" /> Edit
                   </button>
                 )}
               </div>
