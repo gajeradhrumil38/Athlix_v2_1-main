@@ -11,6 +11,7 @@ import {
   Line,
   Pie,
   PieChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -309,29 +310,48 @@ interface CoachChartPoint {
   value: number;
   secondary?: number;
   trend?: number;   // fitted value from the least-squares trend line
+  ma?: number;      // 3-point moving average (local smoother)
 }
 
-// Least-squares linear fit over index→value. Returns the fitted y at each point
-// plus the per-step slope, so a progression chart shows the underlying
-// direction (signal) over the raw session-to-session noise. Needs ≥3 points.
-function withTrendLine(data: CoachChartPoint[]): { data: CoachChartPoint[]; slope: number } {
+// Least-squares linear fit + R² (goodness of fit) + a 3-point moving average.
+// R² gates whether we CLAIM a trend (only when the line actually fits), and the
+// moving average is the honest smoother for noisy data a straight line can't
+// describe. Needs ≥3 points. Signal over noise, per the dataviz playbook.
+function computeTrend(data: CoachChartPoint[]): { data: CoachChartPoint[]; slope: number; r2: number } {
   const n = data.length;
-  if (n < 3) return { data, slope: 0 };
-  const xs = data.map((_, i) => i);
+  if (n < 3) return { data, slope: 0, r2: 0 };
   const ys = data.map((d) => d.value);
-  const mx = xs.reduce((s, x) => s + x, 0) / n;
+  const mx = (n - 1) / 2;
   const my = ys.reduce((s, y) => s + y, 0) / n;
   let num = 0;
   let den = 0;
   for (let i = 0; i < n; i++) {
-    num += (xs[i] - mx) * (ys[i] - my);
-    den += (xs[i] - mx) ** 2;
+    num += (i - mx) * (ys[i] - my);
+    den += (i - mx) ** 2;
   }
   const slope = den === 0 ? 0 : num / den;
   const intercept = my - slope * mx;
+
+  let ssRes = 0;
+  let ssTot = 0;
+  for (let i = 0; i < n; i++) {
+    ssRes += (ys[i] - (slope * i + intercept)) ** 2;
+    ssTot += (ys[i] - my) ** 2;
+  }
+  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
+
+  const ma = ys.map((_, i) => {
+    const lo = Math.max(0, i - 1);
+    const hi = Math.min(n - 1, i + 1);
+    let s = 0;
+    for (let j = lo; j <= hi; j++) s += ys[j];
+    return Math.round((s / (hi - lo + 1)) * 10) / 10;
+  });
+
   return {
-    data: data.map((d, i) => ({ ...d, trend: Math.round((slope * i + intercept) * 10) / 10 })),
+    data: data.map((d, i) => ({ ...d, trend: Math.round((slope * i + intercept) * 10) / 10, ma: ma[i] })),
     slope,
+    r2,
   };
 }
 
@@ -354,6 +374,8 @@ interface CoachChart {
   rings?: CoachRing[];       // kind 'ring'
   centerValue?: string;      // ring / donut center headline
   centerLabel?: string;
+  overlay?: 'trend' | 'ma'; // which smoother to draw on a line chart
+  showPeak?: boolean;        // mark the peak/PR point on a line chart
 }
 
 interface Message {
@@ -514,31 +536,49 @@ function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string
     .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value: Math.round(value * 10) / 10 }));
 
   if (raw.length < 2) return undefined;
-  // Overlay a least-squares trend line + a slope-derived verdict in the subtitle
-  // so the direction is unmistakable over noisy session-to-session data.
-  const { data, slope } = withTrendLine(raw);
-  const verdict = raw.length >= 3
+  // Trend/MA + a CONFIDENCE-gated verdict: only claim a direction when the
+  // straight line actually fits (R² ≥ 0.25). When it doesn't, the data is
+  // noisy → draw the moving average instead and call it "variable".
+  const { data, slope, r2 } = computeTrend(raw);
+  const confident = raw.length >= 3 && r2 >= 0.25;
+  const verdict = confident
     ? (slope > 0.05 ? ' · trending up ↑' : slope < -0.05 ? ' · trending down ↓' : ' · holding steady →')
-    : '';
+    : (raw.length >= 4 ? ' · variable' : '');
+  const overlay: CoachChart['overlay'] = confident ? 'trend' : raw.length >= 5 ? 'ma' : undefined;
   return {
     kind: 'line',
     title: exerciseName,
     subtitle: metric.sub + verdict,
     valueLabel: metric.label,
     data,
+    overlay,
+    showPeak: true,
   };
 }
 
 function buildLoggedWorkoutVolumeChart(workouts: WorkoutWithExercises[], unit: string): CoachChart | undefined {
-  // Aggregate by DAY so two sessions on the same date don't produce two bars
-  // with an identical label.
+  // Weighted volume (sets×reps×weight) reads near-zero for a bodyweight-heavy
+  // block, making the chart useless. Detect that and switch the whole chart to
+  // total REPS per day so it stays meaningful.
+  let weightedSets = 0;
+  let totalSets = 0;
+  for (const w of workouts) {
+    for (const ex of w.exercises || []) {
+      const s = Number(ex.sets) || 1;
+      totalSets += s;
+      if ((Number(ex.weight) || 0) > 0) weightedSets += s;
+    }
+  }
+  const repsMode = totalSets > 0 && weightedSets / totalSets < 0.5; // mostly bodyweight
+
+  // Aggregate by DAY so two sessions on the same date don't produce two bars.
   const byDate = new Map<string, number>();
   for (const w of workouts) {
     const value = (w.exercises || []).reduce((sum, ex) => {
       const sets = Number(ex.sets) || 0;
       const reps = Number(ex.reps) || 0;
       const weight = Number(ex.weight) || 0;
-      return sum + sets * reps * weight;
+      return sum + (repsMode ? sets * reps : sets * reps * weight);
     }, 0);
     if (value > 0) byDate.set(w.date, (byDate.get(w.date) || 0) + value);
   }
@@ -551,9 +591,9 @@ function buildLoggedWorkoutVolumeChart(workouts: WorkoutWithExercises[], unit: s
   if (data.length < 2) return undefined;
   return {
     kind: 'bar',
-    title: 'Training Volume',
-    subtitle: 'Total volume per day',
-    valueLabel: `${unit} volume`,
+    title: repsMode ? 'Training Reps' : 'Training Volume',
+    subtitle: repsMode ? 'Total reps per day' : 'Total volume per day',
+    valueLabel: repsMode ? 'reps' : `${unit} volume`,
     data,
   };
 }
@@ -991,10 +1031,36 @@ type WeightMap = Record<string, { weight: number; unit: string }>;
 // from the user's last logged weight for that lift ("· last"). Bodyweight moves
 // (no weight anywhere) collapse to a compact single row so there's no big empty
 // box.
-const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean; lastWeight?: { weight: number; unit: string } }> = ({ row, index, done, lastWeight }) => {
+// Tiny inline trend line (zero-dependency SVG) for a lift's recent history —
+// green if the latest beats the first, red if it's dropped.
+const Sparkline: React.FC<{ values: number[] }> = ({ values }) => {
+  if (values.length < 3) return null;
+  const w = 44;
+  const h = 15;
+  const pad = 1.5;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values
+    .map((v, i) => {
+      const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+      const y = h - pad - ((v - min) / range) * (h - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const color = values[values.length - 1] >= values[0] ? '#C8FF00' : '#f87171';
+  return (
+    <svg width={w} height={h} className="shrink-0" style={{ opacity: 0.85 }} aria-hidden>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
+
+const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean; lastWeight?: { weight: number; unit: string }; spark?: number[] }> = ({ row, index, done, lastWeight, spark }) => {
   const weightVal = row.weight ?? (lastWeight ? String(lastWeight.weight) : undefined);
   const unit = (row.unit ?? lastWeight?.unit ?? 'lb').toUpperCase();
   const fromHistory = !row.weight && !!lastWeight;
+  const showSpark = !done && spark && spark.length >= 3;
 
   const IndexPill = (
     <span
@@ -1018,6 +1084,7 @@ const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean; l
             <p className="text-[14px] font-bold truncate leading-tight" style={{ color: 'var(--text-primary)' }}>{row.name}</p>
             <p className="text-[10px] font-semibold tracking-[0.08em] uppercase mt-0.5" style={{ color: 'var(--text-muted)' }}>{row.sets} sets · bodyweight</p>
           </div>
+          {showSpark && <Sparkline values={spark!} />}
           <div className="flex flex-col items-end shrink-0">
             <span className="font-victory tabular-nums text-[28px] leading-none font-black" style={{ color: 'var(--text-primary)' }}>{row.reps}</span>
             <span className="mt-1 text-[9px] font-bold tracking-[0.16em] uppercase" style={{ color: 'var(--text-secondary)' }}>reps</span>
@@ -1036,9 +1103,12 @@ const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean; l
           {IndexPill}
           <span className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{row.name}</span>
         </div>
-        {done
-          ? <Check className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
-          : <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>{row.sets} sets</span>}
+        <div className="flex items-center gap-2 shrink-0">
+          {showSpark && <Sparkline values={spark!} />}
+          {done
+            ? <Check className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+            : <span className="text-[10px] font-semibold tracking-[0.08em] uppercase tabular-nums shrink-0" style={{ color: 'var(--text-muted)' }}>{row.sets} sets</span>}
+        </div>
       </div>
       <div className="flex items-stretch border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
         <div className="flex-1 flex flex-col items-center justify-center py-2.5" style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}>
@@ -1056,10 +1126,10 @@ const ExercisePlanCard: React.FC<{ row: ExRow; index?: number; done?: boolean; l
   );
 };
 
-const ExercisePlanBlock: React.FC<{ rows: ExRow[]; weights?: WeightMap }> = ({ rows, weights }) => (
+const ExercisePlanBlock: React.FC<{ rows: ExRow[]; weights?: WeightMap; sparks?: Record<string, number[]> }> = ({ rows, weights, sparks }) => (
   <div className="my-2 space-y-2">
     {rows.map((r, i) => (
-      <ExercisePlanCard key={i} row={r} index={i + 1} lastWeight={weights?.[r.name.toLowerCase()]} />
+      <ExercisePlanCard key={i} row={r} index={i + 1} lastWeight={weights?.[r.name.toLowerCase()]} spark={sparks?.[r.name.toLowerCase()]} />
     ))}
   </div>
 );
@@ -1101,7 +1171,7 @@ const StatConfirmCard: React.FC<{ stat: LoggedStat }> = ({ stat }) => {
 
 // Render coach text, promoting consecutive exercise prescriptions into a tidy
 // plan block and leaving prose as-is.
-function renderText(raw: string, weights?: WeightMap): React.ReactNode[] {
+function renderText(raw: string, weights?: WeightMap, sparks?: Record<string, number[]>): React.ReactNode[] {
   const lines = raw.split('\n');
   const out: React.ReactNode[] = [];
   let exGroup: ExRow[] = [];
@@ -1127,7 +1197,7 @@ function renderText(raw: string, weights?: WeightMap): React.ReactNode[] {
   };
   const flushEx = () => {
     if (!exGroup.length) return;
-    out.push(<ExercisePlanBlock key={`e${bk++}`} rows={exGroup} weights={weights} />);
+    out.push(<ExercisePlanBlock key={`e${bk++}`} rows={exGroup} weights={weights} sparks={sparks} />);
     exGroup = [];
   };
   const flushVol = () => {
@@ -2245,6 +2315,28 @@ export const AiChat: React.FC = () => {
     }
   }
 
+  // Per-exercise mini history for inline sparklines on plan cards: top value per
+  // session (weight if it's a weighted lift, else reps), oldest→newest, last 8.
+  const exerciseSparks: Record<string, number[]> = {};
+  {
+    const byEx: Record<string, { weighted: boolean; perDate: Map<string, number> }> = {};
+    for (const w of workouts) {
+      for (const ex of w.exercises || []) {
+        const key = ex.name.toLowerCase();
+        const weight = Number(ex.weight) || 0;
+        const reps = Number(ex.reps) || 0;
+        const rec = (byEx[key] ||= { weighted: false, perDate: new Map() });
+        if (weight > 0) rec.weighted = true;
+        const v = weight > 0 ? weight : reps;
+        rec.perDate.set(w.date, Math.max(rec.perDate.get(w.date) || 0, v));
+      }
+    }
+    for (const [key, { perDate }] of Object.entries(byEx)) {
+      const series = [...perDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((e) => e[1]).slice(-8);
+      if (series.length >= 3) exerciseSparks[key] = series;
+    }
+  }
+
   // A measurable goal is only completed once the LOGGED work actually reaches
   // its target — never on creation, never by a premature tap. Reconciles when
   // workouts/PRs load or change.
@@ -2353,6 +2445,7 @@ export const AiChat: React.FC = () => {
                 todayFeeling={getTodayFeeling()}
                 goalProgress={goalProgress}
                 exerciseWeights={exerciseWeights}
+                exerciseSparks={exerciseSparks}
                 sessions={sessions}
                 showHistory={showHistory}
                 activeSessionId={activeSessionId}
@@ -2420,6 +2513,7 @@ export const AiChat: React.FC = () => {
                 todayFeeling={getTodayFeeling()}
                 goalProgress={goalProgress}
                 exerciseWeights={exerciseWeights}
+                exerciseSparks={exerciseSparks}
                 sessions={sessions}
                 showHistory={showHistory}
                 activeSessionId={activeSessionId}
@@ -2624,6 +2718,7 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
   const gradientId = React.useId();
   const values = chart.data.map((d) => d.value);
   const peak = Math.max(...values);
+  const peakPoint = chart.data.find((d) => d.value === peak);
   const headline = chart.kind === 'line' ? values[values.length - 1] : peak;
 
   const fmt = (n: number) =>
@@ -2712,16 +2807,21 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
                 dot={false}
                 activeDot={{ r: 4, strokeWidth: 2, stroke: 'rgba(18,20,24,1)', fill: accent }}
               />
-              {chart.data.some((d) => d.trend != null) && (
-                <Line
-                  type="linear"
-                  dataKey="trend"
-                  stroke="rgba(255,255,255,0.42)"
-                  strokeWidth={1.5}
-                  strokeDasharray="5 4"
-                  dot={false}
-                  activeDot={false}
-                  isAnimationActive={false}
+              {chart.overlay === 'trend' && (
+                <Line type="linear" dataKey="trend" stroke="rgba(255,255,255,0.42)" strokeWidth={1.5} strokeDasharray="5 4" dot={false} activeDot={false} isAnimationActive={false} />
+              )}
+              {chart.overlay === 'ma' && (
+                <Line type="monotone" dataKey="ma" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} strokeDasharray="3 3" dot={false} activeDot={false} isAnimationActive={false} />
+              )}
+              {chart.showPeak && peakPoint && (
+                <ReferenceDot
+                  x={peakPoint.label}
+                  y={peakPoint.value}
+                  r={3.5}
+                  fill={accent}
+                  stroke="rgba(18,20,24,1)"
+                  strokeWidth={2}
+                  label={{ value: fmt(peakPoint.value), position: 'top', fill: 'rgba(255,255,255,0.6)', fontSize: 9 }}
                 />
               )}
             </ComposedChart>
@@ -3012,6 +3112,7 @@ interface ChatContentProps {
   todayFeeling: string | null;
   goalProgress: Record<string, GoalProgress>;
   exerciseWeights: WeightMap;
+  exerciseSparks: Record<string, number[]>;
   sessions: ChatSession[];
   showHistory: boolean;
   activeSessionId: string | null;
@@ -3047,7 +3148,7 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress, exerciseWeights,
+  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress, exerciseWeights, exerciseSparks,
   sessions, showHistory, activeSessionId, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate, onAddPlanToLog,
   onOpenLogger, onCreateMissing,
@@ -3449,7 +3550,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
                       wordBreak: 'break-word',
                     }}
                   >
-                    {renderText(m.text, exerciseWeights)}
+                    {renderText(m.text, exerciseWeights, exerciseSparks)}
                   </div>
                 )}
 
@@ -3630,7 +3731,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
                   maxWidth: '78%',
                 }}
               >
-                {renderText(streamingText, exerciseWeights)}
+                {renderText(streamingText, exerciseWeights, exerciseSparks)}
               </div>
             </div>
           )}
