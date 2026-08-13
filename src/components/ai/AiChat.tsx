@@ -688,6 +688,31 @@ function buildMacroDonut(foodScans: FoodScan[]): CoachChart | undefined {
   };
 }
 
+// Find a lift that's actually plateaued (top weight hasn't set a new peak in
+// its recent sessions) so a "which exercises am I plateauing on?" question can
+// show a RELEVANT trend, not a generic volume bar. Returns the most-logged such
+// lift's name.
+function findPlateauedExercise(workouts: WorkoutWithExercises[]): string | null {
+  const byEx: Record<string, Map<string, number>> = {};
+  for (const w of workouts) {
+    for (const ex of w.exercises || []) {
+      const wt = Number(ex.weight) || 0;
+      if (wt <= 0) continue;
+      const m = (byEx[ex.name] ||= new Map<string, number>());
+      m.set(w.date, Math.max(m.get(w.date) || 0, wt));
+    }
+  }
+  let best: { name: string; sessions: number } | null = null;
+  for (const [name, perDate] of Object.entries(byEx)) {
+    if (perDate.size < 3) continue;
+    const series = [...perDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((e) => e[1]);
+    const last = series[series.length - 1];
+    const priorMax = Math.max(...series.slice(0, -1));
+    if (last <= priorMax && (!best || perDate.size > best.sessions)) best = { name, sessions: perDate.size };
+  }
+  return best?.name || null;
+}
+
 function buildCoachChart(
   text: string,
   workouts: WorkoutWithExercises[],
@@ -696,7 +721,8 @@ function buildCoachChart(
   whoopData: WhoopAllData | null,
   unit: string,
 ): CoachChart | undefined {
-  if (!CHART_REQUEST_RE.test(text) && !CHART_AUTO_RE.test(text)) return undefined;
+  const explicit = CHART_REQUEST_RE.test(text);
+  if (!explicit && !CHART_AUTO_RE.test(text)) return undefined;
 
   // 1. A specific exercise the user named → its progression line. This wins
   //    over everything so "plot my bench" is never hijacked by a ring.
@@ -731,12 +757,24 @@ function buildCoachChart(
   if (/\b(muscle)\b/i.test(text)) {
     return buildVolumeChart(workouts, text);
   }
+  // 7. Plateau / stuck (no specific lift named) → show a genuinely plateaued
+  //    lift's trend, so the chart matches the answer instead of generic volume.
+  if (/\b(plateau|plateaus|plateauing|stuck|stall|stalling|not improving|no progress)\b/i.test(text)) {
+    const p = findPlateauedExercise(workouts);
+    if (p) return buildExerciseVolumeChart(workouts, p, unit);
+  }
 
-  // Default: a volume trend is the most broadly useful.
-  return buildLoggedWorkoutVolumeChart(workouts, unit)
-    || buildVolumeChart(workouts, text)
-    || buildNutritionChart(foodScans, text)
-    || buildRunChart(recentRuns, text);
+  // No specific, relevant chart mapped. Only fall back to a generic volume
+  // trend when the user EXPLICITLY asked to "plot/chart/graph" — never auto-
+  // attach an unrelated volume chart to an analytical question (e.g. "which
+  // exercises am I plateauing on"), which just reads as noise under the answer.
+  if (explicit) {
+    return buildLoggedWorkoutVolumeChart(workouts, unit)
+      || buildVolumeChart(workouts, text)
+      || buildNutritionChart(foodScans, text)
+      || buildRunChart(recentRuns, text);
+  }
+  return undefined;
 }
 
 function buildSuggestedCoachChart(
