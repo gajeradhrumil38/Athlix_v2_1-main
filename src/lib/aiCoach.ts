@@ -195,8 +195,24 @@ export function buildRunSection(runs: SavedRun[]): string {
 // call for today. Surfaced near the top so the coach scales every plan to it,
 // instead of leaving the WHOOP numbers unused at the bottom of the context.
 export function readinessDirective(data: WhoopAllData | null): string {
+  // Not connected → no directive at all (rule 13 falls back to muscle recovery).
   if (!data?.recovery?.length) return '';
-  const rec = data.recovery[0].recovery_score;
+
+  const r = data.recovery[0];
+  const score = Number(r.recovery_score);
+  const age = calDaysSince(r.date);
+
+  // No usable reading for today: no score yet (didn't sleep/sync), a 0 (which
+  // WHOOP uses for "no reading", NOT red), or stale (2+ days old — not worn
+  // recently). Never fake a readiness from an empty/old value — tell the coach
+  // to size the session by muscle recovery + how the user feels.
+  if (!Number.isFinite(score) || score <= 0 || age >= 2) {
+    const why = (!Number.isFinite(score) || score <= 0)
+      ? 'no recovery score yet today'
+      : `last WHOOP reading was ${age}d ago (band not worn / not synced)`;
+    return `\n\n━━ TODAY'S DIRECTIVE ━━\n  No fresh WHOOP recovery — ${why}. Size the session by MUSCLE RECOVERY STATUS + how they say they feel; do NOT cite a recovery % as if it's today's.`;
+  }
+
   let acwr = 0;
   try {
     const lm = computeLoadMetrics(buildDailyLoads(data.cycles || [], 28));
@@ -206,29 +222,39 @@ export function readinessDirective(data: WhoopAllData | null): string {
   const overreached = acwr > 1.5;
   let level: string;
   let action: string;
-  if (rec < 34 || overreached) {
+  if (score < 34 || overreached) {
     level = 'DELOAD / EASY';
     action = 'cut total sets ~40%, drop intensity (no top sets or PR attempts), or do active recovery / mobility + a walk. Sleep is the priority.';
-  } else if (rec < 67) {
+  } else if (score < 67) {
     level = 'MODERATE';
     action = 'train normally but capped — hit your target sets, leave 1–2 reps in reserve, skip max/PR attempts.';
   } else {
     level = acwr && acwr < 0.8 ? 'PUSH (room to add load)' : 'PUSH';
     action = 'green light — full volume, and go for a top set or a PR on your most-rested muscle.';
   }
-  return `\n\n━━ TODAY'S DIRECTIVE (recovery ${rec}%${acwr ? `, ACWR ${acwr.toFixed(2)}` : ''}) ━━\n  ${level} — ${action}\n  (Scale EVERY "what/how much to train" answer to this: match sets & intensity to the call above.)`;
+  const staleNote = age === 1 ? ' (reading is from yesterday — confirm how they feel)' : '';
+  return `\n\n━━ TODAY'S DIRECTIVE (recovery ${score}%${acwr ? `, ACWR ${acwr.toFixed(2)}` : ''})${staleNote} ━━\n  ${level} — ${action}\n  (Scale EVERY "what/how much to train" answer to this: match sets & intensity to the call above.)`;
 }
 
 export function buildWhoopSection(data: WhoopAllData | null): string {
   if (!data?.recovery?.length) return '';
   const r = data.recovery[0];
   const s = data.sleep?.[0];
-  const sleepH = s ? (s.total_in_bed_time_milli / 3_600_000).toFixed(1) : '?';
-  const strain = data.cycles?.[0]?.strain_score?.toFixed(1) ?? '?';
+  const sleepH = s && s.total_in_bed_time_milli > 0 ? (s.total_in_bed_time_milli / 3_600_000).toFixed(1) : '—';
+  const strain = (data.cycles?.[0]?.strain_score ?? 0) > 0 ? data.cycles![0].strain_score!.toFixed(1) : '—';
 
-  const readiness = r.recovery_score >= 67 ? 'GREEN — safe to push hard'
-    : r.recovery_score >= 34 ? 'YELLOW — moderate, quality over volume'
+  const score = Number(r.recovery_score);
+  const age = calDaysSince(r.date);
+  const validToday = Number.isFinite(score) && score > 0 && age < 2;
+
+  // A 0/absent score is "no reading" (NOT red), and a 2+ day-old reading is
+  // stale — don't present either as a live readiness.
+  const readiness = !validToday
+    ? (!Number.isFinite(score) || score <= 0 ? 'NO READING — band not worn / not scored' : `STALE — ${age}d old, treat as background not today`)
+    : score >= 67 ? 'GREEN — safe to push hard'
+    : score >= 34 ? 'YELLOW — moderate, quality over volume'
     : 'RED — prioritise recovery / easy day';
+  const recoveryCell = Number.isFinite(score) && score > 0 ? `${score}%` : 'n/a';
 
   // Derived load + cardiac intelligence — the same models the home dashboard
   // shows. Needs a few weeks of cycles to be meaningful; degrades to nothing
@@ -250,7 +276,7 @@ export function buildWhoopSection(data: WhoopAllData | null): string {
     }
   } catch { /* insufficient WHOOP history — skip derived metrics */ }
 
-  return `\n\n━━ WHOOP READINESS (latest: ${r.date}) ━━\n  Recovery: ${r.recovery_score}% → ${readiness}\n  HRV: ${Math.round(r.hrv_rmssd_milli)}ms | RHR: ${r.resting_heart_rate}bpm | Sleep: ${sleepH}h | Strain today: ${strain}${derived}`;
+  return `\n\n━━ WHOOP READINESS (latest: ${r.date}) ━━\n  Recovery: ${recoveryCell} → ${readiness}\n  HRV: ${r.hrv_rmssd_milli > 0 ? `${Math.round(r.hrv_rmssd_milli)}ms` : '—'} | RHR: ${r.resting_heart_rate > 0 ? `${r.resting_heart_rate}bpm` : '—'} | Sleep: ${sleepH}h | Strain: ${strain}${derived}`;
 }
 
 export function buildSkincareSection(stats: { weekPercent: number; streak: number } | null): string {
@@ -369,7 +395,7 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
 10. "How's my week?" / "how am I doing?" / "how's my progress this week?" → lead with the ONE strongest signal from THIS WEEK, not a list. State the session count and, from WEEKLY VOLUME, the standout muscle (most sets) and the one that's lagging/under target — with real numbers. Add ONE line of praise or a nudge with a concrete next step (e.g. "Back's only 3 sets — hit it next"). ≤3 sentences. A weekly-snapshot ring is attached automatically, so don't re-list every muscle.
 11. "Am I improving on <lift>?" / "how's my <lift> going?" → use STRENGTH TRENDS + RECENT SESSIONS/PERSONAL RECORDS for that EXACT lift. State old→new top weight (or est. 1RM — or top REPS for a bodyweight/reps-only lift) with the delta and a one-word verdict: improving / plateaued / dropped. If only ONE session of that lift exists, say so plainly ("only one session logged — I need another to call a trend") — NEVER invent a comparison or a second number. A trend chart is attached automatically.
 12. "Which muscle am I neglecting?" → name the 1–2 muscle groups with the FEWEST weekly sets vs their target — read the numbers straight from WEEKLY VOLUME and the THIS WEEK "Rested / due" line, and cite the real set counts (e.g. "**Back** — 0 sets this week; **Shoulders** — 2"). A muscle with 0 sets this week IS neglected even if trained earlier. Do NOT attribute exercises to muscles beyond what's in the data, and never say a muscle was trained if it's not on the Trained line.
-13. "Should I train (hard) today?" / "am I recovered?" / "how much should I do?" / readiness → answer straight from TODAY'S DIRECTIVE + WHOOP READINESS. In one line: recovery % and the call (push / moderate / deload), then what it means for today (target a rested muscle at the matching volume/intensity, or rest). Weave in ACWR/sleep only if notable. If there's NO WHOOP data, say you don't have today's recovery, and fall back to MUSCLE RECOVERY STATUS (train the most-rested group, rest if everything is ⛔).
+13. "Should I train (hard) today?" / "am I recovered?" / "how much should I do?" / readiness → answer straight from TODAY'S DIRECTIVE + WHOOP READINESS. In one line: recovery % and the call (push / moderate / deload), then what it means for today (target a rested muscle at the matching volume/intensity, or rest). Weave in ACWR/sleep only if notable. If TODAY'S DIRECTIVE says there's no fresh WHOOP recovery (not connected, no score yet, or a stale reading), do NOT cite a recovery % as today's — say you don't have today's recovery and size it from MUSCLE RECOVERY STATUS + how they feel (train the most-rested group, rest if everything is ⛔).
 FUSION (applies to ALL of the above): always cross the training log (THIS WEEK, WEEKLY VOLUME, RECOVERY STATUS) WITH WHOOP readiness — pick WHAT from the muscle data and HOW MUCH from TODAY'S DIRECTIVE. Never recommend pushing hard on a RED/low-recovery day, and never prescribe a rested muscle that's actually ⛔.`
     : '';
 
