@@ -33,7 +33,7 @@ export function weeklyVolume(workouts: WorkoutWithExercises[]): string {
     if (calDaysSince(w.date) > 6) continue;
     for (const ex of (w.exercises || [])) {
       const mg = (ex.muscle_group || 'other').toLowerCase();
-      sets[mg] = (sets[mg] || 0) + ex.sets;
+      sets[mg] = (sets[mg] || 0) + (Number(ex.sets) || 1);
     }
   }
   if (!Object.keys(sets).length) return '  No sets logged this week';
@@ -55,7 +55,7 @@ export function monthlyVolume(workouts: WorkoutWithExercises[]): string {
     if (calDaysSince(w.date) > 27) continue;
     for (const ex of (w.exercises || [])) {
       const mg = (ex.muscle_group || 'other').toLowerCase();
-      sets[mg] = (sets[mg] || 0) + ex.sets;
+      sets[mg] = (sets[mg] || 0) + (Number(ex.sets) || 1);
       sessions[mg] = (sessions[mg] || 0) + 1;
     }
   }
@@ -335,8 +335,8 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
     ? `\n8. "What should I train today?" / "what should I do?" / planning questions → a TEXT plan, never a tool call. Do this exactly:
    a) Pick ONE target muscle group STRICTLY from the "Rested / due" line in THIS WEEK — never a muscle on the "Trained this week" line, and never a ⛔ in RECOVERY STATUS. Prefer the most-rested one that's below its weekly target. Do NOT claim a muscle was trained/rested contrary to the THIS WEEK data.
    b) Open with ONE short line naming it and why — e.g. "**Back** is your most rested and lowest-volume this week (only 3 sets)."
-   c) Give 4–5 exercises, EACH on its own line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: sets×reps @ weight${unit}". Pull the weight from their PERSONAL RECORDS / RECENT SESSIONS for that lift (match it, or +2.5–5${unit} to progress) — never invent a number; for bodyweight moves drop the "@ weight".
-   d) End with ONE line naming a beatable PR to chase, with the exact weight×reps.
+   c) Give 4–5 exercises, EACH on its own line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: sets×reps @ weight${unit}". The weight MUST come from their PERSONAL RECORDS / RECENT SESSIONS for that lift (match it, or +2.5–5${unit} to progress). If there is NO logged weight for a lift (or it's bodyweight), DROP the "@ weight" entirely and just write "· Name: sets×reps" — NEVER guess or invent a load.
+   d) End with ONE line naming a beatable PR to chase, with the exact weight×reps — ONLY if a real PR exists in the data; otherwise skip this line.
    Skip anything ⛔. Do NOT call show_exercise_form here — only when the user picks a specific exercise to log.`
     : '';
 
