@@ -279,6 +279,47 @@ export function buildWhoopSection(data: WhoopAllData | null): string {
   return `\n\n━━ WHOOP READINESS (latest: ${r.date}) ━━\n  Recovery: ${recoveryCell} → ${readiness}\n  HRV: ${r.hrv_rmssd_milli > 0 ? `${Math.round(r.hrv_rmssd_milli)}ms` : '—'} | RHR: ${r.resting_heart_rate > 0 ? `${r.resting_heart_rate}bpm` : '—'} | Sleep: ${sleepH}h | Strain: ${strain}${derived}`;
 }
 
+// WHOOP logs each activity (Weight Training, Running, …) with its OWN measured
+// strain — the day-level strain in buildWhoopSection can't tell lifting from a
+// run from just walking around. This surfaces the per-activity breakdown so the
+// coach can answer "how much strain did my lift / run actually cost" and sanity-
+// check it against how hard the user THINKS they trained. data.workouts already
+// holds the last ~10 WHOOP activities (day tab: /activity/workout?limit=10).
+export function buildWhoopActivitySection(data: WhoopAllData | null): string {
+  const acts = (data?.workouts ?? [])
+    .filter((w) => Number.isFinite(w.strain) && (w.strain ?? 0) > 0 && calDaysSince(w.date) <= 14)
+    .sort((a, b) => (a.start < b.start ? 1 : -1)); // most recent first
+  if (!acts.length) return '';
+
+  // Roll up by sport so "strain from weightlifting vs running" is one glance.
+  const bySport = new Map<string, { n: number; strain: number; min: number; kcal: number; km: number }>();
+  for (const w of acts) {
+    const g = bySport.get(w.sport_name) ?? { n: 0, strain: 0, min: 0, kcal: 0, km: 0 };
+    g.n += 1;
+    g.strain += w.strain ?? 0;
+    g.min += (w.duration_milli ?? 0) / 60_000;
+    g.kcal += (w.kilojoules ?? 0) / 4.184; // WHOOP energy is kilojoules
+    g.km += (w.distance_meter ?? 0) / 1000;
+    bySport.set(w.sport_name, g);
+  }
+
+  const sportLines = [...bySport.entries()]
+    .sort((a, b) => b[1].strain - a[1].strain)
+    .map(([sport, g]) => {
+      const dist = g.km >= 0.1 ? `, ${g.km.toFixed(1)}km` : '';
+      const kcal = g.kcal >= 1 ? `, ${Math.round(g.kcal)}kcal` : '';
+      return `  ${sport}: ${g.n}× | strain ${g.strain.toFixed(1)} total (avg ${(g.strain / g.n).toFixed(1)}) | ${Math.round(g.min)}min${dist}${kcal}`;
+    });
+
+  // Call out the most recent activity so "how much did today's lift cost?" is answerable.
+  const last = acts[0];
+  const lastAge = calDaysSince(last.date);
+  const when = lastAge === 0 ? 'today' : lastAge === 1 ? 'yesterday' : `${lastAge}d ago`;
+  const lastLine = `  Latest: ${last.sport_name} ${when} — strain ${(last.strain ?? 0).toFixed(1)}${last.average_heart_rate ? `, avg HR ${last.average_heart_rate}` : ''}`;
+
+  return `\n\n━━ WHOOP ACTIVITIES (last ${acts.length}, ≤14d — measured strain by sport) ━━\n${sportLines.join('\n')}\n${lastLine}\n  (Per-activity cardiovascular strain straight from WHOOP. Use it to see what a lift vs a run actually cost, to spot when a "light" session was secretly high-strain, and to feed the load picture alongside recovery — don't stack another hard day on top of a high-strain one when recovery is already down.)`;
+}
+
 export function buildSkincareSection(stats: { weekPercent: number; streak: number } | null): string {
   if (!stats) return '';
   return `\n\n━━ SKINCARE ━━\n  This week: ${stats.weekPercent}% complete | Streak: ${stats.streak} day${stats.streak !== 1 ? 's' : ''}`;
@@ -396,7 +437,9 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
 11. "Am I improving on <lift>?" / "how's my <lift> going?" → use STRENGTH TRENDS + RECENT SESSIONS/PERSONAL RECORDS for that EXACT lift. State old→new top weight (or est. 1RM — or top REPS for a bodyweight/reps-only lift) with the delta and a one-word verdict: improving / plateaued / dropped. If only ONE session of that lift exists, say so plainly ("only one session logged — I need another to call a trend") — NEVER invent a comparison or a second number. A trend chart is attached automatically.
 12. "Which muscle am I neglecting?" → name the 1–2 muscle groups with the FEWEST weekly sets vs their target — read the numbers straight from WEEKLY VOLUME and the THIS WEEK "Rested / due" line, and cite the real set counts (e.g. "**Back** — 0 sets this week; **Shoulders** — 2"). A muscle with 0 sets this week IS neglected even if trained earlier. Do NOT attribute exercises to muscles beyond what's in the data, and never say a muscle was trained if it's not on the Trained line.
 13. "Should I train (hard) today?" / "am I recovered?" / "how much should I do?" / readiness → answer straight from TODAY'S DIRECTIVE + WHOOP READINESS. In one line: recovery % and the call (push / moderate / deload), then what it means for today (target a rested muscle at the matching volume/intensity, or rest). Weave in ACWR/sleep only if notable. If TODAY'S DIRECTIVE says there's no fresh WHOOP recovery (not connected, no score yet, or a stale reading), do NOT cite a recovery % as today's — say you don't have today's recovery and size it from MUSCLE RECOVERY STATUS + how they feel (train the most-rested group, rest if everything is ⛔).
-FUSION (applies to ALL of the above): always cross the training log (THIS WEEK, WEEKLY VOLUME, RECOVERY STATUS) WITH WHOOP readiness — pick WHAT from the muscle data and HOW MUCH from TODAY'S DIRECTIVE. Never recommend pushing hard on a RED/low-recovery day, and never prescribe a rested muscle that's actually ⛔.`
+FUSION (applies to ALL of the above): always cross the training log (THIS WEEK, WEEKLY VOLUME, RECOVERY STATUS) WITH WHOOP readiness — pick WHAT from the muscle data and HOW MUCH from TODAY'S DIRECTIVE. Never recommend pushing hard on a RED/low-recovery day, and never prescribe a rested muscle that's actually ⛔.
+
+STRAIN: if asked "how much strain from lifting / running", "which activity taxed me most", or "how hard was that session", answer from WHOOP ACTIVITIES — quote the actual per-sport strain numbers (never invent them), and only cite it if that block exists. When sizing today's plan, treat a recent HIGH-strain activity as extra fatigue on top of recovery: if yesterday's lift or run was high strain AND recovery is down, bias toward MODERATE/DELOAD even if the muscle looks rested. If WHOOP ACTIVITIES is absent (nothing logged / not connected), say you don't have per-activity strain rather than guessing.`
     : '';
 
   return `You are an expert strength & conditioning coach embedded in the Athlix fitness app. Your role: give ${name} evidence-based, data-driven advice using ONLY their logged data below. Never fabricate numbers.
@@ -446,5 +489,5 @@ COACHING RULES:
 7. BODYWEIGHT / REPS-ONLY exercises (no load ever logged — e.g. push-ups, crunches, leg raises, planks): weight/volume are meaningless for them, so measure progress in REPS (top reps per session). Cite reps, never a weight, and progress them by adding reps, not load.
 8. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
-${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildSkincareSection(skincareStats)}`;
+${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildSkincareSection(skincareStats)}`;
 }
