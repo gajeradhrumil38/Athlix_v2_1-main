@@ -191,6 +191,34 @@ export function buildRunSection(runs: SavedRun[]): string {
   return `\n\n━━ RUNNING (last ${recent.length} runs) ━━\n${lines.join('\n')}`;
 }
 
+// Fuse WHOOP recovery + training load into ONE concrete "how hard / how much"
+// call for today. Surfaced near the top so the coach scales every plan to it,
+// instead of leaving the WHOOP numbers unused at the bottom of the context.
+export function readinessDirective(data: WhoopAllData | null): string {
+  if (!data?.recovery?.length) return '';
+  const rec = data.recovery[0].recovery_score;
+  let acwr = 0;
+  try {
+    const lm = computeLoadMetrics(buildDailyLoads(data.cycles || [], 28));
+    if (lm.daysOfData >= 7 && lm.acwr > 0) acwr = lm.acwr;
+  } catch { /* not enough history — recovery alone drives the call */ }
+
+  const overreached = acwr > 1.5;
+  let level: string;
+  let action: string;
+  if (rec < 34 || overreached) {
+    level = 'DELOAD / EASY';
+    action = 'cut total sets ~40%, drop intensity (no top sets or PR attempts), or do active recovery / mobility + a walk. Sleep is the priority.';
+  } else if (rec < 67) {
+    level = 'MODERATE';
+    action = 'train normally but capped — hit your target sets, leave 1–2 reps in reserve, skip max/PR attempts.';
+  } else {
+    level = acwr && acwr < 0.8 ? 'PUSH (room to add load)' : 'PUSH';
+    action = 'green light — full volume, and go for a top set or a PR on your most-rested muscle.';
+  }
+  return `\n\n━━ TODAY'S DIRECTIVE (recovery ${rec}%${acwr ? `, ACWR ${acwr.toFixed(2)}` : ''}) ━━\n  ${level} — ${action}\n  (Scale EVERY "what/how much to train" answer to this: match sets & intensity to the call above.)`;
+}
+
 export function buildWhoopSection(data: WhoopAllData | null): string {
   if (!data?.recovery?.length) return '';
   const r = data.recovery[0];
@@ -334,13 +362,15 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
   const toolCallingRule = variant === 'chat'
     ? `\n9. "What should I train today?" / "what should I do?" / planning questions → a TEXT plan, never a tool call. Do this exactly:
    a) Pick ONE target muscle group STRICTLY from the "Rested / due" line in THIS WEEK — never a muscle on the "Trained this week" line, and never a ⛔ in RECOVERY STATUS. Prefer the most-rested one that's below its weekly target. Do NOT claim a muscle was trained/rested contrary to the THIS WEEK data.
-   b) Open with ONE short line naming it and why — e.g. "**Back** is your most rested and lowest-volume this week (only 3 sets)."
-   c) Give 4–5 exercises, EACH on its own line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: sets×reps @ weight${unit}". The weight MUST come from their PERSONAL RECORDS / RECENT SESSIONS for that lift (match it, or +2.5–5${unit} to progress). If there is NO logged weight for a lift (or it's bodyweight), DROP the "@ weight" entirely and just write "· Name: sets×reps" — NEVER guess or invent a load.
-   d) End with ONE line naming a beatable PR to chase, with the exact weight×reps — ONLY if a real PR exists in the data; otherwise skip this line.
+   b) Open with ONE short line naming it, why, AND scaling to TODAY'S DIRECTIVE if WHOOP data exists — e.g. "Recovery's 78% (push) and **Back** is your most rested (only 3 sets) — good day to load it."
+   c) Give 4–5 exercises, EACH on its own line in EXACTLY this shape so the app renders it as a card: "· Exercise Name: sets×reps @ weight${unit}". The weight MUST come from their PERSONAL RECORDS / RECENT SESSIONS for that lift (match it, or +2.5–5${unit} to progress). If there is NO logged weight for a lift (or it's bodyweight), DROP the "@ weight" entirely and just write "· Name: sets×reps" — NEVER guess or invent a load. SCALE the sets & intensity to TODAY'S DIRECTIVE: PUSH → full sets, heavy top set; MODERATE → your target sets, 1–2 reps in reserve; DELOAD → ~40% fewer sets, lighter, or swap to mobility/active recovery.
+   d) End with ONE line naming a beatable PR to chase, with the exact weight×reps — ONLY if a real PR exists AND the directive is PUSH; skip it on a MODERATE/DELOAD day.
    Skip anything ⛔. Do NOT call show_exercise_form here — only when the user picks a specific exercise to log.
 10. "How's my week?" / "how am I doing?" / "how's my progress this week?" → lead with the ONE strongest signal from THIS WEEK, not a list. State the session count and, from WEEKLY VOLUME, the standout muscle (most sets) and the one that's lagging/under target — with real numbers. Add ONE line of praise or a nudge with a concrete next step (e.g. "Back's only 3 sets — hit it next"). ≤3 sentences. A weekly-snapshot ring is attached automatically, so don't re-list every muscle.
 11. "Am I improving on <lift>?" / "how's my <lift> going?" → use STRENGTH TRENDS + RECENT SESSIONS/PERSONAL RECORDS for that EXACT lift. State old→new top weight (or est. 1RM — or top REPS for a bodyweight/reps-only lift) with the delta and a one-word verdict: improving / plateaued / dropped. If only ONE session of that lift exists, say so plainly ("only one session logged — I need another to call a trend") — NEVER invent a comparison or a second number. A trend chart is attached automatically.
-12. "Which muscle am I neglecting?" → name the 1–2 muscle groups with the FEWEST weekly sets vs their target — read the numbers straight from WEEKLY VOLUME and the THIS WEEK "Rested / due" line, and cite the real set counts (e.g. "**Back** — 0 sets this week; **Shoulders** — 2"). A muscle with 0 sets this week IS neglected even if trained earlier. Do NOT attribute exercises to muscles beyond what's in the data, and never say a muscle was trained if it's not on the Trained line.`
+12. "Which muscle am I neglecting?" → name the 1–2 muscle groups with the FEWEST weekly sets vs their target — read the numbers straight from WEEKLY VOLUME and the THIS WEEK "Rested / due" line, and cite the real set counts (e.g. "**Back** — 0 sets this week; **Shoulders** — 2"). A muscle with 0 sets this week IS neglected even if trained earlier. Do NOT attribute exercises to muscles beyond what's in the data, and never say a muscle was trained if it's not on the Trained line.
+13. "Should I train (hard) today?" / "am I recovered?" / "how much should I do?" / readiness → answer straight from TODAY'S DIRECTIVE + WHOOP READINESS. In one line: recovery % and the call (push / moderate / deload), then what it means for today (target a rested muscle at the matching volume/intensity, or rest). Weave in ACWR/sleep only if notable. If there's NO WHOOP data, say you don't have today's recovery, and fall back to MUSCLE RECOVERY STATUS (train the most-rested group, rest if everything is ⛔).
+FUSION (applies to ALL of the above): always cross the training log (THIS WEEK, WEEKLY VOLUME, RECOVERY STATUS) WITH WHOOP readiness — pick WHAT from the muscle data and HOW MUCH from TODAY'S DIRECTIVE. Never recommend pushing hard on a RED/low-recovery day, and never prescribe a rested muscle that's actually ⛔.`
     : '';
 
   return `You are an expert strength & conditioning coach embedded in the Athlix fitness app. Your role: give ${name} evidence-based, data-driven advice using ONLY their logged data below. Never fabricate numbers.
@@ -356,6 +386,7 @@ TRAINING PATTERN: ${workouts.length ? trainingStats(workouts) : 'no data'}
 ━━ THIS WEEK (last 7 days) — AUTHORITATIVE ━━
 ${thisWeekSection}
 (Treat this as fact: a muscle is "trained this week" ONLY if it's on the Trained line. Never claim otherwise.)
+${readinessDirective(whoopData)}
 
 ${buildImprovementModelSection(improvementModel)}
 
