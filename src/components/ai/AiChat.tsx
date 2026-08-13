@@ -3,11 +3,12 @@ import { aiCoachFetch } from '../../lib/aiCoachFetch';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
+  Line,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -307,6 +308,31 @@ interface CoachChartPoint {
   label: string;
   value: number;
   secondary?: number;
+  trend?: number;   // fitted value from the least-squares trend line
+}
+
+// Least-squares linear fit over index→value. Returns the fitted y at each point
+// plus the per-step slope, so a progression chart shows the underlying
+// direction (signal) over the raw session-to-session noise. Needs ≥3 points.
+function withTrendLine(data: CoachChartPoint[]): { data: CoachChartPoint[]; slope: number } {
+  const n = data.length;
+  if (n < 3) return { data, slope: 0 };
+  const xs = data.map((_, i) => i);
+  const ys = data.map((d) => d.value);
+  const mx = xs.reduce((s, x) => s + x, 0) / n;
+  const my = ys.reduce((s, y) => s + y, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - mx) * (ys[i] - my);
+    den += (xs[i] - mx) ** 2;
+  }
+  const slope = den === 0 ? 0 : num / den;
+  const intercept = my - slope * mx;
+  return {
+    data: data.map((d, i) => ({ ...d, trend: Math.round((slope * i + intercept) * 10) / 10 })),
+    slope,
+  };
 }
 
 interface CoachRing {
@@ -483,15 +509,21 @@ function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string
     points.set(w.date, prev == null ? sessionValue : isPeak ? Math.max(prev, sessionValue) : prev + sessionValue);
   }
 
-  const data = Array.from(points.entries())
+  const raw = Array.from(points.entries())
     .slice(-12)
     .map(([date, value]) => ({ label: format(parseWorkoutDate(date), 'MMM d'), value: Math.round(value * 10) / 10 }));
 
-  if (data.length < 2) return undefined;
+  if (raw.length < 2) return undefined;
+  // Overlay a least-squares trend line + a slope-derived verdict in the subtitle
+  // so the direction is unmistakable over noisy session-to-session data.
+  const { data, slope } = withTrendLine(raw);
+  const verdict = raw.length >= 3
+    ? (slope > 0.05 ? ' · trending up ↑' : slope < -0.05 ? ' · trending down ↓' : ' · holding steady →')
+    : '';
   return {
     kind: 'line',
     title: exerciseName,
-    subtitle: metric.sub,
+    subtitle: metric.sub + verdict,
     valueLabel: metric.label,
     data,
   };
@@ -2655,7 +2687,7 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
       <div style={{ width: '100%', height: 176, padding: '4px 6px 6px 0' }}>
         <ResponsiveContainer width="100%" height="100%">
           {chart.kind === 'line' ? (
-            <AreaChart data={chart.data} margin={{ top: 10, right: 14, bottom: 8, left: -8 }}>
+            <ComposedChart data={chart.data} margin={{ top: 10, right: 14, bottom: 8, left: -8 }}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={accent} stopOpacity={0.22} />
@@ -2669,7 +2701,7 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
                 contentStyle={tooltipStyle}
                 separator=""
                 cursor={{ stroke: 'rgba(255,255,255,0.14)', strokeWidth: 1 }}
-                formatter={(value: unknown) => [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
+                formatter={(value: unknown, name: unknown) => name === 'trend' ? [] : [`${Number(value).toLocaleString()} ${chart.valueLabel}`, '']}
               />
               <Area
                 type="monotone"
@@ -2680,7 +2712,19 @@ const CoachChartCard: React.FC<{ chart: CoachChart }> = ({ chart }) => {
                 dot={false}
                 activeDot={{ r: 4, strokeWidth: 2, stroke: 'rgba(18,20,24,1)', fill: accent }}
               />
-            </AreaChart>
+              {chart.data.some((d) => d.trend != null) && (
+                <Line
+                  type="linear"
+                  dataKey="trend"
+                  stroke="rgba(255,255,255,0.42)"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 4"
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+              )}
+            </ComposedChart>
           ) : (
             <BarChart data={chart.data} margin={{ top: 10, right: 10, bottom: 8, left: -8 }} barCategoryGap="16%">
               <CartesianGrid stroke="rgba(255,255,255,0.045)" vertical={false} />
