@@ -320,6 +320,37 @@ export function buildWhoopActivitySection(data: WhoopAllData | null): string {
   return `\n\n━━ WHOOP ACTIVITIES (last ${acts.length}, ≤14d — measured strain by sport) ━━\n${sportLines.join('\n')}\n${lastLine}\n  (Per-activity cardiovascular strain straight from WHOOP. Use it to see what a lift vs a run actually cost, to spot when a "light" session was secretly high-strain, and to feed the load picture alongside recovery — don't stack another hard day on top of a high-strain one when recovery is already down.)`;
 }
 
+// Personalized strain-cost model output (from user_training_models + the
+// latest snapshot's strain_insight), surfaced so the coach can say "your last
+// session cost X strain vs ~Y expected" using the user's OWN learned model.
+export interface StrainCostContext {
+  coef?: { intercept: number; perSet: number; perVolK: number };
+  n?: number;
+  blend?: number; // 0 = all population prior, 1 = all the user's own data
+  insight?: {
+    title: string; date: string; actual_strain: number; expected_strain: number;
+    delta_pct: number; verdict: string; from_cycle?: boolean; blend_weight: number;
+  } | null;
+}
+
+export function buildStrainCostSection(ctx: StrainCostContext | null): string {
+  if (!ctx) return '';
+  const ins = ctx.insight;
+  const blend = ctx.blend ?? ins?.blend_weight ?? 0;
+  if (!ins && blend < 0.15) return ''; // nothing meaningful yet — still pure baseline
+  const lines: string[] = [];
+  if (ctx.coef && ctx.n != null) {
+    lines.push(`  Your model: ~${ctx.coef.intercept.toFixed(1)} + ${ctx.coef.perSet.toFixed(2)}/set + ${ctx.coef.perVolK.toFixed(2)}/1k-volume strain (n=${ctx.n}, ${Math.round(blend * 100)}% your data).`);
+  }
+  if (ins) {
+    const conf = ins.blend_weight < 0.4 ? ' [still mostly population baseline — low confidence]' : '';
+    const fromCycle = ins.from_cycle ? ' [from day strain — no lifting activity logged that day]' : '';
+    lines.push(`  Last session — ${ins.title} (${ins.date}): ${ins.actual_strain} strain vs ~${ins.expected_strain} expected → ${ins.verdict} (${ins.delta_pct >= 0 ? '+' : ''}${ins.delta_pct}%)${fromCycle}${conf}.`);
+  }
+  if (!lines.length) return '';
+  return `\n\n━━ STRAIN COST (learned) ━━\n${lines.join('\n')}\n  (How much WHOOP strain the user's sessions cost for the volume they log — learned from their own data. A big +delta = they pushed hard / under-recovered / added too much load; −delta = lighter than usual. Quote these numbers only; if flagged low-confidence, say the model is still learning.)`;
+}
+
 export function buildSkincareSection(stats: { weekPercent: number; streak: number } | null): string {
   if (!stats) return '';
   return `\n\n━━ SKINCARE ━━\n  This week: ${stats.weekPercent}% complete | Streak: ${stats.streak} day${stats.streak !== 1 ? 's' : ''}`;
@@ -337,6 +368,7 @@ export function buildSystemPrompt(
   // 'insight' drops the structured RESPONSE FORMAT block, which otherwise conflicts with the pill's own plain-sentence prompt.
   variant: 'chat' | 'insight' = 'chat',
   memory: CoachMemory | null = null,
+  strainCost: StrainCostContext | null = null,
 ): string {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
   const name = profile?.full_name || 'Athlete';
@@ -439,7 +471,7 @@ FORMAT: follow the plain-language, sentence-count instructions given in the user
 13. "Should I train (hard) today?" / "am I recovered?" / "how much should I do?" / readiness → answer straight from TODAY'S DIRECTIVE + WHOOP READINESS. In one line: recovery % and the call (push / moderate / deload), then what it means for today (target a rested muscle at the matching volume/intensity, or rest). Weave in ACWR/sleep only if notable. If TODAY'S DIRECTIVE says there's no fresh WHOOP recovery (not connected, no score yet, or a stale reading), do NOT cite a recovery % as today's — say you don't have today's recovery and size it from MUSCLE RECOVERY STATUS + how they feel (train the most-rested group, rest if everything is ⛔).
 FUSION (applies to ALL of the above): always cross the training log (THIS WEEK, WEEKLY VOLUME, RECOVERY STATUS) WITH WHOOP readiness — pick WHAT from the muscle data and HOW MUCH from TODAY'S DIRECTIVE. Never recommend pushing hard on a RED/low-recovery day, and never prescribe a rested muscle that's actually ⛔.
 
-STRAIN: if asked "how much strain from lifting / running", "which activity taxed me most", or "how hard was that session", answer from WHOOP ACTIVITIES — quote the actual per-sport strain numbers (never invent them), and only cite it if that block exists. When sizing today's plan, treat a recent HIGH-strain activity as extra fatigue on top of recovery: if yesterday's lift or run was high strain AND recovery is down, bias toward MODERATE/DELOAD even if the muscle looks rested. If WHOOP ACTIVITIES is absent (nothing logged / not connected), say you don't have per-activity strain rather than guessing.`
+STRAIN: if asked "how much strain from lifting / running", "which activity taxed me most", or "how hard was that session", answer from WHOOP ACTIVITIES — quote the actual per-sport strain numbers (never invent them), and only cite it if that block exists. When sizing today's plan, treat a recent HIGH-strain activity as extra fatigue on top of recovery: if yesterday's lift or run was high strain AND recovery is down, bias toward MODERATE/DELOAD even if the muscle looks rested. If WHOOP ACTIVITIES is absent (nothing logged / not connected), say you don't have per-activity strain rather than guessing. If a STRAIN COST (learned) block is present, use it to answer "did that session cost too much / was that too much load" — cite the actual vs expected strain and the delta, and if it's flagged low-confidence say the model is still learning your baseline.`
     : '';
 
   return `You are an expert strength & conditioning coach embedded in the Athlix fitness app. Your role: give ${name} evidence-based, data-driven advice using ONLY their logged data below. Never fabricate numbers.
@@ -489,5 +521,5 @@ COACHING RULES:
 7. BODYWEIGHT / REPS-ONLY exercises (no load ever logged — e.g. push-ups, crunches, leg raises, planks): weight/volume are meaningless for them, so measure progress in REPS (top reps per session). Cite reps, never a weight, and progress them by adding reps, not load.
 8. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
-${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildSkincareSection(skincareStats)}`;
+${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildSkincareSection(skincareStats)}`;
 }

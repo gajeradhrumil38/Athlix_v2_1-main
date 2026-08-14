@@ -143,6 +143,12 @@ export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ acti
               <span className="font-bold text-[var(--text-primary)]">{reason.label}: </span>{reason.detail}
             </p>
           ))}
+          {recommendation.strain_insight && recommendation.strain_insight.blend_weight >= 0.4 && (
+            <p className="text-[9.5px] text-[var(--text-secondary)] leading-[1.35]">
+              <span className="font-bold text-[var(--text-primary)]">Last session: </span>
+              {recommendation.strain_insight.actual_strain} strain vs ~{recommendation.strain_insight.expected_strain} expected · {recommendation.strain_insight.verdict}
+            </p>
+          )}
         </div>
 
         <div className="mt-2 pt-2 border-t border-[var(--border)] space-y-1">

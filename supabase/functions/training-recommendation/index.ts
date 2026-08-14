@@ -268,6 +268,117 @@ async function syncWhoopActivities(sb: any, userId: string, rawWorkouts: any): P
   return rows.length;
 }
 
+// ── Strain-cost model (personalized-v2) ─────────────────────────────
+// Learns how much WHOOP strain a session costs THIS user given the volume
+// logged: strain ≈ intercept + perSet·sets + perVolK·(volume/1000). A tiny
+// ridge regression blended with a population prior so it degrades gracefully
+// on thin data and stays interpretable.
+type StrainCostCoef = { intercept: number; perSet: number; perVolK: number };
+const STRAIN_COST_PRIOR: StrainCostCoef = { intercept: 4.0, perSet: 0.30, perVolK: 0.5 };
+const PRIOR_WEIGHT_K = 6;
+const RIDGE_LAMBDA = 1.0;
+
+type StrainPair = { sets: number; volK: number; strain: number; fromCycle: boolean };
+
+// Solve A x = b for a small square A via Gaussian elimination with partial pivot.
+function solveLinear(A: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    if (Math.abs(M[piv][col]) < 1e-9) return null;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col] / M[col][col];
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+
+function fitStrainCost(pairs: StrainPair[]): { coef: StrainCostCoef; n: number; r2: number; mae: number; blendWeight: number; fromCyclePairs: number } {
+  const n = pairs.length;
+  const fromCyclePairs = pairs.filter((p) => p.fromCycle).length;
+  let fitted: StrainCostCoef = { ...STRAIN_COST_PRIOR };
+  let r2 = 0; let mae = 0;
+  if (n >= 3) {
+    const X = pairs.map((p) => [1, p.sets, p.volK]);
+    const y = pairs.map((p) => p.strain);
+    const XtX = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const Xty = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      for (let a = 0; a < 3; a++) {
+        Xty[a] += X[i][a] * y[i];
+        for (let bb = 0; bb < 3; bb++) XtX[a][bb] += X[i][a] * X[i][bb];
+      }
+    }
+    XtX[1][1] += RIDGE_LAMBDA; XtX[2][2] += RIDGE_LAMBDA; // regularize slopes only
+    const sol = solveLinear(XtX, Xty);
+    if (sol) {
+      fitted = { intercept: sol[0], perSet: sol[1], perVolK: sol[2] };
+      const preds = X.map((r) => r[0] * fitted.intercept + r[1] * fitted.perSet + r[2] * fitted.perVolK);
+      const my = y.reduce((s, v) => s + v, 0) / n;
+      let ssRes = 0, ssTot = 0, absErr = 0;
+      for (let i = 0; i < n; i++) { ssRes += (y[i] - preds[i]) ** 2; ssTot += (y[i] - my) ** 2; absErr += Math.abs(y[i] - preds[i]); }
+      r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+      mae = absErr / n;
+    }
+  }
+  const w = n / (n + PRIOR_WEIGHT_K); // 0 → all prior, 1 → all fitted
+  const coef: StrainCostCoef = {
+    intercept: w * fitted.intercept + (1 - w) * STRAIN_COST_PRIOR.intercept,
+    perSet: w * fitted.perSet + (1 - w) * STRAIN_COST_PRIOR.perSet,
+    perVolK: w * fitted.perVolK + (1 - w) * STRAIN_COST_PRIOR.perVolK,
+  };
+  return { coef, n, r2, mae, blendWeight: w, fromCyclePairs };
+}
+
+function predictStrain(coef: StrainCostCoef, sets: number, volK: number): number {
+  return Math.max(0, coef.intercept + coef.perSet * sets + coef.perVolK * volK);
+}
+
+function gymDayFeatures(w: GymWorkout): { date: string; sets: number; volK: number } {
+  let sets = 0, vol = 0;
+  for (const ex of w.exercises ?? []) {
+    const s = Math.max(0, Number(ex.sets) || 0);
+    const reps = Math.max(0, Number(ex.reps) || 0);
+    const weight = Math.max(0, Number(ex.weight) || 0);
+    sets += s;
+    vol += (ex.unit === 'kg' || ex.unit === 'lbs') ? s * reps * weight : 0;
+  }
+  return { date: w.date, sets, volK: vol / 1000 };
+}
+
+const LIFT_SPORTS = new Set(['Weight Training', 'CrossFit', 'HIIT', 'Functional Fitness']);
+
+async function buildStrainPairs(sb: any, userId: string, gym: GymWorkout[], cycles: ParsedCycle[]): Promise<StrainPair[]> {
+  const since = addDays(todayKey(), -89);
+  const { data: acts } = await sb
+    .from('whoop_activities')
+    .select('date, sport_name, strain')
+    .eq('user_id', userId)
+    .gte('date', since);
+  const liftByDate = new Map<string, number>();
+  for (const a of (acts ?? []) as any[]) {
+    if (a.strain == null || !LIFT_SPORTS.has(a.sport_name)) continue;
+    liftByDate.set(a.date, Math.max(liftByDate.get(a.date) ?? -1, Number(a.strain)));
+  }
+  const cycleByDate = new Map(cycles.filter((c) => c.strain_score != null).map((c) => [c.date, c.strain_score as number]));
+
+  const pairs: StrainPair[] = [];
+  for (const w of gym) {
+    const f = gymDayFeatures(w);
+    if (f.sets <= 0) continue;
+    const lift = liftByDate.get(f.date);
+    const strain = lift ?? cycleByDate.get(f.date);
+    if (strain == null) continue;
+    pairs.push({ sets: f.sets, volK: f.volK, strain, fromCycle: lift == null });
+  }
+  return pairs;
+}
+
 async function resolveWhoopToken(sb: any, userId: string): Promise<string | null> {
   const { data: row } = await sb
     .from('whoop_tokens')
@@ -665,6 +776,36 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
   const muscleState = buildMuscleState(gym, date);
   const load = computeLoad(whoop.cycles);
   const readiness = computeReadiness(whoop.recovery, whoop.sleep, load);
+
+  // Personalized strain-cost model: fit on (logged volume → WHOOP strain) pairs,
+  // store learned coefficients, and derive a "last session cost vs expected"
+  // insight. Non-fatal.
+  const strainPairs = await buildStrainPairs(sb, userId, gym, whoop.cycles).catch(() => [] as StrainPair[]);
+  const strainModel = fitStrainCost(strainPairs);
+  await sb.from('user_training_models').upsert({
+    user_id: userId, model_name: 'strain_cost', model_version: 'personalized-v2',
+    coefficients: strainModel.coef, n_samples: strainModel.n,
+    quality: { r2: strainModel.r2, mae: strainModel.mae, blendWeight: strainModel.blendWeight, fromCyclePairs: strainModel.fromCyclePairs },
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,model_name' }).then(({ error }: any) => { if (error) console.error('strain model upsert failed:', error.message); });
+
+  let strainInsight: Record<string, unknown> | null = null;
+  for (const w of [...gym].sort((a, b) => b.date.localeCompare(a.date))) {
+    const f = gymDayFeatures(w);
+    if (f.sets <= 0) continue;
+    const pair = strainPairs.find((p) => Math.abs(p.sets - f.sets) < 0.5 && Math.abs(p.volK - f.volK) < 0.01);
+    if (!pair) continue;
+    const expected = predictStrain(strainModel.coef, f.sets, f.volK);
+    const ratio = expected > 0 ? pair.strain / expected : 1;
+    strainInsight = {
+      date: w.date, title: w.title, actual_strain: Number(pair.strain.toFixed(1)),
+      expected_strain: Number(expected.toFixed(1)), delta_pct: Math.round((ratio - 1) * 100),
+      verdict: ratio > 1.15 ? 'higher than usual' : ratio < 0.85 ? 'lighter than usual' : 'about as expected',
+      from_cycle: pair.fromCycle, blend_weight: Number(strainModel.blendWeight.toFixed(2)),
+    };
+    break;
+  }
+
   const ranked = scoreCandidates(createCandidates(muscleState), muscleState, readiness, load);
   const best = ranked[0] ?? createCandidates(muscleState)[0];
   const intensity = pickIntensity(best.type, readiness, load);
@@ -694,6 +835,8 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
       load_observed_days: load.observedDays,
       gym_sessions: gym.length,
     },
+    strain_cost: { coef: strainModel.coef, n: strainModel.n, r2: strainModel.r2, blend: strainModel.blendWeight },
+    strain_insight: strainInsight,
     model_version: MODEL_VERSION,
   };
 
@@ -734,7 +877,7 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
     .single();
   if (recError) throw recError;
 
-  return { recommendation: recRow, snapshot: { id: snapshotRow.id, ...snapshot } };
+  return { recommendation: { ...recRow, strain_insight: strainInsight }, snapshot: { id: snapshotRow.id, ...snapshot } };
 }
 
 Deno.serve(async (req: Request) => {
@@ -776,7 +919,10 @@ Deno.serve(async (req: Request) => {
         .eq('user_id', user.id)
         .eq('date', date)
         .maybeSingle();
-      if (existing) return json({ recommendation: existing, generated: false });
+      if (existing) {
+        const insight = (existing as any).athlete_daily_snapshots?.strain_insight ?? null;
+        return json({ recommendation: { ...existing, strain_insight: insight }, generated: false });
+      }
     }
 
     const result = await generateRecommendation(sb, user.id, Boolean(body.force_whoop));

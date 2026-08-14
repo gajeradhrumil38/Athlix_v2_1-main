@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import type { StrainCostContext } from '../../../lib/aiCoach';
 
 export type TrainingIntensity = 'heavy' | 'moderate' | 'light' | 'recovery' | 'rest';
 export type ReadinessTier = 'green' | 'yellow' | 'red' | 'unknown';
@@ -38,6 +39,10 @@ export interface TrainingRecommendation {
   confidence: number;
   generated_at: string;
   model_version: string;
+  strain_insight?: {
+    title: string; date: string; actual_strain: number; expected_strain: number;
+    delta_pct: number; verdict: string; from_cycle?: boolean; blend_weight: number;
+  } | null;
 }
 
 interface RecommendationResponse {
@@ -73,4 +78,23 @@ export async function sendRecommendationFeedback(
   });
 
   if (error) throw error;
+}
+
+// Reads the persisted strain-cost model + latest session insight so the AI
+// coach can talk about "your last session cost X vs ~Y expected". RLS scopes
+// both tables to the signed-in user automatically.
+export async function getStrainCostContext(): Promise<StrainCostContext | null> {
+  const [modelRes, snapRes] = await Promise.all([
+    supabase.from('user_training_models').select('coefficients, n_samples, quality').eq('model_name', 'strain_cost').maybeSingle(),
+    supabase.from('athlete_daily_snapshots').select('strain_insight').order('date', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const model = modelRes.data as { coefficients?: StrainCostContext['coef']; n_samples?: number; quality?: { blendWeight?: number } } | null;
+  const insight = (snapRes.data as { strain_insight?: StrainCostContext['insight'] } | null)?.strain_insight ?? null;
+  if (!model && !insight) return null;
+  return {
+    coef: model?.coefficients,
+    n: model?.n_samples,
+    blend: model?.quality?.blendWeight,
+    insight,
+  };
 }
