@@ -218,7 +218,7 @@ function parseWhoopWorkouts(raw: any): ParsedWorkout[] {
 }
 
 type SyncActivity = {
-  whoop_id: number; date: string; sport_id: number | null; sport_name: string;
+  whoop_id: string; date: string; sport_id: number | null; sport_name: string;
   started_at: string; ended_at: string; strain: number | null;
   average_heart_rate: number | null; max_heart_rate: number | null;
   kilojoules: number | null; distance_meter: number | null; zones: Record<string, number>;
@@ -232,16 +232,18 @@ const SPORT_NAMES: Record<number, string> = {
 };
 
 function parseSyncActivities(raw: any): SyncActivity[] {
+  // WHOOP v2 workout `id` is a UUID string (not numeric) and the record carries
+  // its own `sport_name` (lowercased, e.g. "walking"); prefer it over the map.
   return ((raw?.records ?? []) as any[])
     .filter((r) => r.id != null && (r.score_state === 'SCORED' || r.score_state === 'PENDING_SCORE'))
     .map((r) => {
       const s = r.score ?? {};
       const z = s.zone_duration ?? {};
       return {
-        whoop_id: Number(r.id),
+        whoop_id: String(r.id),
         date: parseWhoopDate(r.start),
         sport_id: r.sport_id != null ? Number(r.sport_id) : null,
-        sport_name: SPORT_NAMES[Number(r.sport_id)] ?? 'Workout',
+        sport_name: r.sport_name || SPORT_NAMES[Number(r.sport_id)] || 'Workout',
         started_at: String(r.start),
         ended_at: String(r.end),
         strain: Number.isFinite(Number(s.strain)) ? Number(s.strain) : null,
@@ -351,7 +353,13 @@ function gymDayFeatures(w: GymWorkout): { date: string; sets: number; volK: numb
   return { date: w.date, sets, volK: vol / 1000 };
 }
 
-const LIFT_SPORTS = new Set(['Weight Training', 'CrossFit', 'HIIT', 'Functional Fitness']);
+// Tolerant of WHOOP's lowercase / underscored naming (weightlifting,
+// functional_fitness, crossfit, hiit, powerlifting, …).
+function isLiftSport(name: string): boolean {
+  const n = String(name).toLowerCase();
+  return n.includes('weight') || n.includes('strength') || n.includes('crossfit')
+    || n.includes('functional') || n.includes('hiit') || n.includes('powerlift');
+}
 
 async function buildStrainPairs(sb: any, userId: string, gym: GymWorkout[], cycles: ParsedCycle[]): Promise<StrainPair[]> {
   const since = addDays(todayKey(), -89);
@@ -362,7 +370,7 @@ async function buildStrainPairs(sb: any, userId: string, gym: GymWorkout[], cycl
     .gte('date', since);
   const liftByDate = new Map<string, number>();
   for (const a of (acts ?? []) as any[]) {
-    if (a.strain == null || !LIFT_SPORTS.has(a.sport_name)) continue;
+    if (a.strain == null || !isLiftSport(a.sport_name)) continue;
     liftByDate.set(a.date, Math.max(liftByDate.get(a.date) ?? -1, Number(a.strain)));
   }
   const cycleByDate = new Map(cycles.filter((c) => c.strain_score != null).map((c) => [c.date, c.strain_score as number]));
