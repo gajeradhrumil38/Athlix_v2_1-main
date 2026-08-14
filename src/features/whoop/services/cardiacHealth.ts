@@ -27,8 +27,12 @@ export interface CardiacHealth {
   vo2max: number | null;      // Uth–Sørensen estimate (ml/kg/min)
   vo2maxLabel: string;
   vo2maxColor: string;
+  vo2Confidence: 'effort-based' | 'rough' | 'none';
   maxHrFromEffort: boolean;   // true if maxHr came from a real (≥ moderate) effort
   daysOfData: number;
+  trendConfidence: 'low' | 'medium' | 'high';
+  recentDays: number;
+  baselineDays: number;
   rhrSeries: TrendPoint[];
   hrvSeries: TrendPoint[];
 }
@@ -43,14 +47,14 @@ const BLUE = '#4FC3F7';
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 // Recent (last 7 readings) vs the baseline before that (readings 8–28).
-function recentVsBaseline(series: TrendPoint[]): { recent: number | null; delta: number } {
-  if (series.length === 0) return { recent: null, delta: 0 };
+function recentVsBaseline(series: TrendPoint[]): { recent: number | null; delta: number; recentDays: number; baselineDays: number } {
+  if (series.length === 0) return { recent: null, delta: 0, recentDays: 0, baselineDays: 0 };
   const vals = series.map((p) => p.value);
   const recentArr = vals.slice(-7);
   const baselineArr = vals.slice(-28, -7);
   const recent = mean(recentArr);
   const baseline = baselineArr.length ? mean(baselineArr) : recent;
-  return { recent, delta: recent - baseline };
+  return { recent, delta: recent - baseline, recentDays: recentArr.length, baselineDays: baselineArr.length };
 }
 
 // General adult VO2max bands (ml/kg/min). Norms shift with age/sex, which the
@@ -79,8 +83,10 @@ export function computeCardiacHealth(
     .map((r) => ({ date: r.date, value: r.hrv_rmssd_milli }))
     .sort(byDate);
 
-  const { recent: restingHr, delta: restingHrDelta } = recentVsBaseline(rhrSeries);
-  const { recent: hrv, delta: hrvDelta } = recentVsBaseline(hrvSeries);
+  const rhrTrend = recentVsBaseline(rhrSeries);
+  const hrvTrend = recentVsBaseline(hrvSeries);
+  const { recent: restingHr, delta: restingHrDelta } = rhrTrend;
+  const { recent: hrv, delta: hrvDelta } = hrvTrend;
 
   // True max HR: prefer a hard-effort workout (a genuine ceiling); fall back to
   // the daily cycle max. Estimating VO2max off a max seen only during easy days
@@ -98,12 +104,20 @@ export function computeCardiacHealth(
   let vo2max: number | null = null;
   let vo2maxLabel = '—';
   let vo2maxColor = 'rgba(255,255,255,0.4)';
+  let vo2Confidence: CardiacHealth['vo2Confidence'] = 'none';
   if (maxHr != null && restingHr != null && restingHr > 0) {
     vo2max = Math.round(VO2_UTH * (maxHr / restingHr) * 10) / 10;
     const band = vo2Band(vo2max);
     vo2maxLabel = band.label;
     vo2maxColor = band.color;
+    vo2Confidence = maxHrFromEffort ? 'effort-based' : 'rough';
   }
+
+  const recentDays = Math.max(rhrTrend.recentDays, hrvTrend.recentDays);
+  const baselineDays = Math.max(rhrTrend.baselineDays, hrvTrend.baselineDays);
+  const trendConfidence = baselineDays >= 14 && recentDays >= 5 ? 'high'
+    : baselineDays >= 7 && recentDays >= 3 ? 'medium'
+    : 'low';
 
   return {
     restingHr: restingHr != null ? Math.round(restingHr) : null,
@@ -115,8 +129,12 @@ export function computeCardiacHealth(
     vo2max,
     vo2maxLabel,
     vo2maxColor,
+    vo2Confidence,
     maxHrFromEffort,
-    daysOfData: rhrSeries.length,
+    daysOfData: Math.max(rhrSeries.length, hrvSeries.length),
+    trendConfidence,
+    recentDays,
+    baselineDays,
     rhrSeries,
     hrvSeries,
   };
