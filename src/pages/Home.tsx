@@ -16,6 +16,7 @@ import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { AppIcon } from '../config/icons';
+import { TrainingRecommendationCard } from '../components/home/TrainingRecommendationCard';
 
 // --- Utility Functions ---
 const calculateStreak = (workouts: { date: string }[]) => {
@@ -620,7 +621,11 @@ export const Home: React.FC = () => {
       </div>
     ),
     train_next: (
-      <div key="train_next" className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-3 h-full flex flex-col">
+      <div key="train_next" className={isCurrentRange ? 'h-full flex flex-col' : 'bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-3 h-full flex flex-col'}>
+        {isCurrentRange ? (
+          <TrainingRecommendationCard active={Boolean(user)} />
+        ) : (
+          <>
 
         {/* ── DAY VIEW ── */}
         {viewMode === 'Day' && (() => {
@@ -784,6 +789,8 @@ export const Home: React.FC = () => {
           );
         })()}
 
+          </>
+        )}
       </div>
     ),
     pr_banner: alert ? (
