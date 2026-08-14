@@ -396,7 +396,7 @@ const fmtDuration = (ms: number) => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 };
 
-const WorkoutCard: React.FC<{ w: WhoopWorkout }> = ({ w }) => {
+const WorkoutCard: React.FC<{ w: WhoopWorkout; isHardest?: boolean }> = ({ w, isHardest }) => {
   const [expanded, setExpanded] = useState(false);
   const strainColor = w.strain == null ? 'rgba(255,255,255,0.5)'
     : w.strain >= 18 ? '#ef4444'
@@ -407,7 +407,7 @@ const WorkoutCard: React.FC<{ w: WhoopWorkout }> = ({ w }) => {
   return (
     <div
       className="rounded-xl overflow-hidden"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+      style={{ background: 'rgba(255,255,255,0.04)', border: isHardest ? '1px solid rgba(249,115,22,0.5)' : '1px solid rgba(255,255,255,0.07)' }}
     >
       <button
         type="button"
@@ -710,11 +710,29 @@ export const WhoopDashboard: React.FC = () => {
               style={{ color: 'rgba(255,255,255,0.25)', transition: 'transform 0.2s', transform: showWorkouts ? 'rotate(180deg)' : 'none' }}
             />
           </button>
-          {showWorkouts && (
-            <div className="flex flex-col gap-2">
-              {workouts.slice(0, 8).map((w) => <WorkoutCard key={w.id} w={w} />)}
-            </div>
-          )}
+          {(() => {
+            const hardest = workouts.reduce<WhoopWorkout | null>(
+              (best, w) => (w.strain != null && (!best || w.strain > (best.strain ?? -1)) ? w : best),
+              null,
+            );
+            return (
+              <>
+                {hardest?.strain != null && (
+                  <div className="flex items-center justify-between mb-2" style={{ fontSize: 10, fontWeight: 700 }}>
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>Hardest recently</span>
+                    <span style={{ color: 'white' }}>
+                      {hardest.sport_name} · <span style={{ color: '#f97316' }}>{hardest.strain.toFixed(1)}</span>
+                    </span>
+                  </div>
+                )}
+                {showWorkouts && (
+                  <div className="flex flex-col gap-2">
+                    {workouts.slice(0, 8).map((w) => <WorkoutCard key={w.id} w={w} isHardest={w.id === hardest?.id} />)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

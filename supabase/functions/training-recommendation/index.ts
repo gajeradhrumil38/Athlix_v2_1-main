@@ -217,6 +217,57 @@ function parseWhoopWorkouts(raw: any): ParsedWorkout[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+type SyncActivity = {
+  whoop_id: number; date: string; sport_id: number | null; sport_name: string;
+  started_at: string; ended_at: string; strain: number | null;
+  average_heart_rate: number | null; max_heart_rate: number | null;
+  kilojoules: number | null; distance_meter: number | null; zones: Record<string, number>;
+};
+
+const SPORT_NAMES: Record<number, string> = {
+  0: 'Activity', 1: 'Running', 16: 'Cycling', 35: 'Swimming', 44: 'Walking',
+  45: 'Weight Training', 63: 'Hiking', 71: 'CrossFit', 126: 'Yoga', 127: 'Pilates',
+  169: 'HIIT', 189: 'Rowing', 190: 'Elliptical', 231: 'Jump Rope', 232: 'Rock Climbing',
+  257: 'Pickleball', 264: 'Dance', 268: 'Jiu Jitsu', 269: 'Triathlon',
+};
+
+function parseSyncActivities(raw: any): SyncActivity[] {
+  return ((raw?.records ?? []) as any[])
+    .filter((r) => r.id != null && (r.score_state === 'SCORED' || r.score_state === 'PENDING_SCORE'))
+    .map((r) => {
+      const s = r.score ?? {};
+      const z = s.zone_duration ?? {};
+      return {
+        whoop_id: Number(r.id),
+        date: parseWhoopDate(r.start),
+        sport_id: r.sport_id != null ? Number(r.sport_id) : null,
+        sport_name: SPORT_NAMES[Number(r.sport_id)] ?? 'Workout',
+        started_at: String(r.start),
+        ended_at: String(r.end),
+        strain: Number.isFinite(Number(s.strain)) ? Number(s.strain) : null,
+        average_heart_rate: s.average_heart_rate ?? null,
+        max_heart_rate: s.max_heart_rate ?? null,
+        kilojoules: s.kilojoule ?? null,
+        distance_meter: s.distance_meter ?? null,
+        zones: {
+          zone_zero: z.zone_zero_milli ?? 0, zone_one: z.zone_one_milli ?? 0,
+          zone_two: z.zone_two_milli ?? 0, zone_three: z.zone_three_milli ?? 0,
+          zone_four: z.zone_four_milli ?? 0, zone_five: z.zone_five_milli ?? 0,
+        },
+      };
+    })
+    .filter((a) => a.date && a.whoop_id);
+}
+
+async function syncWhoopActivities(sb: any, userId: string, rawWorkouts: any): Promise<number> {
+  const activities = parseSyncActivities(rawWorkouts);
+  if (!activities.length) return 0;
+  const rows = activities.map((a) => ({ user_id: userId, ...a, synced_at: new Date().toISOString() }));
+  const { error } = await sb.from('whoop_activities').upsert(rows, { onConflict: 'user_id,whoop_id' });
+  if (error) { console.error('whoop_activities upsert failed:', error.message); return 0; }
+  return rows.length;
+}
+
 async function resolveWhoopToken(sb: any, userId: string): Promise<string | null> {
   const { data: row } = await sb
     .from('whoop_tokens')
@@ -326,6 +377,7 @@ async function getWhoopData(sb: any, userId: string, force: boolean) {
     sleep: parseSleep(fresh.get(`sleep:${suffix}`)),
     cycles: parseCycles(fresh.get(`cycles:${suffix}`)),
     workouts: parseWhoopWorkouts(fresh.get(`workouts:${suffix}`)),
+    rawWorkouts: fresh.get(`workouts:${suffix}`) ?? { records: [] },
     fromCache: stale.length === 0,
   };
 }
@@ -511,7 +563,7 @@ function createCandidates(state: MuscleState): Candidate[] {
     { type: 'cardio', title: 'Zone 2 Cardio', muscles: CARDIO, base: 0, score: 0, reasons: [] },
     { type: 'mobility', title: 'Mobility Reset', muscles: MOBILITY, base: 0, score: 0, reasons: [] },
     { type: 'rest', title: 'Recovery Day', muscles: [], base: 0, score: 0, reasons: [] },
-  ].map((c) => ({ ...c, base: groupDueScore(c.muscles.length ? c.muscles : MOBILITY, state) }));
+  ].map((c) => ({ ...c, base: groupDueScore(c.muscles.length ? c.muscles : MOBILITY, state) })) as Candidate[];
 }
 
 function scoreCandidates(candidates: Candidate[], state: MuscleState, readiness: ReturnType<typeof computeReadiness>, load: ReturnType<typeof computeLoad>) {
@@ -602,9 +654,13 @@ function confidenceScore(whoop: Awaited<ReturnType<typeof getWhoopData>>, gym: G
 async function generateRecommendation(sb: any, userId: string, forceWhoop: boolean) {
   const date = todayKey();
   const [whoop, gym] = await Promise.all([
-    getWhoopData(sb, userId, forceWhoop).catch(() => ({ recovery: [], sleep: [], cycles: [], workouts: [], fromCache: false })),
+    getWhoopData(sb, userId, forceWhoop).catch(() => ({ recovery: [], sleep: [], cycles: [], workouts: [], rawWorkouts: { records: [] }, fromCache: false })),
     getGymData(sb, userId),
   ]);
+
+  // Persist WHOOP activities (non-fatal) so the app has durable per-activity
+  // history and the strain-cost model has training data.
+  const activitiesSynced = await syncWhoopActivities(sb, userId, (whoop as any).rawWorkouts ?? { records: [] }).catch(() => 0);
 
   const muscleState = buildMuscleState(gym, date);
   const load = computeLoad(whoop.cycles);
@@ -629,6 +685,7 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
       recovery_days: whoop.recovery.length,
       sleep_days: whoop.sleep.length,
       cycle_days: whoop.cycles.length,
+      activities_synced: activitiesSynced,
       from_cache: whoop.fromCache,
     },
     data_quality: {
