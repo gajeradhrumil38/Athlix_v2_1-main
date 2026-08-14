@@ -294,22 +294,29 @@ async function getWhoopData(sb: any, userId: string, force: boolean) {
   if (stale.length) {
     const token = await resolveWhoopToken(sb, userId);
     if (token) {
+      // WHOOP v2 caps `limit` at 25 — a higher value 400s. Fetch each endpoint
+      // independently so one failure degrades that stream to empty instead of
+      // nuking ALL WHOOP data (which silently zeroed readiness/load before).
       const paths: Record<string, string> = {
-        [`recovery:${suffix}`]: `/v2/recovery?start=${start}&end=${end}&limit=50`,
-        [`sleep:${suffix}`]: `/v2/activity/sleep?start=${start}&end=${end}&limit=50`,
-        [`cycles:${suffix}`]: `/v2/cycle?start=${start}&end=${end}&limit=50`,
-        [`workouts:${suffix}`]: `/v2/activity/workout?start=${start}&end=${end}&limit=50`,
+        [`recovery:${suffix}`]: `/v2/recovery?start=${start}&end=${end}&limit=25`,
+        [`sleep:${suffix}`]: `/v2/activity/sleep?start=${start}&end=${end}&limit=25`,
+        [`cycles:${suffix}`]: `/v2/cycle?start=${start}&end=${end}&limit=25`,
+        [`workouts:${suffix}`]: `/v2/activity/workout?start=${start}&end=${end}&limit=25`,
       };
 
       await Promise.all(stale.map(async (key) => {
-        const data = await whoopGet(token, paths[key]);
-        fresh.set(key, data);
-        await sb.from('whoop_cache').upsert({
-          user_id: userId,
-          cache_key: key,
-          data,
-          fetched_at: new Date().toISOString(),
-        });
+        try {
+          const data = await whoopGet(token, paths[key]);
+          fresh.set(key, data);
+          await sb.from('whoop_cache').upsert({
+            user_id: userId,
+            cache_key: key,
+            data,
+            fetched_at: new Date().toISOString(),
+          });
+        } catch (err) {
+          console.error(`WHOOP fetch failed for ${key}:`, err instanceof Error ? err.message : err);
+        }
       }));
     }
   }
