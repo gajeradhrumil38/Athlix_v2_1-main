@@ -488,7 +488,7 @@ export const WhoopDashboard: React.FC = () => {
   const [sleep, setSleep] = useState<WhoopSleep[]>([]);
   const [steps, setSteps] = useState<WhoopCycle[]>([]);
   const [workouts, setWorkouts] = useState<WhoopWorkout[]>([]);
-  const [showWorkouts, setShowWorkouts] = useState(false);
+  const [showWorkouts, setShowWorkouts] = useState(true);
   const [loading, setLoading] = useState(false);
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -703,7 +703,7 @@ export const WhoopDashboard: React.FC = () => {
             className="w-full flex items-center justify-between mb-2 cursor-pointer"
           >
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>
-              Workouts · {workouts.length}
+              Activities · {workouts.length}
             </span>
             <ChevronDown
               size={12}

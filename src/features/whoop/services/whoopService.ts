@@ -99,6 +99,14 @@ const SPORT_NAMES: Record<number, string> = {
   257: 'Pickleball', 264: 'Dance', 268: 'Jiu Jitsu', 269: 'Triathlon',
 };
 
+// WHOOP v2 records carry their own sport_name (lowercase / hyphenated, e.g.
+// "weightlifting", "warm-bath") which is more accurate than mapping sport_id
+// through a partial local table. Title-case it for display.
+function titleCaseSport(name: unknown): string | undefined {
+  if (typeof name !== 'string' || !name.trim()) return undefined;
+  return name.trim().split(/[\s_-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
 function parseWorkouts(raw: { records?: unknown[] }): WhoopWorkout[] {
   return ((raw?.records ?? []) as Record<string, unknown>[])
     .filter((r) => r.score_state === 'SCORED' || r.score_state === 'PENDING_SCORE')
@@ -113,7 +121,7 @@ function parseWorkouts(raw: { records?: unknown[] }): WhoopWorkout[] {
         start: r.start as string,
         end: r.end as string,
         sport_id: r.sport_id as number,
-        sport_name: SPORT_NAMES[r.sport_id as number] ?? 'Workout',
+        sport_name: titleCaseSport(r.sport_name) ?? SPORT_NAMES[r.sport_id as number] ?? 'Workout',
         duration_milli: endMs - startMs,
         strain: score?.strain as number | undefined,
         average_heart_rate: score?.average_heart_rate as number | undefined,
