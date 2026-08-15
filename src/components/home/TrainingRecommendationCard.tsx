@@ -150,6 +150,31 @@ export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ acti
               {recommendation.strain_insight.actual_strain} strain vs ~{recommendation.strain_insight.expected_strain} expected · {recommendation.strain_insight.verdict}
             </p>
           )}
+          {recommendation.insights?.recovery_forecast && (
+            <p className="text-[9.5px] text-[var(--text-secondary)] leading-[1.35]">
+              <span className="font-bold text-[var(--text-primary)]">Forecast: </span>
+              train this → ~{recommendation.insights.recovery_forecast.if_train}% recovery tomorrow · rest → ~{recommendation.insights.recovery_forecast.if_rest}%
+            </p>
+          )}
+          {recommendation.insights?.strain_target && (
+            <p className="text-[9.5px] text-[var(--text-secondary)] leading-[1.35]">
+              <span className="font-bold text-[var(--text-primary)]">Strain target: </span>
+              aim {recommendation.insights.strain_target.low}–{recommendation.insights.strain_target.high}
+              {recommendation.insights.strain_target.today != null ? ` · now ${recommendation.insights.strain_target.today}` : ''}
+            </p>
+          )}
+          {recommendation.insights?.sleep_debt && recommendation.insights.sleep_debt.debt_hours_7d >= 3 && (
+            <p className="text-[9.5px] text-[var(--text-secondary)] leading-[1.35]">
+              <span className="font-bold text-[var(--text-primary)]">Sleep debt: </span>
+              ~{recommendation.insights.sleep_debt.debt_hours_7d}h this week · protect sleep
+            </p>
+          )}
+          {recommendation.insights?.overreaching && recommendation.insights.overreaching.level !== 'ok' && recommendation.insights.overreaching.flags.length > 0 && (
+            <p className="text-[9.5px] leading-[1.35]" style={{ color: recommendation.insights.overreaching.level === 'high' ? '#f87171' : '#fbbf24' }}>
+              <span className="font-bold">⚠ {recommendation.insights.overreaching.level === 'high' ? 'Overreaching risk' : 'Watch'}: </span>
+              {recommendation.insights.overreaching.flags.join('; ')}
+            </p>
+          )}
         </div>
 
         <div className="mt-2 pt-2 border-t border-[var(--border)] space-y-1">

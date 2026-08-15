@@ -969,6 +969,62 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
   const exercises = adjustExercises(best.type, intensity);
   const confidence = confidenceScore(whoop, gym, load);
 
+  // ── Data-driven insights bundle ─────────────────────────────────────
+  const PLANNED_STRAIN: Record<Intensity, number> = { heavy: 14, moderate: 11, light: 8, recovery: 5, rest: 3 };
+  const plannedStrain = PLANNED_STRAIN[intensity] ?? 10;
+  const latestRec = whoop.recovery.length ? whoop.recovery[whoop.recovery.length - 1].recovery_score : null;
+
+  // 1) Recovery forecast — tomorrow's recovery if they train the plan vs rest.
+  const recoveryForecast = recoveryPairs.length ? {
+    planned_strain: plannedStrain,
+    if_train: Math.round(predictRecovery(recoveryModel.coef, plannedStrain, typicalSleep)),
+    if_rest: Math.round(predictRecovery(recoveryModel.coef, 4, typicalSleep)),
+    typical_sleep: Math.round(typicalSleep),
+    blend_weight: Number(recoveryModel.blendWeight.toFixed(2)),
+  } : null;
+
+  // 2) Sleep debt — vs an 8h need over the last 7 nights.
+  const NEED_H = 8;
+  const last7Sleep = whoop.sleep.slice(-7).map((s) => s.total_in_bed_time_milli / 3_600_000).filter((h) => h > 0);
+  const sleepDebt = last7Sleep.length ? {
+    debt_hours_7d: Math.round(last7Sleep.reduce((a, h) => a + Math.max(0, NEED_H - h), 0) * 10) / 10,
+    last_night_hours: Math.round(last7Sleep[last7Sleep.length - 1] * 10) / 10,
+    need_hours: NEED_H, nights: last7Sleep.length,
+  } : null;
+
+  // 3) Optimal strain target — recovery → a day-strain range (WHOOP zones).
+  let stLow = 6, stHigh = 10;
+  if (latestRec != null) {
+    if (latestRec >= 67) { stLow = 10; stHigh = 15; }
+    else if (latestRec >= 50) { stLow = 8; stHigh = 12; }
+    else if (latestRec >= 34) { stLow = 6; stHigh = 10; }
+    else { stLow = 4; stHigh = 7; }
+  }
+  const strainTarget = latestRec != null ? {
+    low: stLow, high: stHigh,
+    today: load.todayStrain != null ? Math.round(load.todayStrain * 10) / 10 : null,
+    recovery: latestRec,
+  } : null;
+
+  // 4) Overreaching early-warning — fuse ACWR + HRV-CV + RHR trend + recovery.
+  const hrvs = whoop.recovery.filter((r) => r.hrv_rmssd_milli > 0).slice(-7).map((r) => r.hrv_rmssd_milli);
+  const hrvMean = mean(hrvs); const hrvCv = hrvMean > 0 && hrvs.length >= 4 ? stdDev(hrvs) / hrvMean : null;
+  const rhrTrend = recentVsBaseline(whoop.recovery.filter((r) => r.resting_heart_rate > 0).map((r) => ({ date: r.date, value: r.resting_heart_rate })));
+  const orFlags: string[] = [];
+  if (load.acwr != null && load.acwr > 1.5) orFlags.push('training load spiking (ACWR ' + load.acwr.toFixed(2) + ')');
+  if (hrvCv != null && hrvCv > 0.12) orFlags.push('HRV getting erratic');
+  if (rhrTrend.baselineDays >= 7 && rhrTrend.delta > 3) orFlags.push('resting HR rising');
+  if (latestRec != null && latestRec < 34) orFlags.push('recovery in the red');
+  const overreaching = {
+    level: orFlags.length >= 2 ? 'high' : orFlags.length === 1 ? 'watch' : 'ok',
+    flags: orFlags,
+    acwr: load.acwr != null ? Math.round(load.acwr * 100) / 100 : null,
+    hrv_cv: hrvCv != null ? Math.round(hrvCv * 100) / 100 : null,
+    rhr_delta: Math.round(rhrTrend.delta),
+  };
+
+  const insights = { recovery_forecast: recoveryForecast, sleep_debt: sleepDebt, strain_target: strainTarget, overreaching };
+
   const snapshot = {
     user_id: userId,
     date,
@@ -995,6 +1051,7 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
     strain_cost: { coef: strainModel.coef, n: strainModel.n, r2: strainModel.r2, blend: strainModel.blendWeight },
     strain_insight: strainInsight,
     recovery_insight: recoveryInsight,
+    insights,
     model_version: MODEL_VERSION,
   };
 
@@ -1035,7 +1092,7 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
     .single();
   if (recError) throw recError;
 
-  return { recommendation: { ...recRow, strain_insight: strainInsight }, snapshot: { id: snapshotRow.id, ...snapshot } };
+  return { recommendation: { ...recRow, strain_insight: strainInsight, insights }, snapshot: { id: snapshotRow.id, ...snapshot } };
 }
 
 Deno.serve(async (req: Request) => {
@@ -1078,8 +1135,8 @@ Deno.serve(async (req: Request) => {
         .eq('date', date)
         .maybeSingle();
       if (existing) {
-        const insight = (existing as any).athlete_daily_snapshots?.strain_insight ?? null;
-        return json({ recommendation: { ...existing, strain_insight: insight }, generated: false });
+        const snap = (existing as any).athlete_daily_snapshots ?? {};
+        return json({ recommendation: { ...existing, strain_insight: snap.strain_insight ?? null, insights: snap.insights ?? null }, generated: false });
       }
     }
 

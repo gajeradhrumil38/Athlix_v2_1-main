@@ -1,5 +1,5 @@
 import { supabase } from '../../../lib/supabase';
-import type { StrainCostContext, RecoveryContext } from '../../../lib/aiCoach';
+import type { StrainCostContext, RecoveryContext, InsightsContext } from '../../../lib/aiCoach';
 
 export type TrainingIntensity = 'heavy' | 'moderate' | 'light' | 'recovery' | 'rest';
 export type ReadinessTier = 'green' | 'yellow' | 'red' | 'unknown';
@@ -43,6 +43,7 @@ export interface TrainingRecommendation {
     title: string; date: string; actual_strain: number; expected_strain: number;
     delta_pct: number; verdict: string; from_cycle?: boolean; blend_weight: number;
   } | null;
+  insights?: InsightsContext | null;
 }
 
 interface RecommendationResponse {
@@ -97,6 +98,19 @@ export async function getStrainCostContext(): Promise<StrainCostContext | null> 
     blend: model?.quality?.blendWeight,
     insight,
   };
+}
+
+// Reads the daily data-driven insights bundle (recovery forecast, sleep debt,
+// optimal strain target, overreaching warning) for the coach. RLS-scoped.
+export async function getInsightsContext(): Promise<InsightsContext | null> {
+  const { data } = await supabase
+    .from('athlete_daily_snapshots')
+    .select('insights')
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const insights = (data as { insights?: InsightsContext } | null)?.insights;
+  return insights && Object.keys(insights).length ? insights : null;
 }
 
 // Reads the persisted recovery dose-response insight so the coach can explain

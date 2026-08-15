@@ -371,6 +371,31 @@ export function buildRecoveryResponseSection(ctx: RecoveryContext | null): strin
   return `\n\n━━ RECOVERY RESPONSE (learned) ━━\n  Each +1 strain ≈ ${ins.per_strain}% next-day recovery; each +10% sleep ≈ ${ins.per_sleep10 >= 0 ? '+' : ''}${ins.per_sleep10}%.\n  Predicted recovery: after a hard day (strain 15) ≈ ${ins.hard_day_recovery}%, after an easy day (strain 6) ≈ ${ins.easy_day_recovery}% (at their typical ${ins.typical_sleep}% sleep). For them, ${driver}.${conf}\n  (Use for "how does load/rest affect me" and to justify easy days — quote these learned numbers only; if low-confidence, say the model is still learning.)`;
 }
 
+// Data-driven daily insights: recovery forecast, sleep debt, optimal strain
+// target, overreaching early-warning — computed server-side from WHOOP + models.
+export interface InsightsContext {
+  recovery_forecast?: { planned_strain: number; if_train: number; if_rest: number; typical_sleep: number; blend_weight: number } | null;
+  sleep_debt?: { debt_hours_7d: number; last_night_hours: number; need_hours: number; nights: number } | null;
+  strain_target?: { low: number; high: number; today: number | null; recovery: number } | null;
+  overreaching?: { level: string; flags: string[]; acwr: number | null; hrv_cv: number | null; rhr_delta: number } | null;
+}
+
+export function buildInsightsSection(ctx: InsightsContext | null): string {
+  if (!ctx) return '';
+  const lines: string[] = [];
+  const f = ctx.recovery_forecast;
+  if (f) lines.push(`  Recovery forecast: train the plan (~${f.planned_strain} strain) → ~${f.if_train}% tomorrow; rest → ~${f.if_rest}%${f.blend_weight < 0.4 ? ' [model still learning]' : ''}.`);
+  const sd = ctx.sleep_debt;
+  if (sd) lines.push(`  Sleep debt: ~${sd.debt_hours_7d}h over ${sd.nights} nights (last night ${sd.last_night_hours}h vs ${sd.need_hours}h need).`);
+  const st = ctx.strain_target;
+  if (st) lines.push(`  Optimal strain today: aim ${st.low}–${st.high}${st.today != null ? ` (currently ${st.today})` : ''} at recovery ${st.recovery}%.`);
+  const or = ctx.overreaching;
+  if (or && or.level !== 'ok' && or.flags.length) lines.push(`  Overreaching ${or.level === 'high' ? 'RISK' : 'watch'}: ${or.flags.join('; ')}.`);
+  else if (or && or.level === 'ok') lines.push(`  Overreaching: no red flags (ACWR ${or.acwr ?? '—'}, HRV-CV ${or.hrv_cv ?? '—'}).`);
+  if (!lines.length) return '';
+  return `\n\n━━ TODAY'S INSIGHTS (data-driven) ━━\n${lines.join('\n')}\n  (Answer forecast / sleep-debt / strain-target / overtraining questions from these — cite the numbers; flag low-confidence where noted. The recovery forecast is from the user's own dose-response model.)`;
+}
+
 export function buildSkincareSection(stats: { weekPercent: number; streak: number } | null): string {
   if (!stats) return '';
   return `\n\n━━ SKINCARE ━━\n  This week: ${stats.weekPercent}% complete | Streak: ${stats.streak} day${stats.streak !== 1 ? 's' : ''}`;
@@ -390,6 +415,7 @@ export function buildSystemPrompt(
   memory: CoachMemory | null = null,
   strainCost: StrainCostContext | null = null,
   recovery: RecoveryContext | null = null,
+  insights: InsightsContext | null = null,
 ): string {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
   const name = profile?.full_name || 'Athlete';
@@ -542,5 +568,5 @@ COACHING RULES:
 7. BODYWEIGHT / REPS-ONLY exercises (no load ever logged — e.g. push-ups, crunches, leg raises, planks): weight/volume are meaningless for them, so measure progress in REPS (top reps per session). Cite reps, never a weight, and progress them by adding reps, not load.
 8. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
-${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildRecoveryResponseSection(recovery)}${buildSkincareSection(skincareStats)}`;
+${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildRecoveryResponseSection(recovery)}${buildInsightsSection(insights)}${buildSkincareSection(skincareStats)}`;
 }
