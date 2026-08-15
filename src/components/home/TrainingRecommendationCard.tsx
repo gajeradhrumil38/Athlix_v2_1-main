@@ -162,7 +162,7 @@ export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ acti
 
         <div className="mt-auto pt-2 flex items-center gap-1.5 text-[8.5px] text-[var(--text-muted)]">
           <ShieldCheck className="w-3 h-3" />
-          <span>{confidence}% confidence · explainable V1</span>
+          <span>{confidence}% confidence · {recommendation.strain_insight ? 'personalized' : 'explainable'} · v2</span>
         </div>
       </button>
     </div>

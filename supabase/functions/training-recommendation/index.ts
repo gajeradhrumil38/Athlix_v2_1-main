@@ -7,7 +7,7 @@ const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer';
 const TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token';
 const WHOOP_CLIENT_ID = Deno.env.get('WHOOP_CLIENT_ID')!;
 const WHOOP_CLIENT_SECRET = Deno.env.get('WHOOP_CLIENT_SECRET')!;
-const MODEL_VERSION = 'deterministic-v1';
+const MODEL_VERSION = 'personalized-v2';
 const TIME_ZONE = 'America/Los_Angeles';
 
 const cors = {
