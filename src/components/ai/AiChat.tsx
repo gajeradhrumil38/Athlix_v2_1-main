@@ -49,7 +49,7 @@ import {
   calDaysSince,
   parseSkincareStats,
 } from '../../lib/aiCoach';
-import { getStrainCostContext } from '../../features/recommendations/services/trainingRecommendation';
+import { getStrainCostContext, getTodayTrainingRecommendation, type TrainingRecommendation } from '../../features/recommendations/services/trainingRecommendation';
 import { useAiCoachKey, DEFAULT_MODEL } from '../../hooks/useAiCoachKey';
 import {
   type CoachGoal,
@@ -1692,6 +1692,41 @@ const ApiKeySetupModal: React.FC<{ onDone: () => void; onSave: (apiKey: string, 
   );
 };
 
+// "What should I train today?" is the coach's highest-value question and it
+// shouldn't ride on the rate-limitable LLM — the deterministic engine already
+// computes an explainable plan. Detect the intent and answer from it directly.
+function isWhatToTrainIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 90) return false; // a long message is a real conversation, not this quick ask
+  const trainWord = /\b(train|training|workout|work out|lift|do|exercise|hit|gym)\b/;
+  const todayWord = /\b(today|now|this morning|tonight|right now)\b/;
+  const askWord = /\b(what|which|should|recommend|suggest|plan|tell me)\b/;
+  if (/\bwhat (should i|to|do i) (train|do|lift|workout|hit)\b/.test(t)) return true;
+  if (/\b(train|workout|training) (for )?today\b/.test(t)) return true;
+  if (/\b(what'?s|whats) (my|the) (plan|workout|training)\b/.test(t)) return true;
+  if (/\bwhich muscle/.test(t) && (todayWord.test(t) || askWord.test(t))) return true;
+  return askWord.test(t) && trainWord.test(t) && todayWord.test(t);
+}
+
+const REC_TIER_WORD: Record<string, string> = { green: 'ready to push', yellow: 'controlled', red: 'recovery-focused', unknown: 'estimated readiness' };
+
+function formatTrainingAnswer(rec: TrainingRecommendation): string {
+  const tier = REC_TIER_WORD[rec.readiness_tier] ?? rec.readiness_tier;
+  const lines: string[] = [];
+  lines.push(`**${rec.title}** — ${rec.intensity}, ${tier}.`);
+  if (rec.muscles?.length) lines.push(`\n**Focus:** ${rec.muscles.join(' · ')}`);
+  const why = (rec.reasons ?? []).slice(0, 2).map((r) => `• ${r.label}: ${r.detail}`).join('\n');
+  if (why) lines.push(`\n${why}`);
+  const plan = (rec.exercises ?? []).map((e) => `• ${e.name} — ${e.sets}×${e.reps}`).join('\n');
+  if (plan) lines.push(`\n**Suggested work:**\n${plan}`);
+  const ins = rec.strain_insight;
+  if (ins && ins.blend_weight >= 0.4) {
+    lines.push(`\nYour last session cost ${ins.actual_strain} strain vs ~${ins.expected_strain} expected — ${ins.verdict}.`);
+  }
+  lines.push(`\n_From your readiness, training load, and muscle recovery (${Math.round((rec.confidence ?? 0) * 100)}% confidence). Tap the Train Today card to start it._`);
+  return lines.join('\n');
+}
+
 /* ── Main AiChat component ─────────────────────────────────────────── */
 export const AiChat: React.FC = () => {
   const { user, profile } = useAuth();
@@ -1858,6 +1893,20 @@ export const AiChat: React.FC = () => {
       setStreamingText('');
       // Engaging with the coach counts toward the daily streak.
       setMemory(recordCheckIn(user?.id));
+
+      // "What should I train today?" → answer from the deterministic engine, no
+      // LLM call, so this key question never hits a token-per-minute rate limit
+      // ("coach is busy"). Falls through to the LLM only if the engine has nothing.
+      if (isWhatToTrainIntent(text)) {
+        try {
+          const rec = await getTodayTrainingRecommendation(false);
+          if (rec) {
+            setMessages((prev) => [...prev, { role: 'model', text: formatTrainingAnswer(rec) }]);
+            setLoading(false);
+            return;
+          }
+        } catch { /* engine unavailable — fall through to the LLM below */ }
+      }
 
       // Charts are computed client-side from logged data — they do NOT need the
       // LLM. Declared out here so if the model call rate-limits, the catch can
