@@ -398,6 +398,75 @@ async function buildStrainPairs(sb: any, userId: string, gym: GymWorkout[], cycl
   return pairs;
 }
 
+// ── Recovery dose-response model (personalized-v2) ──────────────────
+// Learns how THIS user's next-morning recovery responds to yesterday's strain
+// and last night's sleep: recovery ≈ intercept + perStrain·strain + perSleep·sleep.
+type RecoveryCoef = { intercept: number; perStrain: number; perSleep: number };
+const RECOVERY_PRIOR: RecoveryCoef = { intercept: 55, perStrain: -1.0, perSleep: 0.25 };
+type RecoveryPair = { strain: number; sleep: number; recovery: number };
+
+function fitRecoveryResponse(pairs: RecoveryPair[]): { coef: RecoveryCoef; n: number; r2: number; mae: number; blendWeight: number } {
+  const n = pairs.length;
+  let fitted: RecoveryCoef = { ...RECOVERY_PRIOR };
+  let r2 = 0; let mae = 0;
+  if (n >= 4) {
+    const X = pairs.map((p) => [1, p.strain, p.sleep]);
+    const y = pairs.map((p) => p.recovery);
+    const XtX = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const Xty = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      for (let a = 0; a < 3; a++) {
+        Xty[a] += X[i][a] * y[i];
+        for (let bb = 0; bb < 3; bb++) XtX[a][bb] += X[i][a] * X[i][bb];
+      }
+    }
+    XtX[1][1] += RIDGE_LAMBDA; XtX[2][2] += RIDGE_LAMBDA;
+    const sol = solveLinear(XtX, Xty);
+    if (sol) {
+      fitted = { intercept: sol[0], perStrain: sol[1], perSleep: sol[2] };
+      const preds = X.map((r) => r[0] * fitted.intercept + r[1] * fitted.perStrain + r[2] * fitted.perSleep);
+      const my = y.reduce((s, v) => s + v, 0) / n;
+      let ssRes = 0, ssTot = 0, absErr = 0;
+      for (let i = 0; i < n; i++) { ssRes += (y[i] - preds[i]) ** 2; ssTot += (y[i] - my) ** 2; absErr += Math.abs(y[i] - preds[i]); }
+      r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+      mae = absErr / n;
+    }
+  }
+  const w = n / (n + PRIOR_WEIGHT_K);
+  const coef: RecoveryCoef = {
+    intercept: w * fitted.intercept + (1 - w) * RECOVERY_PRIOR.intercept,
+    perStrain: w * fitted.perStrain + (1 - w) * RECOVERY_PRIOR.perStrain,
+    perSleep: w * fitted.perSleep + (1 - w) * RECOVERY_PRIOR.perSleep,
+  };
+  return { coef, n, r2, mae, blendWeight: w };
+}
+
+function predictRecovery(coef: RecoveryCoef, strain: number, sleep: number): number {
+  return Math.max(0, Math.min(100, coef.intercept + coef.perStrain * strain + coef.perSleep * sleep));
+}
+
+// recovery(X) responds to strain(X-1) + sleep(X). All inputs already fetched.
+function buildRecoveryPairs(recovery: ParsedRecovery[], cycles: ParsedCycle[], sleep: ParsedSleep[]): RecoveryPair[] {
+  const strainByDate = new Map(cycles.filter((c) => c.strain_score != null).map((c) => [c.date, c.strain_score as number]));
+  const sleepByDate = new Map(sleep.filter((s) => s.sleep_performance_percentage > 0).map((s) => [s.date, s.sleep_performance_percentage]));
+  const pairs: RecoveryPair[] = [];
+  for (const r of recovery) {
+    if (!(r.recovery_score > 0)) continue;
+    const prevStrain = strainByDate.get(addDays(r.date, -1));
+    const sameSleep = sleepByDate.get(r.date);
+    if (prevStrain == null || sameSleep == null) continue;
+    pairs.push({ strain: prevStrain, sleep: sameSleep, recovery: r.recovery_score });
+  }
+  return pairs;
+}
+
+function median(xs: number[]): number {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
 async function resolveWhoopToken(sb: any, userId: string): Promise<string | null> {
   const { data: row } = await sb
     .from('whoop_tokens')
@@ -825,6 +894,30 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
     break;
   }
 
+  // Personalized recovery dose-response: how the user's next-morning recovery
+  // responds to yesterday's strain + last night's sleep. Non-fatal.
+  const recoveryPairs = buildRecoveryPairs(whoop.recovery, whoop.cycles, whoop.sleep);
+  const recoveryModel = fitRecoveryResponse(recoveryPairs);
+  await sb.from('user_training_models').upsert({
+    user_id: userId, model_name: 'recovery_response', model_version: 'personalized-v2',
+    coefficients: recoveryModel.coef, n_samples: recoveryModel.n,
+    quality: { r2: recoveryModel.r2, mae: recoveryModel.mae, blendWeight: recoveryModel.blendWeight },
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,model_name' }).then(({ error }: any) => { if (error) console.error('recovery model upsert failed:', error.message); });
+
+  const typicalSleep = median(recoveryPairs.map((p) => p.sleep)) || 70;
+  const strainEffect = Math.abs(recoveryModel.coef.perStrain) * 12; // strain typically spans ~6–18
+  const sleepEffect = Math.abs(recoveryModel.coef.perSleep) * 45;   // sleep typically spans ~50–95
+  const recoveryInsight = recoveryPairs.length ? {
+    per_strain: Number(recoveryModel.coef.perStrain.toFixed(2)),
+    per_sleep10: Number((recoveryModel.coef.perSleep * 10).toFixed(1)),
+    hard_day_recovery: Math.round(predictRecovery(recoveryModel.coef, 15, typicalSleep)),
+    easy_day_recovery: Math.round(predictRecovery(recoveryModel.coef, 6, typicalSleep)),
+    typical_sleep: Math.round(typicalSleep),
+    driver: strainEffect >= sleepEffect ? 'strain' : 'sleep',
+    n: recoveryModel.n, blend_weight: Number(recoveryModel.blendWeight.toFixed(2)),
+  } : null;
+
   const ranked = scoreCandidates(createCandidates(muscleState), muscleState, readiness, load);
   const best = ranked[0] ?? createCandidates(muscleState)[0];
   const intensity = pickIntensity(best.type, readiness, load);
@@ -856,6 +949,7 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
     },
     strain_cost: { coef: strainModel.coef, n: strainModel.n, r2: strainModel.r2, blend: strainModel.blendWeight },
     strain_insight: strainInsight,
+    recovery_insight: recoveryInsight,
     model_version: MODEL_VERSION,
   };
 

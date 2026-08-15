@@ -351,6 +351,26 @@ export function buildStrainCostSection(ctx: StrainCostContext | null): string {
   return `\n\n━━ STRAIN COST (learned) ━━\n${lines.join('\n')}\n  (How much WHOOP strain the user's sessions cost for the volume they log — learned from their own data. A big +delta = they pushed hard / under-recovered / added too much load; −delta = lighter than usual. Quote these numbers only; if flagged low-confidence, say the model is still learning.)`;
 }
 
+// Personalized recovery dose-response output — how the user's next-morning
+// recovery responds to yesterday's strain + last night's sleep.
+export interface RecoveryContext {
+  insight?: {
+    per_strain: number; per_sleep10: number; hard_day_recovery: number;
+    easy_day_recovery: number; typical_sleep: number; driver: 'strain' | 'sleep';
+    n: number; blend_weight: number;
+  } | null;
+}
+
+export function buildRecoveryResponseSection(ctx: RecoveryContext | null): string {
+  const ins = ctx?.insight;
+  if (!ins || ins.blend_weight < 0.15) return '';
+  const conf = ins.blend_weight < 0.4 ? ' [still mostly population baseline — low confidence]' : '';
+  const driver = ins.driver === 'strain'
+    ? 'strain drives their recovery more than sleep'
+    : 'sleep drives their recovery more than strain';
+  return `\n\n━━ RECOVERY RESPONSE (learned) ━━\n  Each +1 strain ≈ ${ins.per_strain}% next-day recovery; each +10% sleep ≈ ${ins.per_sleep10 >= 0 ? '+' : ''}${ins.per_sleep10}%.\n  Predicted recovery: after a hard day (strain 15) ≈ ${ins.hard_day_recovery}%, after an easy day (strain 6) ≈ ${ins.easy_day_recovery}% (at their typical ${ins.typical_sleep}% sleep). For them, ${driver}.${conf}\n  (Use for "how does load/rest affect me" and to justify easy days — quote these learned numbers only; if low-confidence, say the model is still learning.)`;
+}
+
 export function buildSkincareSection(stats: { weekPercent: number; streak: number } | null): string {
   if (!stats) return '';
   return `\n\n━━ SKINCARE ━━\n  This week: ${stats.weekPercent}% complete | Streak: ${stats.streak} day${stats.streak !== 1 ? 's' : ''}`;
@@ -369,6 +389,7 @@ export function buildSystemPrompt(
   variant: 'chat' | 'insight' = 'chat',
   memory: CoachMemory | null = null,
   strainCost: StrainCostContext | null = null,
+  recovery: RecoveryContext | null = null,
 ): string {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
   const name = profile?.full_name || 'Athlete';
@@ -521,5 +542,5 @@ COACHING RULES:
 7. BODYWEIGHT / REPS-ONLY exercises (no load ever logged — e.g. push-ups, crunches, leg raises, planks): weight/volume are meaningless for them, so measure progress in REPS (top reps per session). Cite reps, never a weight, and progress them by adding reps, not load.
 8. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
-${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildSkincareSection(skincareStats)}`;
+${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildRecoveryResponseSection(recovery)}${buildSkincareSection(skincareStats)}`;
 }

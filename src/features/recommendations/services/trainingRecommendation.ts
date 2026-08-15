@@ -1,5 +1,5 @@
 import { supabase } from '../../../lib/supabase';
-import type { StrainCostContext } from '../../../lib/aiCoach';
+import type { StrainCostContext, RecoveryContext } from '../../../lib/aiCoach';
 
 export type TrainingIntensity = 'heavy' | 'moderate' | 'light' | 'recovery' | 'rest';
 export type ReadinessTier = 'green' | 'yellow' | 'red' | 'unknown';
@@ -97,4 +97,17 @@ export async function getStrainCostContext(): Promise<StrainCostContext | null> 
     blend: model?.quality?.blendWeight,
     insight,
   };
+}
+
+// Reads the persisted recovery dose-response insight so the coach can explain
+// how the user's recovery responds to strain + sleep. RLS-scoped.
+export async function getRecoveryContext(): Promise<RecoveryContext | null> {
+  const { data } = await supabase
+    .from('athlete_daily_snapshots')
+    .select('recovery_insight')
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const insight = (data as { recovery_insight?: RecoveryContext['insight'] } | null)?.recovery_insight ?? null;
+  return insight ? { insight } : null;
 }

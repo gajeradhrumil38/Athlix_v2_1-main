@@ -45,11 +45,12 @@ import type { WhoopAllData } from '../../features/whoop/services/whoopService';
 import {
   type WorkoutWithExercises,
   type StrainCostContext,
+  type RecoveryContext,
   buildSystemPrompt,
   calDaysSince,
   parseSkincareStats,
 } from '../../lib/aiCoach';
-import { getStrainCostContext, getTodayTrainingRecommendation, type TrainingRecommendation } from '../../features/recommendations/services/trainingRecommendation';
+import { getStrainCostContext, getRecoveryContext, getTodayTrainingRecommendation, type TrainingRecommendation } from '../../features/recommendations/services/trainingRecommendation';
 import { useAiCoachKey, DEFAULT_MODEL } from '../../hooks/useAiCoachKey';
 import {
   type CoachGoal,
@@ -1746,6 +1747,7 @@ export const AiChat: React.FC = () => {
   const [whoopData, setWhoopData] = useState<WhoopAllData | null>(null);
   const [skincareStats, setSkincareStats] = useState<{ weekPercent: number; streak: number } | null>(null);
   const [strainCost, setStrainCost] = useState<StrainCostContext | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryContext | null>(null);
   const [memory, setMemory] = useState<CoachMemory>(() => getCoachMemory(null));
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -1797,12 +1799,13 @@ export const AiChat: React.FC = () => {
       // Pull a full window from the server so charts/trends reflect all the
       // user's data, not just the last handful of sessions.
       const startDate = format(subDays(new Date(), 180), 'yyyy-MM-dd');
-      const [workoutRes, prRes, foodRes, whoopRes, strainRes] = await Promise.allSettled([
+      const [workoutRes, prRes, foodRes, whoopRes, strainRes, recoveryRes] = await Promise.allSettled([
         getWorkouts(user.id, { startDate, limit: 500, includeExercises: true }),
         getPersonalRecords(user.id),
         getFoodScans(user.id, 0, 90),
         whoopService.fetchAll('day').catch(() => null),
         getStrainCostContext().catch(() => null),
+        getRecoveryContext().catch(() => null),
       ]);
 
       if (workoutRes.status === 'fulfilled') setWorkouts((workoutRes.value as WorkoutWithExercises[]) || []);
@@ -1810,6 +1813,7 @@ export const AiChat: React.FC = () => {
       if (foodRes.status === 'fulfilled') setFoodScans((foodRes.value as { scans: FoodScan[] }).scans || []);
       if (whoopRes.status === 'fulfilled' && whoopRes.value) setWhoopData(whoopRes.value as WhoopAllData);
       if (strainRes.status === 'fulfilled') setStrainCost(strainRes.value as StrainCostContext | null);
+      if (recoveryRes.status === 'fulfilled') setRecovery(recoveryRes.value as RecoveryContext | null);
 
       // Runs and skincare are synchronous (localStorage) — always safe
       setRecentRuns(getRuns());
@@ -1915,7 +1919,7 @@ export const AiChat: React.FC = () => {
       let suggestedChart: CoachChart | undefined;
 
       try {
-        const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id), strainCost);
+        const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id), strainCost, recovery);
         // Route the chart off the user's CURRENT message only — not the whole
         // recent window — so words from earlier turns (e.g. the coach mentioning
         // "recovery") don't hijack a fresh "plot my volume" request.
@@ -2155,7 +2159,7 @@ export const AiChat: React.FC = () => {
         setLoading(false);
       }
     },
-    [input, loading, hasKey, model, profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, strainCost, messages, user?.id, navigate],
+    [input, loading, hasKey, model, profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, strainCost, recovery, messages, user?.id, navigate],
   );
 
   // Actually send a hand-off question once the seeded insight message has
