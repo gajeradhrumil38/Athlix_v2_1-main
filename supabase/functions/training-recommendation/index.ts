@@ -168,6 +168,17 @@ function parseWhoopDate(value: unknown) {
   return new Date(String(value)).toISOString().slice(0, 10);
 }
 
+// Local calendar date of a WHOOP event using its own timezone_offset (e.g.
+// "-07:00"), so an 8pm lift (next-day in UTC) lands on the day the user
+// actually trained — otherwise activities miss their logged gym session.
+function whoopLocalDate(start: unknown, tzOffset: unknown): string {
+  const ms = new Date(String(start)).getTime();
+  if (!Number.isFinite(ms)) return '';
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(tzOffset ?? ''));
+  const offMin = m ? (m[1] === '-' ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10)) : 0;
+  return new Date(ms + offMin * 60_000).toISOString().slice(0, 10);
+}
+
 function parseRecovery(raw: any): ParsedRecovery[] {
   return ((raw?.records ?? []) as any[])
     .filter((r) => r.score_state === 'SCORED')
@@ -241,7 +252,7 @@ function parseSyncActivities(raw: any): SyncActivity[] {
       const z = s.zone_duration ?? {};
       return {
         whoop_id: String(r.id),
-        date: parseWhoopDate(r.start),
+        date: whoopLocalDate(r.start, r.timezone_offset),
         sport_id: r.sport_id != null ? Number(r.sport_id) : null,
         sport_name: r.sport_name || SPORT_NAMES[Number(r.sport_id)] || 'Workout',
         started_at: String(r.start),
