@@ -467,6 +467,37 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+// ── Preference model (personalized-v2) ──────────────────────────────
+// Nudges candidate scores toward the day-types the user actually accepts /
+// completes and away from ones they skip, learned from recommendation_feedback.
+// Small and gated (needs a few observations per type) so it never hijacks the
+// physiological signal — and it stays a near-no-op until real feedback accrues.
+const PREF_MAX_NUDGE = 6;
+async function buildPreferenceModel(sb: any, userId: string): Promise<{ weights: Record<string, number>; n: number }> {
+  const since = addDays(todayKey(), -89);
+  const { data } = await sb
+    .from('recommendation_feedback')
+    .select('action, training_recommendations(recommendation_type)')
+    .eq('user_id', userId)
+    .gte('date', since);
+  const net: Record<string, number> = {};
+  const cnt: Record<string, number> = {};
+  for (const f of (data ?? []) as any[]) {
+    const type = f.training_recommendations?.recommendation_type as string | undefined;
+    if (!type) continue;
+    const v = f.action === 'completed' ? 1.0 : f.action === 'accepted' ? 0.6 : f.action === 'modified' ? 0.2 : f.action === 'skipped' ? -0.8 : 0;
+    net[type] = (net[type] ?? 0) + v;
+    cnt[type] = (cnt[type] ?? 0) + 1;
+  }
+  const weights: Record<string, number> = {};
+  let n = 0;
+  for (const type of Object.keys(cnt)) {
+    n += cnt[type];
+    if (cnt[type] >= 3) weights[type] = Math.max(-PREF_MAX_NUDGE, Math.min(PREF_MAX_NUDGE, net[type] * 2));
+  }
+  return { weights, n };
+}
+
 async function resolveWhoopToken(sb: any, userId: string): Promise<string | null> {
   const { data: row } = await sb
     .from('whoop_tokens')
@@ -765,7 +796,7 @@ function createCandidates(state: MuscleState): Candidate[] {
   ].map((c) => ({ ...c, base: groupDueScore(c.muscles.length ? c.muscles : MOBILITY, state) })) as Candidate[];
 }
 
-function scoreCandidates(candidates: Candidate[], state: MuscleState, readiness: ReturnType<typeof computeReadiness>, load: ReturnType<typeof computeLoad>) {
+function scoreCandidates(candidates: Candidate[], state: MuscleState, readiness: ReturnType<typeof computeReadiness>, load: ReturnType<typeof computeLoad>, prefWeights: Record<string, number> = {}) {
   const chestSets = state.Chest?.sets_7d ?? 0;
   const backSets = state.Back?.sets_7d ?? 0;
   const legSets = (state.Legs?.sets_7d ?? 0) + (state.Glutes?.sets_7d ?? 0) + (state.Hamstrings?.sets_7d ?? 0);
@@ -816,6 +847,12 @@ function scoreCandidates(candidates: Candidate[], state: MuscleState, readiness:
       c.reasons.push({ label: 'Balance', detail: 'Upper body volume is ahead of legs this week', impact: 'positive' });
     }
     if (c.type === 'core' && (state.Core?.last_trained_days ?? 99) > 2) score += 8;
+
+    const pref = prefWeights[c.type] ?? 0;
+    if (pref !== 0) {
+      score += pref;
+      c.reasons.push({ label: 'Your history', detail: pref > 0 ? 'You tend to accept and finish this' : 'You usually skip this', impact: pref > 0 ? 'positive' : 'negative' });
+    }
 
     c.score = Math.round(clamp(score, 0, 100));
     c.reasons = c.reasons
@@ -918,7 +955,15 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
     n: recoveryModel.n, blend_weight: Number(recoveryModel.blendWeight.toFixed(2)),
   } : null;
 
-  const ranked = scoreCandidates(createCandidates(muscleState), muscleState, readiness, load);
+  // Preference model: nudge candidate scores toward what the user accepts /
+  // completes, away from what they skip. Small + gated; near-no-op until data.
+  const pref = await buildPreferenceModel(sb, userId).catch(() => ({ weights: {} as Record<string, number>, n: 0 }));
+  await sb.from('user_training_models').upsert({
+    user_id: userId, model_name: 'preference', model_version: 'personalized-v2',
+    coefficients: pref.weights, n_samples: pref.n, quality: {}, updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,model_name' }).then(({ error }: any) => { if (error) console.error('preference model upsert failed:', error.message); });
+
+  const ranked = scoreCandidates(createCandidates(muscleState), muscleState, readiness, load, pref.weights);
   const best = ranked[0] ?? createCandidates(muscleState)[0];
   const intensity = pickIntensity(best.type, readiness, load);
   const exercises = adjustExercises(best.type, intensity);
