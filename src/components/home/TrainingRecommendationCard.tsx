@@ -53,6 +53,7 @@ export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ acti
       state: {
         preselectedMuscles: recommendation.muscles,
         suggestedTitle: recommendation.title,
+        recommendedExercises: recommendation.exercises,
       },
     });
   };

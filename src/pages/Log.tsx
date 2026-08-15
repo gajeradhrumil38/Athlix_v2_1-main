@@ -21,6 +21,7 @@ import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
 import { ActiveWorkout } from '../components/log/ActiveWorkout';
 import { FinishSheet } from '../components/log/FinishSheet';
+import { OPENTRAINING_ID_BY_NAME, OPENTRAINING_ASSETS_BY_ID, normalizeExerciseName } from '../data/opentrainingCatalog';
 
 export interface Set {
   id: string;
@@ -63,6 +64,37 @@ export interface WorkoutState {
 
 const DRAFT_KEY = 'athlix_active_workout';
 const DRAFT_TTL = 8 * 60 * 60 * 1000;
+
+// Build workout entries from a Train Today recommendation: resolve each
+// exercise's muscle group from the catalog (fallback to the plan's primary
+// muscle), N empty sets, with the plan's target reps seeded as a hint.
+type PlanExercise = { name: string; sets: number; reps: string };
+function planRepTarget(reps: string): number | null {
+  const m = /(\d+)/.exec(reps || '');
+  return m ? Number(m[1]) : null;
+}
+function buildEntriesFromPlan(exercises: PlanExercise[], planMuscles?: string[]): ExerciseEntry[] {
+  return exercises.map((ex) => {
+    const assetId = OPENTRAINING_ID_BY_NAME[normalizeExerciseName(ex.name)];
+    const asset = assetId ? OPENTRAINING_ASSETS_BY_ID[assetId] : undefined;
+    const muscleGroup = asset?.muscleGroup || planMuscles?.[0] || 'Core';
+    const nSets = Math.max(1, Math.min(6, Number(ex.sets) || 3));
+    const target = planRepTarget(ex.reps);
+    return {
+      id: crypto.randomUUID(),
+      name: ex.name,
+      muscleGroup,
+      exercise_db_id: asset?.id,
+      sets: Array.from({ length: nSets }, () => ({
+        id: crypto.randomUUID(),
+        weight: null,
+        reps: null,
+        done: false,
+        planned_reps: target,
+      })),
+    };
+  });
+}
 
 const pad2 = (value: number) => value.toString().padStart(2, '0');
 
@@ -240,6 +272,28 @@ export const Log: React.FC = () => {
 
     const draft = readDraft();
 
+    // "Start this plan" from the Train Today card → pre-load the recommended
+    // exercises. Preserve an in-progress draft that has real sets, but let the
+    // plan take priority over a lingering empty draft.
+    const recExercises = (location.state as { recommendedExercises?: PlanExercise[] } | null)?.recommendedExercises;
+    if (recExercises?.length) {
+      const draftHasWork = draft?.exercises?.some((e) => e.sets.length > 0);
+      if (draft && draftHasWork) {
+        setWorkout(draft);
+        setShowQuickStart(false);
+        setOpenPickerOnStart(false);
+      } else {
+        const st = location.state as { suggestedTitle?: string; preselectedMuscles?: string[] } | null;
+        const entries = buildEntriesFromPlan(recExercises, st?.preselectedMuscles);
+        const state = createWorkoutState(entries, st?.suggestedTitle, forcedWorkoutDate);
+        setWorkout(state);
+        setShowQuickStart(false);
+        setOpenPickerOnStart(false);
+        writeDraft(state);
+      }
+      return;
+    }
+
     // If a specific past date is forced, only load the draft when it matches that date.
     // Prevents today's in-progress draft from hijacking a past-date edit session.
     if (draft) {
@@ -385,7 +439,7 @@ export const Log: React.FC = () => {
     setShowQuickStart(false);
     setOpenPickerOnStart(false);
     writeDraft(initialState);
-  }, [showStartSheet, skipQuickStart, workout, createWorkoutState, forceAddExercise, forcedWorkoutDate, user]);
+  }, [showStartSheet, skipQuickStart, workout, createWorkoutState, forceAddExercise, forcedWorkoutDate, user, location.state]);
 
   // Write draft immediately when exercise count changes (covers unload / add / remove)
   const prevExCountRef = useRef<number>(-1);
