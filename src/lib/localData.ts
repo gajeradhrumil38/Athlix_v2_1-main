@@ -110,6 +110,7 @@ export interface LocalExerciseSessionSummary {
     sets: number;
     reps: number;
     weight: number;
+    unit?: 'kg' | 'lbs';
     totalVolume: number;
     perSetData?: Array<{ weight: number; reps: number }>;
   };
@@ -1261,6 +1262,13 @@ export const getLastExerciseSession = async (userId: string, exerciseName: strin
 
   const lastRow = sessionRows[sessionRows.length - 1];
   const totalVolume = sessionRows.reduce((sum, row) => sum + row.weight * row.reps * row.sets, 0);
+  const unit: 'kg' | 'lbs' = lastRow.unit === 'kg' ? 'kg' : 'lbs';
+  // Top set (heaviest; ties → more reps) is the representative "last time",
+  // not the final (often lighter) set.
+  const topRow = sessionRows.reduce((best, r) => {
+    if (r.weight !== best.weight) return r.weight > best.weight ? r : best;
+    return r.reps > best.reps ? r : best;
+  }, sessionRows[0]);
 
   return {
     name: lastRow.name,
@@ -1269,9 +1277,11 @@ export const getLastExerciseSession = async (userId: string, exerciseName: strin
     lastSession: {
       date: lastRow.workouts.date,
       sets: sessionRows.length,
-      reps: lastRow.reps,
-      weight: lastRow.weight,
+      reps: topRow.reps,
+      weight: topRow.weight,
+      unit,
       totalVolume,
+      perSetData: sessionRows.map((r) => ({ weight: r.weight, reps: r.reps })),
     },
   };
 };

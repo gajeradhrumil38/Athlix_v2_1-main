@@ -16,7 +16,7 @@ import {
   type LocalExerciseGoal,
 } from '../lib/supabaseData';
 import { resolveEffectiveInputType, isWeightExerciseType } from '../lib/exerciseTypes';
-import { convertWeight } from '../lib/units';
+import { convertWeight, type WeightUnit } from '../lib/units';
 import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
 import { ActiveWorkout } from '../components/log/ActiveWorkout';
@@ -47,6 +47,7 @@ export interface ExerciseEntry {
     sets: number;
     reps: number;
     weight: number;
+    unit?: WeightUnit;
     totalVolume?: number;
   };
 }

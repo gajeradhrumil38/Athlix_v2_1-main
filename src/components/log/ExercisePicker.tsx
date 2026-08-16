@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Plus, History, LayoutGrid, ChevronLeft, ClipboardList, Play, Check, Pencil, Trash2, Dumbbell } from 'lucide-react';
 import { CreateExerciseSheet } from './CreateExerciseSheet';
 import { getMachineLabel } from '../../lib/machineLabels';
+import { convertWeight, type WeightUnit } from '../../lib/units';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -27,6 +28,7 @@ interface Exercise {
     reps: number;
     date: string;
     sets?: number;
+    unit?: 'kg' | 'lbs';
     perSetData?: Array<{ weight: number; reps: number }>;
   };
   defaultSets?: number;
@@ -163,7 +165,10 @@ const ExerciseRow: React.FC<{
       {exercise.lastSession && !isSelected && (
         <div className="flex flex-col items-end shrink-0 pr-1 gap-0.5">
           <span className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {exercise.lastSession.sets ?? 1}×{exercise.lastSession.weight}{weightUnit}
+            {exercise.lastSession.sets ?? 1}×{(() => {
+              const to: WeightUnit = weightUnit === 'kg' ? 'kg' : 'lbs';
+              return convertWeight(exercise.lastSession.weight, exercise.lastSession.unit ?? to, to);
+            })()}{weightUnit}
           </span>
           <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
             {exercise.lastSession.reps} reps
@@ -238,6 +243,7 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
               reps: ex.lastSession.reps,
               date: ex.lastSession.date,
               sets: ex.lastSession.sets,
+              unit: ex.lastSession.unit,
               perSetData: ex.lastSession.perSetData,
             }
           : undefined,

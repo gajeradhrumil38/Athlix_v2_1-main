@@ -538,7 +538,12 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       const makeSets = (summary: typeof knownSummary) => {
         const perSetData = summary?.perSetData;
         const totalSets = summary ? Math.max(1, Math.min(20, Number(summary.sets))) : 1;
-        const seedWeight = Number(summary?.weight ?? defaults.weight);
+        // Last-time weights are stored in the unit they were LOGGED in — convert
+        // to this session's display unit so a set logged as 20lb doesn't reappear
+        // as "20kg". (No-op when the units already match.)
+        const fromUnit: WeightUnit = (summary?.unit as WeightUnit) ?? weightUnit;
+        const toDisplay = (w: number) => convertWeight(Number(w) || 0, fromUnit, weightUnit);
+        const seedWeight = summary ? toDisplay(summary.weight) : Number(defaults.weight);
         const seedReps = Number(summary?.reps ?? defaults.reps);
         // Apply type-aware weight clamping: reps_only → 0, time_only → 120 min max, else 9999 lbs max
         const clampW = (w: number) => {
@@ -554,14 +559,17 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
             ? { planned_weight: null, planned_reps: clampR(seedReps) }
             : { planned_weight: null, planned_reps: null };
         return perSetData && perSetData.length > 0
-          ? perSetData.map((s: { weight: number; reps: number }) => ({
-              id: createSetId(),
-              weight: clampW(s.weight),
-              reps: clampR(s.reps),
-              done: false,
-              planned_weight: clampW(s.weight),
-              planned_reps: clampR(s.reps),
-            }))
+          ? perSetData.map((s: { weight: number; reps: number }) => {
+              const w = clampW(toDisplay(s.weight));
+              return {
+                id: createSetId(),
+                weight: w,
+                reps: clampR(s.reps),
+                done: false,
+                planned_weight: w,
+                planned_reps: clampR(s.reps),
+              };
+            })
           : Array.from({ length: totalSets }, () => ({
               id: createSetId(),
               weight: clampW(seedWeight),
@@ -584,6 +592,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
               sets: knownSummary.sets,
               reps: knownSummary.reps,
               weight: knownSummary.weight,
+              unit: (knownSummary.unit as WeightUnit) ?? weightUnit,
               totalVolume: knownSummary.totalVolume,
             }
           : undefined,
@@ -627,6 +636,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                       sets: fetched.sets,
                       reps: fetched.reps,
                       weight: fetched.weight,
+                      unit: (fetched.unit as WeightUnit) ?? weightUnit,
                       totalVolume: fetched.totalVolume,
                     },
                   };
@@ -639,7 +649,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         }
       }
     },
-    [setWorkout, user, workout.exercises],
+    [setWorkout, user, workout.exercises, weightUnit],
   );
 
   useEffect(() => {

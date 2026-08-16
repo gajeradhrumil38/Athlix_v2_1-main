@@ -3,6 +3,7 @@ import { Copy, X } from 'lucide-react';
 import type { ExerciseEntry } from '../../pages/Log';
 import { SetRow } from './SetRow';
 import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
+import { convertWeight } from '../../lib/units';
 import {
   DistanceUnit,
   WeightUnit,
@@ -215,6 +216,17 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
               <div className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
               <span className="text-[12px] font-medium text-[var(--text-primary)]">
                 Last session · {fmtLastDate(exercise.lastSession.date)}
+                {(() => {
+                  const ls = exercise.lastSession!;
+                  // Top set from last time, converted from the unit it was logged
+                  // in to the unit shown now — so "last time" reads correctly.
+                  if (binding.primary === 'weight' && ls.weight > 0) {
+                    const w = convertWeight(ls.weight, ls.unit ?? weightUnit, weightUnit);
+                    return <span className="text-[var(--text-secondary)]"> · {w}{weightUnit} × {ls.reps}</span>;
+                  }
+                  if (ls.reps > 0) return <span className="text-[var(--text-secondary)]"> · {ls.reps} reps</span>;
+                  return null;
+                })()}
               </span>
             </div>
             <button

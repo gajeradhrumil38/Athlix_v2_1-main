@@ -2211,6 +2211,15 @@ export const getExerciseRowsWithWorkoutDates = async (userId: string) => {
   return exercises.sort((a, b) => a.workouts.date.localeCompare(b.workouts.date));
 };
 
+// The most representative set of a session: heaviest weight, ties broken by
+// reps. For bodyweight/reps-only work (all weights 0) this naturally becomes
+// the highest-rep set.
+const pickTopSet = <T extends { weight: number; reps: number }>(rows: T[]): T =>
+  rows.reduce((best, r) => {
+    if (r.weight !== best.weight) return r.weight > best.weight ? r : best;
+    return r.reps > best.reps ? r : best;
+  }, rows[0]);
+
 export const getLastExerciseSession = async (userId: string, exerciseName: string) => {
   if (!hasSupabaseConfig) return localData.getLastExerciseSession(userId, exerciseName);
 
@@ -2224,14 +2233,23 @@ export const getLastExerciseSession = async (userId: string, exerciseName: strin
 
   if (!matches.length) return null;
 
-  const latestDate = matches[0].workouts.date;
+  // Only the single most-recent WORKOUT for this exercise. (Previously this also
+  // pulled in any row sharing the latest DATE, which merged two same-day
+  // sessions — and their possibly-different units — into one "last time".)
   const latestWorkoutId = matches[0].workout_id;
   const sessionRows = matches
-    .filter((row) => row.workout_id === latestWorkoutId || row.workouts.date === latestDate)
+    .filter((row) => row.workout_id === latestWorkoutId)
     .sort((a, b) => a.order_index - b.order_index);
 
   const lastRow = sessionRows[sessionRows.length - 1];
   const totalVolume = sessionRows.reduce((sum, row) => sum + row.weight * row.reps * row.sets, 0);
+  // All sets of one exercise in one workout share a unit (the exercise's saved
+  // unit). Surface it so consumers can convert to the current display unit
+  // instead of showing the raw number under the wrong unit.
+  const unit = (lastRow.unit === 'kg' ? 'kg' : 'lbs') as WeightUnit;
+  // Represent "last time" by the TOP set (heaviest; ties broken by reps) rather
+  // than the final set, which is often a lighter drop/back-off set.
+  const topRow = pickTopSet(sessionRows);
 
   return {
     name: lastRow.name,
@@ -2240,8 +2258,9 @@ export const getLastExerciseSession = async (userId: string, exerciseName: strin
     lastSession: {
       date: lastRow.workouts.date,
       sets: sessionRows.length,
-      reps: lastRow.reps,
-      weight: lastRow.weight,
+      reps: topRow.reps,
+      weight: topRow.weight,
+      unit,
       totalVolume,
       perSetData: sessionRows.map((r) => ({ weight: r.weight, reps: r.reps })),
     },

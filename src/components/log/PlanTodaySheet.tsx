@@ -8,6 +8,7 @@ import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
 import { saveTemplate, checkTemplateNameExists, getLastExerciseSession } from '../../lib/supabaseData';
 import type { ExerciseEntry } from '../../pages/Log';
 import { resolveEffectiveInputType } from '../../lib/exerciseTypes';
+import { convertWeight, type WeightUnit } from '../../lib/units';
 import toast from 'react-hot-toast';
 
 interface PlannedSet {
@@ -426,23 +427,28 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
     name: string;
     muscleGroup: string;
     exercise_db_id?: string;
-    lastSession?: { weight: number; reps: number; sets?: number; perSetData?: Array<{ weight: number; reps: number }> };
+    lastSession?: { weight: number; reps: number; sets?: number; unit?: WeightUnit; perSetData?: Array<{ weight: number; reps: number }> };
   }) => {
     setShowPicker(false);
 
+    // This sheet renders weights in lbs, so convert last-time values from the
+    // unit they were logged in — otherwise a kg-logged lift seeds the wrong number.
+    const cv = (w: number, u?: WeightUnit) => convertWeight(Number(w) || 0, u ?? 'lbs', 'lbs');
+
     let sets: PlannedSet[];
     const perSetData = ex.lastSession?.perSetData;
+    const exUnit = ex.lastSession?.unit;
 
     if (perSetData && perSetData.length > 0) {
-      sets = perSetData.map((s) => ({ weight: s.weight, reps: s.reps }));
+      sets = perSetData.map((s) => ({ weight: cv(s.weight, exUnit), reps: s.reps }));
     } else if (!ex.lastSession && user) {
       try {
         const session = await getLastExerciseSession(user.id, ex.name);
-        const ls = session?.lastSession as ({ perSetData?: Array<{ weight: number; reps: number }> } & { sets: number; weight: number; reps: number }) | undefined;
+        const ls = session?.lastSession as ({ unit?: WeightUnit; perSetData?: Array<{ weight: number; reps: number }> } & { sets: number; weight: number; reps: number }) | undefined;
         if (ls?.perSetData?.length) {
-          sets = ls.perSetData.map((s: { weight: number; reps: number }) => ({ weight: s.weight, reps: s.reps }));
+          sets = ls.perSetData.map((s: { weight: number; reps: number }) => ({ weight: cv(s.weight, ls.unit), reps: s.reps }));
         } else if (ls) {
-          sets = Array.from({ length: ls.sets || 3 }, () => ({ weight: ls.weight, reps: ls.reps }));
+          sets = Array.from({ length: ls.sets || 3 }, () => ({ weight: cv(ls.weight, ls.unit), reps: ls.reps }));
         } else {
           sets = [{ weight: 0, reps: 10 }, { weight: 0, reps: 10 }, { weight: 0, reps: 10 }];
         }
@@ -450,7 +456,7 @@ export const PlanTodaySheet: React.FC<PlanTodaySheetProps> = ({ onClose, onStart
         sets = [{ weight: 0, reps: 10 }, { weight: 0, reps: 10 }, { weight: 0, reps: 10 }];
       }
     } else {
-      const w = ex.lastSession?.weight ?? 0;
+      const w = cv(ex.lastSession?.weight ?? 0, exUnit);
       const r = ex.lastSession?.reps ?? 10;
       const n = ex.lastSession?.sets ?? 3;
       sets = Array.from({ length: n }, () => ({ weight: w, reps: r }));
