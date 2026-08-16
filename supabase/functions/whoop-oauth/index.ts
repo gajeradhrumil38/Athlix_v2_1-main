@@ -184,13 +184,19 @@ Deno.serve(async (req: Request) => {
         await Promise.all(staleKeys.map(async (key) => {
           const data = await whoopGet(accessToken, paths[key]);
           freshData.set(key, data);
-          // Fire-and-forget cache write — don't block response
-          sb.from('whoop_cache').upsert({
-            user_id: user.id,
-            cache_key: key,
-            data,
-            fetched_at: new Date().toISOString(),
-          }).then(() => {/* ignore */}).catch(() => {/* ignore */});
+          // Only cache non-empty results. A transient WHOOP 404 returns
+          // { records: [] }; caching that poisoned the window for an hour and
+          // made Training Load / Cardiac Health (which gate on daysOfData)
+          // silently vanish. Skipping empties means the next load retries.
+          const hasRecords = Array.isArray((data as { records?: unknown[] })?.records) && (data as { records: unknown[] }).records.length > 0;
+          if (hasRecords) {
+            sb.from('whoop_cache').upsert({
+              user_id: user.id,
+              cache_key: key,
+              data,
+              fetched_at: new Date().toISOString(),
+            }).then(() => {/* ignore */}).catch(() => {/* ignore */});
+          }
         }));
       }
 
