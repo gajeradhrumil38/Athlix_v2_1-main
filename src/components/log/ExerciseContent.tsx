@@ -91,7 +91,6 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
     weightUnit = 'lbs',
     distanceUnit = 'km',
     bodyWeightForMath = null,
-    onWeightUnitChange,
     onDistanceUnitChange,
     onUpdateSet,
     onMarkSetDone,
@@ -164,27 +163,12 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
               )}
             </div>
 
-            {/* Unit toggle */}
+            {/* Unit — weight follows the app-wide setting (changed in Settings),
+                so no kg/lbs toggle here. Distance still toggles km/mi since
+                there is no global control for it. */}
             <div className="flex flex-col gap-1 px-3 py-2.5">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">Unit</div>
-              {isWeightExerciseType(exerciseType) && (
-                <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-[3px]">
-                  {(['kg', 'lbs'] as const).map((unit) => (
-                    <button
-                      key={unit}
-                      onClick={() => onWeightUnitChange(unit)}
-                      className={`h-6 min-w-[34px] rounded-lg px-2 text-[10px] font-bold uppercase transition-all ${
-                        weightUnit === unit
-                          ? 'border border-[var(--accent)]/25 bg-[var(--accent-dim)] text-[var(--accent)]'
-                          : 'text-[var(--text-secondary)]'
-                      }`}
-                    >
-                      {unit}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {isDistanceExerciseType(exerciseType) && (
+              {isDistanceExerciseType(exerciseType) ? (
                 <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-[3px]">
                   {(['km', 'mi'] as const).map((unit) => (
                     <button
@@ -200,8 +184,7 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
                     </button>
                   ))}
                 </div>
-              )}
-              {!isWeightExerciseType(exerciseType) && !isDistanceExerciseType(exerciseType) && (
+              ) : (
                 <div className="text-[13px] font-bold text-[var(--text-primary)] uppercase">{statUnit || '—'}</div>
               )}
             </div>

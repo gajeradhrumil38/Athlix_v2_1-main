@@ -2923,11 +2923,12 @@ const ExerciseQuickForm: React.FC<{
   setLoading: (v: boolean) => void;
 }> = ({ initialName = '', onSubmit, loading, setLoading }) => {
   const { user, profile } = useAuth();
-  const defaultUnit = ((profile?.unit_preference as 'kg' | 'lbs') || 'kg');
+  // Follows the app-wide weight unit (set in Settings); defaults to lbs.
+  const defaultUnit = ((profile?.unit_preference as 'kg' | 'lbs') || 'lbs');
 
   const [name, setName] = useState(initialName);
   const [sets, setSets] = useState<SetEntry[]>([{ reps: 10, weight: 0 }]);
-  const [unit, setUnit] = useState<'kg' | 'lbs'>(defaultUnit);
+  const [unit] = useState<'kg' | 'lbs'>(defaultUnit);
   const [done, setDone] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [nameError, setNameError] = useState(false);
@@ -3060,20 +3061,6 @@ const ExerciseQuickForm: React.FC<{
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Unit toggle */}
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>Unit</span>
-            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-              {(['kg', 'lbs'] as const).map((u) => (
-                <button key={u} onClick={() => setUnit(u)}
-                  className="px-3 py-1.5 text-[11px] font-bold transition-all"
-                  style={{ background: unit === u ? '#C8FF00' : 'transparent', color: unit === u ? '#000' : 'rgba(255,255,255,0.4)' }}>
-                  {u}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Column headers */}
