@@ -11,16 +11,19 @@ import { motion, useReducedMotion } from 'framer-motion';
 export const CardGlow: React.FC<{ tone: string; className?: string }> = ({ tone, className = 'rounded-2xl' }) => {
   const reduce = useReducedMotion();
   const base = `pointer-events-none absolute inset-0 ${className}`;
+  // Two-stop rim: a stronger colour band at the very edge fading to transparent
+  // well inside the card, so the glow clearly reads on the dark surface.
+  const grad = (edgeAlpha: string) => `radial-gradient(130% 115% at 50% 50%, transparent 40%, ${tone}${edgeAlpha} 100%)`;
   if (reduce) {
-    return <div aria-hidden className={base} style={{ background: `radial-gradient(125% 110% at 50% 50%, transparent 54%, ${tone}22 100%)` }} />;
+    return <div aria-hidden className={base} style={{ background: grad('40') }} />;
   }
   return (
     <motion.div
       aria-hidden
       className={base}
-      style={{ background: `radial-gradient(125% 110% at 50% 50%, transparent 54%, ${tone}2e 100%)`, transformOrigin: 'center' }}
-      animate={{ opacity: [0.4, 0.9, 0.4], scale: [1, 0.965, 1] }}
-      transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
+      style={{ background: grad('66'), transformOrigin: 'center' }}
+      animate={{ opacity: [0.5, 1, 0.5], scale: [1, 0.93, 1] }}
+      transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
     />
   );
 };
