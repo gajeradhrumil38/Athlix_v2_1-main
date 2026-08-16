@@ -63,7 +63,7 @@ const A_SWEEP = 270; // to f=1 (bottom-right)
 const angleFor = (f: number) => A_START + Math.min(1, Math.max(0, f)) * A_SWEEP;
 
 const ArcGauge: React.FC<{ acwr: number; color: string; label: string; show: boolean }> = ({ acwr, color, label, show }) => {
-  const size = 132;
+  const size = 124;
   const stroke = 12;
   const r = (size - stroke) / 2;
   const c = size / 2;
@@ -73,34 +73,34 @@ const ArcGauge: React.FC<{ acwr: number; color: string; label: string; show: boo
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* base track */}
         <path d={arcPath(c, c, r, A_START, A_START + A_SWEEP)} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} strokeLinecap="round" />
-        {/* coloured bands: blue detraining / green optimal / red high */}
         <path d={arcPath(c, c, r, angleFor(0), angleFor(0.4))} fill="none" stroke={BLUE} strokeWidth={stroke} strokeLinecap="round" />
         <path d={arcPath(c, c, r, angleFor(0.4), angleFor(0.65))} fill="none" stroke={GREEN} strokeWidth={stroke} />
         <path d={arcPath(c, c, r, angleFor(0.65), angleFor(1))} fill="none" stroke={RED} strokeWidth={stroke} strokeLinecap="round" />
-        {show && (
-          <circle cx={mx} cy={my} r={6} fill="#fff" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} />
-        )}
+        {show && <circle cx={mx} cy={my} r={6} fill="#fff" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} />}
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ paddingBottom: 6 }}>
-        <span style={{ fontSize: 30, fontWeight: 900, color: 'white', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+      <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ paddingBottom: 7 }}>
+        <span style={{ fontSize: 33, fontWeight: 900, color: 'white', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
           {show ? acwr.toFixed(2) : '—'}
         </span>
-        <span style={{ fontSize: 12, fontWeight: 800, color, marginTop: 2 }}>{label}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color, marginTop: 3 }}>{label}</span>
       </div>
     </div>
   );
 };
 
-const Caret: React.FC<{ color: string }> = ({ color }) => (
-  <span style={{ fontSize: 9, color, marginLeft: 3, verticalAlign: 'middle' }}>▲</span>
+const Caret: React.FC<{ color: string; size?: number }> = ({ color, size = 11 }) => (
+  <span style={{ fontSize: size, color, marginLeft: 4, verticalAlign: 'middle' }}>▲</span>
 );
 
 const LegendDot: React.FC<{ color: string; label: string; active?: boolean }> = ({ color, label, active }) => (
-  <div className="flex items-center gap-2">
-    <span style={{ width: 8, height: 8, borderRadius: 99, background: color, opacity: active ? 1 : 0.5, boxShadow: active ? `0 0 6px ${color}` : 'none' }} />
-    <span style={{ fontSize: 11, fontWeight: active ? 800 : 600, color: active ? 'white' : 'rgba(255,255,255,0.45)' }}>{label}</span>
+  <div className="flex items-center gap-2.5">
+    <span className="flex items-center justify-center" style={{ width: 13, height: 13 }}>
+      {active
+        ? <span style={{ width: 13, height: 13, borderRadius: 99, background: color, boxShadow: `0 0 8px ${color}`, border: '2px solid rgba(255,255,255,0.9)' }} />
+        : <span style={{ width: 9, height: 9, borderRadius: 99, background: color, opacity: 0.55 }} />}
+    </span>
+    <span style={{ fontSize: 13, fontWeight: active ? 800 : 600, color: active ? 'white' : 'rgba(255,255,255,0.45)' }}>{label}</span>
   </div>
 );
 
@@ -161,19 +161,19 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
       <CardGlow tone={acwr?.color || BLUE} />
       <div className="relative z-10">
         {/* Header */}
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center rounded-xl" style={{ width: 34, height: 34, background: 'rgba(79,195,247,0.12)', border: '1px solid rgba(79,195,247,0.2)' }}>
-              <ShieldAlert className="w-4 h-4" style={{ color: acwr?.color }} />
+            <span className="flex items-center justify-center rounded-xl shrink-0" style={{ width: 38, height: 38, background: 'rgba(120,140,170,0.12)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <ShieldAlert style={{ color: acwr?.color, width: 17, height: 17 }} />
             </span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '0.01em' }}>Training Load</span>
+            <span style={{ fontSize: 17, fontWeight: 800, color: 'white', letterSpacing: '0.01em' }}>Training Load</span>
           </div>
-          <div className="flex flex-col items-end gap-1.5">
-            <span className="px-2.5 py-1 rounded-full" style={{ fontSize: 10, color: confidence.color, fontWeight: 800, background: 'rgba(255,255,255,0.04)', border: `1px solid color-mix(in srgb, ${confidence.color} 30%, transparent)` }}>
+          <div className="flex flex-col items-end gap-2">
+            <span className="rounded-full" style={{ fontSize: 12, color: confidence.color, fontWeight: 800, background: 'rgba(255,255,255,0.03)', border: `1px solid color-mix(in srgb, ${confidence.color} 32%, transparent)`, padding: '5px 12px' }}>
               {confidence.label}
             </span>
             {watch && (
-              <span className="px-2.5 py-1 rounded-full" style={{ fontSize: 10, color: watch.color, fontWeight: 800, background: `color-mix(in srgb, ${watch.color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${watch.color} 34%, transparent)` }}>
+              <span className="rounded-full" style={{ fontSize: 12, color: watch.color, fontWeight: 800, background: `color-mix(in srgb, ${watch.color} 12%, transparent)`, border: `1px solid color-mix(in srgb, ${watch.color} 36%, transparent)`, padding: '5px 12px' }}>
                 {watch.text}
               </span>
             )}
@@ -181,24 +181,24 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
         </div>
 
         {/* Hero: arc gauge + coverage / acute-load stats + legend */}
-        <div className="flex items-start gap-4 mb-3">
+        <div className="flex items-start gap-3 mb-4">
           <ArcGauge acwr={metrics.acwr} color={acwr?.color || BLUE} label={acwr?.label || '—'} show={metrics.hasAcwrBaseline} />
           <div className="flex-1 min-w-0">
-            <div className="flex gap-6 mb-3">
-              <div>
-                <div style={{ fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>28d coverage</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: 'white', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{coveragePct}%</div>
+            <div className="flex gap-4 mb-3.5">
+              <div className="min-w-0">
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>28d coverage</div>
+                <div style={{ fontSize: 27, fontWeight: 900, color: 'white', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{coveragePct}%</div>
               </div>
-              <div>
-                <div style={{ fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>Acute load</div>
-                <div className="flex items-baseline" style={{ fontSize: 24, fontWeight: 900, color: 'white', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
+              <div className="min-w-0">
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Acute load</div>
+                <div className="flex items-baseline" style={{ fontSize: 27, fontWeight: 900, color: 'white', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
                   {metrics.acuteDays ? metrics.acuteLoad.toFixed(1) : '—'}
-                  {metrics.hasAcwrBaseline && metrics.acuteLoad < metrics.chronicLoad && <Caret color={BLUE} />}
+                  {metrics.hasAcwrBaseline && metrics.acuteLoad < metrics.chronicLoad && <Caret color={BLUE} size={12} />}
                 </div>
-                <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.34)', marginTop: 1 }}>vs chronic {metrics.chronicLoad > 0 ? metrics.chronicLoad.toFixed(1) : '—'}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)', marginTop: 2 }}>vs chronic {metrics.chronicLoad > 0 ? metrics.chronicLoad.toFixed(1) : '—'}</div>
               </div>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <LegendDot color={BLUE} label="Detraining" active={acwr?.label === 'Detraining'} />
               <LegendDot color={GREEN} label="Optimal" active={acwr?.label === 'Optimal'} />
               <LegendDot color={RED} label="High" active={acwr?.label === 'High risk' || acwr?.label === 'Caution'} />
@@ -206,41 +206,50 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
           </div>
         </div>
 
-        <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.45, marginBottom: 14 }}>{loadAdvice}</p>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.45, marginBottom: 16 }}>{loadAdvice}</p>
 
         {/* Last 7 observed days */}
-        <div className="mb-3">
-          <div className="flex items-baseline justify-between mb-2">
-            <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Last 7 days</span>
-            <div className="text-right">
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{metrics.acuteDays}/7 logged</span>
-            </div>
+        <div className="mb-4">
+          <div className="flex items-baseline justify-between mb-1">
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Last 7 days</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{metrics.acuteDays}/7 logged</span>
           </div>
-          <div className="relative" style={{ height: 74 }}>
-            {/* gridlines */}
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="absolute left-0 right-0" style={{ top: `${(i / 3) * 56}px`, height: 1, background: 'rgba(255,255,255,0.05)' }} />
-            ))}
-            <div className="absolute right-0" style={{ top: -2, fontSize: 11, fontWeight: 800, color: BLUE }}>Avg {metrics.acuteDays ? metrics.acuteLoad.toFixed(1) : '—'}</div>
-            <div className="absolute left-0 right-0 flex items-end gap-2" style={{ top: 8, height: 48 }}>
+          <div className="flex justify-end mb-1">
+            <span style={{ fontSize: 13, fontWeight: 800, color: BLUE }}>Avg {metrics.acuteDays ? metrics.acuteLoad.toFixed(1) : '—'}</span>
+          </div>
+          <div className="relative" style={{ height: 96 }}>
+            {/* grid cells (vertical + top/bottom hairlines) */}
+            <div className="absolute inset-x-0 grid" style={{ top: 0, height: 72, gridTemplateColumns: 'repeat(7,1fr)' }}>
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} style={{ borderLeft: i ? '1px solid rgba(255,255,255,0.05)' : 'none', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }} />
+              ))}
+            </div>
+            <div className="absolute inset-x-0" style={{ top: 36, height: 1, background: 'rgba(255,255,255,0.04)' }} />
+            {/* bars */}
+            <div className="absolute inset-x-0 grid" style={{ top: 0, height: 72, gridTemplateColumns: 'repeat(7,1fr)', alignItems: 'end' }}>
               {recentLoads.map((point, i) => {
                 const isToday = i === recentLoads.length - 1;
-                const height = point.observed ? Math.max(5, Math.round((point.load / maxRecentLoad) * 46)) : 3;
+                const ratio = point.observed ? point.load / maxRecentLoad : 0;
+                const height = point.observed ? Math.max(7, Math.round(ratio * 66)) : 4;
+                const a = 0.4 + 0.6 * ratio; // brighter = higher load
                 return (
-                  <div key={point.date} className="flex-1 rounded-md" title={`${point.date}: ${point.observed ? point.load.toFixed(1) : 'no data'}`}
-                    style={{
-                      height,
-                      background: point.observed
-                        ? (isToday ? 'transparent' : 'linear-gradient(180deg,#4FC3F7 0%,rgba(79,195,247,0.32) 100%)')
-                        : 'rgba(255,255,255,0.08)',
-                      border: isToday && point.observed ? `1.5px solid ${BLUE}` : 'none',
-                    }} />
+                  <div key={point.date} className="flex items-end justify-center" style={{ padding: '0 5px' }}>
+                    <div className="w-full rounded-lg" title={`${point.date}: ${point.observed ? point.load.toFixed(1) : 'no data'}`}
+                      style={{
+                        height,
+                        background: point.observed
+                          ? (isToday ? 'transparent' : `linear-gradient(180deg, rgba(79,195,247,${a}) 0%, rgba(79,195,247,${a * 0.35}) 100%)`)
+                          : 'rgba(255,255,255,0.07)',
+                        border: isToday && point.observed ? `2px solid ${BLUE}` : 'none',
+                      }} />
+                  </div>
                 );
               })}
             </div>
-            <div className="absolute left-0 right-0 flex gap-2" style={{ top: 60 }}>
+            {/* day labels */}
+            <div className="absolute inset-x-0 grid" style={{ top: 78, gridTemplateColumns: 'repeat(7,1fr)' }}>
               {recentLoads.map((point, i) => (
-                <span key={point.date} className="flex-1 text-center" style={{ fontSize: 10, fontWeight: 700, color: i === recentLoads.length - 1 ? BLUE : 'rgba(255,255,255,0.4)' }}>
+                <span key={point.date} className="text-center" style={{ fontSize: 12, fontWeight: i === recentLoads.length - 1 ? 800 : 700, color: i === recentLoads.length - 1 ? 'white' : 'rgba(255,255,255,0.42)' }}>
                   {parseDow(point.date)}
                 </span>
               ))}
@@ -249,30 +258,20 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
         </div>
 
         {/* Fitness / Fatigue / Form */}
-        <div className="grid grid-cols-3 gap-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <MetricCol
-            label="Fitness" badge={{ text: 'CTL', color: BLUE }}
-            value={metrics.ctl.toFixed(1)} caret={ctlDelta > 0 ? GREEN : undefined} tone="white" caption="42-day avg" />
-          <MetricCol
-            label="Fatigue" badge={{ text: 'ATL', color: RED }}
-            value={metrics.atl.toFixed(1)} tone="white" caption="7-day avg" divider />
-          <MetricCol
-            label="Form" value={`${metrics.form > 0 ? '+' : ''}${metrics.form.toFixed(1)}`}
-            caret={metrics.form > 0 ? (form?.color || GREEN) : undefined} tone={form?.color} caption="Fitness − Fatigue" divider />
+        <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <MetricCol label="Fitness" badge={{ text: 'CTL', color: BLUE }} value={metrics.ctl.toFixed(1)} caret={ctlDelta > 0 ? GREEN : undefined} tone="white" caption="42-day avg" />
+          <MetricCol label="Fatigue" badge={{ text: 'ATL', color: RED }} value={metrics.atl.toFixed(1)} tone="white" caption="7-day avg" divider />
+          <MetricCol label="Form" value={`${metrics.form > 0 ? '+' : ''}${metrics.form.toFixed(1)}`} caret={metrics.form > 0 ? (form?.color || GREEN) : undefined} tone={form?.color} caption="Fitness − Fatigue" divider />
         </div>
 
         {/* Monotony / Week strain */}
-        <div className="grid grid-cols-2 gap-3 pt-3 mt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <MetricCol
-            label="Monotony" value={metrics.monotony > 0 ? metrics.monotony.toFixed(2) : '—'}
-            caret={metrics.monotony >= 2 ? RED : undefined} tone={mono?.color} caption={(mono?.label ?? '—').toLowerCase()} />
-          <MetricCol
-            label="Week strain" value={metrics.weeklyStrain > 0 ? Math.round(metrics.weeklyStrain).toString() : '—'}
-            caret={metrics.weeklyStrain >= 150 ? RED : undefined} tone={strain?.color} caption={(strain?.label ?? '—').toLowerCase()} divider />
+        <div className="grid grid-cols-2 gap-3 pt-4 mt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <MetricCol label="Monotony" value={metrics.monotony > 0 ? metrics.monotony.toFixed(2) : '—'} caret={metrics.monotony >= 2 ? RED : undefined} tone={mono?.color} caption={(mono?.label ?? '—').toLowerCase()} />
+          <MetricCol label="Week strain" value={metrics.weeklyStrain > 0 ? Math.round(metrics.weeklyStrain).toString() : '—'} caret={metrics.weeklyStrain >= 150 ? RED : undefined} tone={strain?.color} caption={(strain?.label ?? '—').toLowerCase()} divider />
         </div>
 
         {thin && (
-          <p className="flex items-center justify-center gap-1.5" style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.34)', marginTop: 10, textAlign: 'center' }}>
+          <p className="flex items-center justify-center gap-1.5" style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)', marginTop: 12, textAlign: 'center' }}>
             <Activity className="w-3 h-3" />
             {metrics.daysOfData} observed days. Accuracy improves after ~4 weeks.
           </p>
@@ -291,16 +290,16 @@ const MetricCol: React.FC<{
   badge?: { text: string; color: string };
   divider?: boolean;
 }> = ({ label, value, tone = 'white', caption, caret, badge, divider }) => (
-  <div className="min-w-0" style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 12 } : undefined}>
-    <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
-      <span style={{ fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>{label}</span>
+  <div className="min-w-0" style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 11 } : undefined}>
+    <div className="flex items-center gap-1.5" style={{ marginBottom: 6 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       {badge && (
-        <span style={{ fontSize: 8, fontWeight: 900, color: badge.color, background: `color-mix(in srgb, ${badge.color} 16%, transparent)`, padding: '1px 4px', borderRadius: 4, letterSpacing: '0.04em' }}>{badge.text}</span>
+        <span style={{ fontSize: 8.5, fontWeight: 900, color: badge.color, background: `color-mix(in srgb, ${badge.color} 18%, transparent)`, padding: '2px 4px', borderRadius: 5, letterSpacing: '0.04em' }}>{badge.text}</span>
       )}
     </div>
-    <div style={{ fontSize: 22, fontWeight: 900, color: tone, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+    <div style={{ fontSize: 26, fontWeight: 900, color: tone, lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
       {value}{caret && <Caret color={caret} />}
     </div>
-    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.36)', marginTop: 3, lineHeight: 1.25 }}>{caption}</div>
+    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.36)', marginTop: 4, lineHeight: 1.2 }}>{caption}</div>
   </div>
 );

@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Heart, Minus } from 'lucide-react';
 import { whoopService, whoopWindowRange } from '../services/whoopService';
 import { computeCardiacHealth, type CardiacHealth as CardiacData } from '../services/cardiacHealth';
 import { CardGlow } from '../../../components/shared/CardGlow';
+import heartUrl from '../../../assets/anatomical-heart.svg';
 
 // Cardiometric-health panel: resting HR, HRV, an estimated VO2max (with a trend
 // line) and HR reserve. Self-fetches the same 28-day window as the load card
@@ -25,13 +26,13 @@ const trendConfidenceMeta = {
 const Trend: React.FC<{ delta: number; goodDown?: boolean; unit?: string }> = ({ delta, goodDown, unit }) => {
   const rounded = Math.round(delta);
   if (rounded === 0) {
-    return <span className="inline-flex items-center gap-0.5" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9.5, fontWeight: 700 }}><Minus className="w-2.5 h-2.5" />flat</span>;
+    return <span className="inline-flex items-center gap-0.5" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 700 }}><Minus className="w-2.5 h-2.5" />flat</span>;
   }
   const improving = goodDown ? rounded < 0 : rounded > 0;
   const color = improving ? GREEN : RED;
   const Icon = rounded < 0 ? ArrowDown : ArrowUp;
   return (
-    <span className="inline-flex items-center gap-0.5" style={{ color, fontSize: 9.5, fontWeight: 800 }}>
+    <span className="inline-flex items-center gap-0.5" style={{ color, fontSize: 10, fontWeight: 800 }}>
       <Icon className="w-2.5 h-2.5" />{Math.abs(rounded)}{unit}
     </span>
   );
@@ -46,22 +47,22 @@ const VitalTile: React.FC<{
   caption?: string;
   divider?: boolean;
 }> = ({ label, value, unit, color, trend, caption, divider }) => (
-  <div className="min-w-0" style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 12 } : undefined}>
-    <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
-    <div className="flex items-baseline gap-1" style={{ marginTop: 4 }}>
+  <div className="min-w-0" style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 9 } : undefined}>
+    <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</span>
+    <div className="flex items-baseline gap-0.5" style={{ marginTop: 5 }}>
       <span style={{ fontSize: 22, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05 }}>
         {value ?? '—'}
       </span>
-      {value != null && <span style={{ fontSize: 9.5, fontWeight: 700, color: 'rgba(255,255,255,0.34)' }}>{unit}</span>}
+      {value != null && <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.34)' }}>{unit}</span>}
     </div>
-    <div style={{ marginTop: 4, minHeight: 13 }}>{trend ?? <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{caption}</span>}</div>
+    <div style={{ marginTop: 5, minHeight: 13 }}>{trend ?? <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{caption}</span>}</div>
   </div>
 );
 
 // VO2max trend sparkline (area + line) from the per-day estimate series.
 const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
-  const w = 220;
-  const h = 58;
+  const w = 240;
+  const h = 62;
   const pad = 4;
   const path = useMemo(() => {
     if (values.length < 2) return null;
@@ -88,8 +89,8 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
         </linearGradient>
       </defs>
       <path d={path.area} fill="url(#vo2fill)" />
-      <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={path.last[0]} cy={path.last[1]} r={3} fill={GREEN} />
+      <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={path.last[0]} cy={path.last[1]} r={3.5} fill={GREEN} />
     </svg>
   );
 };
@@ -134,59 +135,59 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center rounded-xl" style={{ width: 34, height: 34, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.2)' }}>
-              <Heart className="w-4 h-4" style={{ color: RED }} />
+            <span className="flex items-center justify-center rounded-xl shrink-0" style={{ width: 38, height: 38, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.2)' }}>
+              <Heart style={{ color: RED, width: 17, height: 17 }} />
             </span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: 'white', letterSpacing: '0.01em' }}>Cardiac Health</span>
+            <span style={{ fontSize: 17, fontWeight: 800, color: 'white', letterSpacing: '0.01em' }}>Cardiac Health</span>
           </div>
-          <span className="px-2.5 py-1 rounded-full" style={{ fontSize: 10, color: confidence.color, fontWeight: 800, background: 'rgba(255,255,255,0.04)', border: `1px solid color-mix(in srgb, ${confidence.color} 30%, transparent)` }}>
+          <span className="rounded-full shrink-0" style={{ fontSize: 12, color: confidence.color, fontWeight: 800, background: 'rgba(255,255,255,0.03)', border: `1px solid color-mix(in srgb, ${confidence.color} 32%, transparent)`, padding: '5px 12px' }}>
             {confidence.label}
           </span>
         </div>
 
-        {/* Hero: VO2max (heart backdrop) + VO2max trend */}
+        {/* Hero: VO2max on anatomical-heart backdrop + VO2max trend */}
         <div className="flex items-stretch gap-3 mb-4">
-          <div className="relative flex flex-col items-center justify-center shrink-0" style={{ width: 128 }}>
-            <Heart className="absolute" style={{ width: 92, height: 92, color: RED, opacity: 0.1, fill: RED }} strokeWidth={1} />
+          <div className="relative flex flex-col items-center justify-center shrink-0" style={{ width: 116 }}>
+            <img src={heartUrl} alt="" aria-hidden className="absolute pointer-events-none" style={{ width: 104, height: 104, opacity: 0.5, filter: 'saturate(0.4)' }} />
             <div className="relative flex flex-col items-center">
-              <span style={{ fontSize: 8.5, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.09em' }}>Est. VO₂max</span>
-              <span style={{ fontSize: 32, fontWeight: 900, color: data.vo2maxColor, lineHeight: 1, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. VO₂max</span>
+              <span style={{ fontSize: 33, fontWeight: 900, color: data.vo2maxColor, lineHeight: 1, fontVariantNumeric: 'tabular-nums', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>
                 {data.vo2max ?? '—'}
               </span>
-              <span style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>ml/kg/min</span>
-              <span style={{ fontSize: 11, fontWeight: 800, color: data.vo2maxColor, marginTop: 2 }}>{data.vo2maxLabel}</span>
+              <span style={{ fontSize: 9.5, fontWeight: 600, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>ml/kg/min</span>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: data.vo2maxColor, marginTop: 3 }}>{data.vo2maxLabel}</span>
             </div>
           </div>
           <div className="flex-1 min-w-0 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center justify-between mb-1">
-              <span style={{ fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>VO₂max trend</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>VO₂max trend</span>
               {vo2Vals.length >= 2 && vo2DeltaRounded !== 0 && (
-                <span className="inline-flex items-center gap-0.5" style={{ fontSize: 11, fontWeight: 800, color: vo2DeltaRounded > 0 ? GREEN : RED }}>
-                  {vo2DeltaRounded > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                <span className="inline-flex items-center gap-0.5" style={{ fontSize: 13, fontWeight: 800, color: vo2DeltaRounded > 0 ? GREEN : RED }}>
+                  {vo2DeltaRounded > 0 ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
                   {vo2DeltaRounded > 0 ? '+' : ''}{vo2DeltaRounded.toFixed(1)}
                 </span>
               )}
             </div>
             <Vo2Spark values={vo2Vals} />
-            <div className="flex items-center justify-between" style={{ marginTop: 2 }}>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>4wk ago</span>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>Now</span>
+            <div className="flex items-center justify-between" style={{ marginTop: 3 }}>
+              <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>4wk ago</span>
+              <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>Now</span>
             </div>
           </div>
         </div>
 
         {/* Vitals */}
-        <div className="grid grid-cols-4 gap-2 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="grid grid-cols-4 gap-2 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
           <VitalTile label="Resting HR" value={data.restingHr} unit="bpm" color={BLUE} trend={<Trend delta={data.restingHrDelta} goodDown />} />
           <VitalTile label="HRV" value={data.hrv} unit="ms" color={AMBER} trend={<Trend delta={data.hrvDelta} unit="ms" />} divider />
           <VitalTile label="Max HR" value={data.maxHr} unit="bpm" color={RED} caption={data.maxHrFromEffort ? 'from workout' : 'daily high'} divider />
           <VitalTile label="HR reserve" value={data.hrReserve} unit="bpm" color={GREEN} caption="wider = fitter" divider />
         </div>
 
-        <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.58)', lineHeight: 1.45, marginTop: 14 }}>{advice}</p>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.58)', lineHeight: 1.45, marginTop: 16 }}>{advice}</p>
 
         {data.vo2max != null && !data.maxHrFromEffort && (
-          <p style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.34)', marginTop: 8, textAlign: 'center' }}>
+          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)', marginTop: 8, textAlign: 'center' }}>
             VO₂max is estimated from your peak HR seen so far. Do a hard session to sharpen it — no max-effort day is in this window yet.
           </p>
         )}
