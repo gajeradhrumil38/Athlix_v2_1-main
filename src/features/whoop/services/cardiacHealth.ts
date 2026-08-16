@@ -35,6 +35,8 @@ export interface CardiacHealth {
   baselineDays: number;
   rhrSeries: TrendPoint[];
   hrvSeries: TrendPoint[];
+  vo2Series: TrendPoint[]; // per-day VO2max estimate for the trend line
+  vo2Delta: number;        // recent − baseline VO2max (positive = fitter)
 }
 
 const VO2_UTH = 15.3; // Uth–Sørensen constant
@@ -113,6 +115,16 @@ export function computeCardiacHealth(
     vo2Confidence = maxHrFromEffort ? 'effort-based' : 'rough';
   }
 
+  // Per-day VO2max estimate for the trend line: hold the window's max HR fixed
+  // (an aerobic ceiling) and let each day's resting HR move it — a lower RHR
+  // reads as higher fitness (Uth–Sørensen). Only meaningful once a maxHr exists.
+  const vo2Series: TrendPoint[] = maxHr != null
+    ? rhrSeries
+        .filter((p) => p.value > 0)
+        .map((p) => ({ date: p.date, value: Math.round(VO2_UTH * (maxHr / p.value) * 10) / 10 }))
+    : [];
+  const vo2Delta = recentVsBaseline(vo2Series).delta;
+
   const recentDays = Math.max(rhrTrend.recentDays, hrvTrend.recentDays);
   const baselineDays = Math.max(rhrTrend.baselineDays, hrvTrend.baselineDays);
   const trendConfidence = baselineDays >= 14 && recentDays >= 5 ? 'high'
@@ -137,5 +149,7 @@ export function computeCardiacHealth(
     baselineDays,
     rhrSeries,
     hrvSeries,
+    vo2Series,
+    vo2Delta,
   };
 }

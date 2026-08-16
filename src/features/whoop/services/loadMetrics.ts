@@ -184,3 +184,12 @@ export function monotonyZone(monotony: number): Zone {
   if (monotony < 2) return { label: 'Moderate', color: AMBER, advice: 'Days are getting samey — make easy days easier and hard days harder.' };
   return { label: 'Too monotonous', color: RED, advice: 'Little day-to-day variation — a known overtraining driver even at moderate volume.' };
 }
+
+// Foster weekly strain = 7-day load sum × monotony. High values (driven by big
+// volume, low variation, or both) track with overtraining/illness risk.
+export function weeklyStrainZone(ws: number): Zone {
+  if (ws <= 0) return { label: '—', color: 'rgba(255,255,255,0.4)', advice: 'Not enough of the week logged to score.' };
+  if (ws < 80) return { label: 'Building', color: BLUE, advice: 'Weekly strain is modest — room to build if recovery holds.' };
+  if (ws < 150) return { label: 'Balanced', color: GREEN, advice: 'Weekly strain is in a productive range.' };
+  return { label: 'Elevated risk', color: RED, advice: 'High weekly strain (volume × monotony) — a Foster overtraining marker. Add an easy day or more variation.' };
+}
