@@ -10,7 +10,6 @@ import {
   formatSetValue,
   getFieldKinds,
   getInputLabels,
-  getUnitDisplay,
   isDistanceExerciseType,
   isWeightExerciseType,
   resolveEffectiveInputType,
@@ -130,7 +129,6 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
     [exercise.sets, exerciseType],
   );
 
-  const statUnit = getUnitDisplay(exerciseType, { weightUnit, distanceUnit }).toLowerCase();
   const relativeLoad =
     bodyWeightForMath && bodyWeightForMath > 0 && isWeightExerciseType(exerciseType)
       ? totalVolume / bodyWeightForMath
@@ -140,7 +138,7 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
     <div className="h-full overflow-y-auto bg-transparent pb-24">
       <div className="sticky top-0 z-20 bg-[var(--bg-base)]/90 px-4 pb-3 pt-3 backdrop-blur-xl scroll-fade-header">
         <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-surface)]">
-          <div className="grid grid-cols-3">
+          <div className={`grid ${isDistanceExerciseType(exerciseType) ? 'grid-cols-3' : 'grid-cols-2'}`}>
             {/* Sets */}
             <div className="flex flex-col gap-0.5 px-3 py-2.5">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">Sets</div>
@@ -163,12 +161,12 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
               )}
             </div>
 
-            {/* Unit — weight follows the app-wide setting (changed in Settings),
-                so no kg/lbs toggle here. Distance still toggles km/mi since
-                there is no global control for it. */}
-            <div className="flex flex-col gap-1 px-3 py-2.5">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">Unit</div>
-              {isDistanceExerciseType(exerciseType) ? (
+            {/* Weight unit follows the app-wide setting (changed in Settings) —
+                no unit control or label here. Distance keeps a km/mi toggle
+                since there is no global control for it. */}
+            {isDistanceExerciseType(exerciseType) && (
+              <div className="flex flex-col gap-1 px-3 py-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)]">Unit</div>
                 <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-[3px]">
                   {(['km', 'mi'] as const).map((unit) => (
                     <button
@@ -184,10 +182,8 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div className="text-[13px] font-bold text-[var(--text-primary)] uppercase">{statUnit || '—'}</div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
