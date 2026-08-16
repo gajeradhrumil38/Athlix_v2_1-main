@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronRight, Dumbbell, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -34,6 +35,7 @@ const StatTile: React.FC<{ label: string; value: string; sub?: string; tone?: st
 
 export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ active }) => {
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
   const [recommendation, setRecommendation] = useState<TrainingRecommendation | null>(null);
   const [loading, setLoading] = useState(active);
   const [error, setError] = useState<string | null>(null);
@@ -128,8 +130,22 @@ export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ acti
   }
 
   return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-3 h-full flex flex-col">
-      <div className="flex items-center justify-between gap-2 mb-2">
+    <div className="relative overflow-hidden bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-3 h-full flex flex-col">
+      {/* Breathing edge glow — bright at the border, fading inward, tinted by
+          today's intensity. Flows inward via a subtle scale + opacity pulse. */}
+      {reduceMotion ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl" style={{ background: `radial-gradient(125% 110% at 50% 50%, transparent 54%, ${tone}22 100%)` }} />
+      ) : (
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-2xl"
+          style={{ background: `radial-gradient(125% 110% at 50% 50%, transparent 54%, ${tone}2e 100%)`, transformOrigin: 'center' }}
+          animate={{ opacity: [0.4, 0.9, 0.4], scale: [1, 0.965, 1] }}
+          transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      )}
+
+      <div className="relative z-10 flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <Dumbbell className="w-3.5 h-3.5 shrink-0" style={{ color: tone }} />
           <span className="text-[9px] uppercase tracking-[1.4px] text-[var(--text-secondary)] font-bold truncate">Train Today</span>
@@ -144,7 +160,7 @@ export const TrainingRecommendationCard: React.FC<{ active: boolean }> = ({ acti
         </button>
       </div>
 
-      <button type="button" onClick={handleStart} className="text-left flex-1 flex flex-col min-h-0 cursor-pointer">
+      <button type="button" onClick={handleStart} className="relative z-10 text-left flex-1 flex flex-col min-h-0 cursor-pointer">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="text-[16px] font-black text-[var(--text-primary)] leading-[1.05] truncate">{recommendation.title}</h3>
