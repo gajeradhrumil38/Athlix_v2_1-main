@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Activity, ArrowDown, ArrowUp, Heart, Minus, Waves } from 'lucide-react';
 import { whoopService, whoopWindowRange } from '../services/whoopService';
 import { computeCardiacHealth, type CardiacHealth as CardiacData } from '../services/cardiacHealth';
+import { CardGlow } from '../../../components/shared/CardGlow';
 
 // Cardiometric-health panel: resting HR, HRV, an estimated VO2max and HR
 // reserve, each with its recent trend. Self-fetches the same 28-day window as
@@ -90,7 +91,9 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
         : 'Vitals are steady. Use this with recovery and training load before pushing intensity.';
 
   return (
-    <div className="rounded-2xl p-4 overflow-hidden" style={{ background: 'linear-gradient(160deg,#1a1216 0%,#0f0d12 100%)', border: '1px solid rgba(248,113,113,0.14)', boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset' }}>
+    <div className="relative rounded-2xl p-4 overflow-hidden" style={{ background: 'linear-gradient(160deg,#1a1216 0%,#0f0d12 100%)', border: '1px solid rgba(248,113,113,0.14)', boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset' }}>
+      <CardGlow tone="#f87171" />
+      <div className="relative z-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -158,6 +161,7 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
           VO₂max is estimated from your peak HR seen so far. Do a hard session to sharpen it — no max-effort day is in this window yet.
         </p>
       )}
+      </div>
     </div>
   );
 };

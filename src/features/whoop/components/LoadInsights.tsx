@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, BarChart3, ShieldAlert } from 'lucide-react';
 import { whoopService, whoopWindowRange } from '../services/whoopService';
+import { CardGlow } from '../../../components/shared/CardGlow';
 import {
   buildDailyLoads, computeLoadMetrics, acwrZone, formZone, monotonyZone,
   type LoadMetrics,
@@ -82,7 +83,9 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
           : 'You are in the productive zone. Keep progression steady.';
 
   return (
-    <div className="rounded-2xl p-4 overflow-hidden" style={{ background: 'linear-gradient(160deg,#111821 0%,#090d13 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset' }}>
+    <div className="relative rounded-2xl p-4 overflow-hidden" style={{ background: 'linear-gradient(160deg,#111821 0%,#090d13 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset' }}>
+      <CardGlow tone={acwr?.color || '#4FC3F7'} />
+      <div className="relative z-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -157,6 +160,7 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
           {metrics.daysOfData} observed days. Accuracy improves after ~4 weeks.
         </p>
       )}
+      </div>
     </div>
   );
 };
