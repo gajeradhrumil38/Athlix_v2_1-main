@@ -132,6 +132,9 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
         <path d={path.area} fill="url(#vo2fill)" />
         <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
+      {/* left/right edge fades in the card colour so the plot melts into the BG */}
+      <div aria-hidden className="absolute inset-y-0 left-0 pointer-events-none" style={{ width: '13%', background: 'linear-gradient(90deg, #0d1420 0%, transparent 100%)' }} />
+      <div aria-hidden className="absolute inset-y-0 right-0 pointer-events-none" style={{ width: '13%', background: 'linear-gradient(270deg, #0d1420 0%, transparent 100%)' }} />
       {/* end marker as a real HTML circle — immune to the horizontal SVG stretch */}
       <span
         aria-hidden
