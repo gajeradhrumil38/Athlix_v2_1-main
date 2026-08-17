@@ -500,55 +500,43 @@ export const Settings: React.FC = () => {
   const initial = draftProfile?.full_name?.trim().charAt(0).toUpperCase() || 'A';
 
   return (
-    <div className="max-w-lg mx-auto space-y-4 pb-10 animate-fade-in">
-      <h1 className="text-[22px] font-bold text-[var(--text-primary)]">Settings</h1>
-
-      {/* ── Profile card ──────────────────────── */}
-      <SectionCard title="Profile">
-        {/* Avatar + info */}
-        <div className="px-5 py-5 flex items-center gap-4">
-          <div
-            className="h-14 w-14 rounded-2xl flex items-center justify-center text-[22px] font-bold shrink-0 border border-[var(--accent)]/25"
-            style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}
+    <div className="max-w-lg mx-auto space-y-4 pb-10 pt-1 animate-fade-in">
+      {/* ── Profile (headerless — the avatar + name make it self-evident) ── */}
+      <section className="glass-card p-5 flex items-center gap-4">
+        <div
+          className="h-14 w-14 rounded-2xl flex items-center justify-center text-[22px] font-bold shrink-0 border border-[var(--accent)]/25"
+          style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}
+        >
+          {initial}
+        </div>
+        <div className="flex-1 min-w-0">
+          {/* Name is edited in place — click it and type */}
+          <input
+            type="text"
+            value={draftProfile?.full_name || ''}
+            onChange={(e) => {
+              setDraftProfile({ ...draftProfile, full_name: e.target.value });
+              setNameChanged(true);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            onBlur={() => nameChanged && saveName()}
+            aria-label="Display name"
+            placeholder="Your name"
+            className="w-full bg-transparent text-[17px] font-semibold text-[var(--text-primary)] outline-none rounded-lg px-1.5 -mx-1.5 py-0.5 focus:bg-[var(--bg-elevated)] focus:ring-1 focus:ring-[var(--accent)]/40 transition-colors truncate"
+          />
+          <p className="text-[13px] text-[var(--text-muted)] truncate px-1.5 -mx-1.5 mt-0.5">{user?.email}</p>
+        </div>
+        {nameChanged && (
+          <button
+            onClick={saveName}
+            disabled={saving}
+            aria-label="Save name"
+            className="h-9 w-9 rounded-xl bg-[var(--accent)] text-black flex items-center justify-center shrink-0 disabled:opacity-40 transition-opacity"
           >
-            {initial}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[16px] font-semibold text-[var(--text-primary)] truncate">
-              {draftProfile?.full_name || 'Athlete'}
-            </p>
-            <p className="text-[13px] text-[var(--text-muted)] truncate">{user?.email}</p>
-          </div>
-        </div>
-
-        {/* Display name input */}
-        <div className="px-5 pb-5">
-          <label className="block text-[12px] font-medium text-[var(--text-muted)] mb-1.5">
-            Display name
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={draftProfile?.full_name || ''}
-              onChange={(e) => {
-                setDraftProfile({ ...draftProfile, full_name: e.target.value });
-                setNameChanged(true);
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && saveName()}
-              className="flex-1 h-10 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl px-3.5 text-[14px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]/60 transition-colors"
-              placeholder="Your name"
-            />
-            <button
-              onClick={saveName}
-              disabled={saving || !nameChanged}
-              className="h-10 px-4 rounded-xl bg-[var(--accent)] text-black text-[13px] font-bold flex items-center gap-1.5 disabled:opacity-40 transition-opacity"
-            >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              Save
-            </button>
-          </div>
-        </div>
-      </SectionCard>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          </button>
+        )}
+      </section>
 
       {/* ── Preferences ───────────────────────── */}
       <SectionCard title="Preferences">
