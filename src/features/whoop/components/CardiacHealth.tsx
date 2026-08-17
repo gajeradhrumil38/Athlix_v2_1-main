@@ -120,8 +120,8 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
           {/* left→right fade so the grid dissolves at both ends (no box edges) */}
           <linearGradient id="vo2gridFade" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#000" />
-            <stop offset="16%" stopColor="#fff" />
-            <stop offset="84%" stopColor="#fff" />
+            <stop offset="38%" stopColor="#fff" />
+            <stop offset="62%" stopColor="#fff" />
             <stop offset="100%" stopColor="#000" />
           </linearGradient>
           <mask id="vo2gridMask"><rect x="0" y="0" width={w} height={h} fill="url(#vo2gridFade)" /></mask>
