@@ -110,28 +110,41 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
   const rows = [0.28, 0.5, 0.72];
   const cols = [0.2, 0.4, 0.6, 0.8];
   return (
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="vo2fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={GREEN} stopOpacity="0.26" />
-          <stop offset="100%" stopColor={GREEN} stopOpacity="0" />
-        </linearGradient>
-        {/* radial fade so the grid melts out at the edges */}
-        <radialGradient id="vo2gridFade" cx="50%" cy="50%" r="62%">
-          <stop offset="0%" stopColor="#fff" />
-          <stop offset="58%" stopColor="#fff" />
-          <stop offset="100%" stopColor="#000" />
-        </radialGradient>
-        <mask id="vo2gridMask"><rect x="0" y="0" width={w} height={h} fill="url(#vo2gridFade)" /></mask>
-      </defs>
-      <g mask="url(#vo2gridMask)" opacity="0.11">
-        {rows.map((f, i) => <line key={`r${i}`} x1="0" y1={h * f} x2={w} y2={h * f} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-        {cols.map((f, i) => <line key={`c${i}`} x1={w * f} y1="0" x2={w * f} y2={h} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-      </g>
-      <path d={path.area} fill="url(#vo2fill)" />
-      <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={path.last[0]} cy={path.last[1]} r={3.5} fill={GREEN} />
-    </svg>
+    <div className="relative" style={{ width: '100%', height: h }}>
+      <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+        <defs>
+          <linearGradient id="vo2fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={GREEN} stopOpacity="0.26" />
+            <stop offset="100%" stopColor={GREEN} stopOpacity="0" />
+          </linearGradient>
+          {/* radial fade so the grid melts out at the edges */}
+          <radialGradient id="vo2gridFade" cx="50%" cy="50%" r="62%">
+            <stop offset="0%" stopColor="#fff" />
+            <stop offset="58%" stopColor="#fff" />
+            <stop offset="100%" stopColor="#000" />
+          </radialGradient>
+          <mask id="vo2gridMask"><rect x="0" y="0" width={w} height={h} fill="url(#vo2gridFade)" /></mask>
+        </defs>
+        <g mask="url(#vo2gridMask)" opacity="0.11">
+          {rows.map((f, i) => <line key={`r${i}`} x1="0" y1={h * f} x2={w} y2={h * f} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+          {cols.map((f, i) => <line key={`c${i}`} x1={w * f} y1="0" x2={w * f} y2={h} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+        </g>
+        <path d={path.area} fill="url(#vo2fill)" />
+        <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+      {/* end marker as a real HTML circle — immune to the horizontal SVG stretch */}
+      <span
+        aria-hidden
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          left: `${(path.last[0] / w) * 100}%`,
+          top: `${(path.last[1] / h) * 100}%`,
+          transform: 'translate(-50%,-50%)',
+          width: 8, height: 8, background: GREEN,
+          boxShadow: '0 0 0 2px #0c131d, 0 0 8px rgba(77,255,145,0.45)',
+        }}
+      />
+    </div>
   );
 };
 
