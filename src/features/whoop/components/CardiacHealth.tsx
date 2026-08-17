@@ -3,17 +3,27 @@ import { ArrowDown, ArrowUp, Heart, Minus } from 'lucide-react';
 import { whoopService, whoopWindowRange } from '../services/whoopService';
 import { computeCardiacHealth, type CardiacHealth as CardiacData } from '../services/cardiacHealth';
 import { CardGlow } from '../../../components/shared/CardGlow';
-import heartUrl from '../../../assets/anatomical-heart.svg';
+import heartUrl from '../../../assets/heart-real5.svg';
 
 // Cardiometric-health panel: resting HR, HRV, an estimated VO2max (with a trend
 // line) and HR reserve. Self-fetches the same 28-day window as the load card
 // (shared cache — one fetch). See services/cardiacHealth.ts.
 const WINDOW_DAYS = 28;
 
-const GREEN = '#4ade80';
-const RED = '#f87171';
-const BLUE = '#4FC3F7';
-const AMBER = '#fbbf24';
+// Athlix design-system app tokens (from the Dashboard Cards design).
+const GREEN = '#4dff91'; // --athlix-success
+const RED = '#ff8080';   // --athlix-error-soft
+const BLUE = '#4FC3F7';  // --athlix-ring-volume
+const AMBER = '#ffd54f'; // --athlix-warn
+
+// Plain-English explanations shown when a metric is tapped.
+const CARDIAC_INFO: Record<string, { title: string; text: string }> = {
+  vo2: { title: 'VO₂max', text: 'Your aerobic engine — how much oxygen your body can use when working hard. Higher means fitter, and it is one of the strongest predictors of long-term health. Estimated from your peak vs. resting heart rate.' },
+  resting: { title: 'Resting Heart Rate', text: 'Beats per minute when you are fully at rest. Lower is generally fitter. The trend matters most — a creeping rise over several days can signal stress, illness, or under-recovery.' },
+  hrv: { title: 'Heart Rate Variability', text: 'The tiny variation in time between heartbeats. Here more variation is better — it means your nervous system is relaxed and adaptable. It is the most sensitive "how recovered am I?" signal.' },
+  maxhr: { title: 'Max Heart Rate', text: 'The highest heart rate seen in this window, paired with resting HR to estimate VO₂max. If it came from an easy day rather than a hard effort, the VO₂max estimate is rougher.' },
+  reserve: { title: 'Heart-Rate Reserve', text: 'The gap between your resting and max heart rate. A wider gap means more room to work — a sign of a fitter heart.' },
+};
 
 const trendConfidenceMeta = {
   high: { label: 'Strong trend', color: GREEN },
@@ -46,8 +56,13 @@ const VitalTile: React.FC<{
   trend?: React.ReactNode;
   caption?: string;
   divider?: boolean;
-}> = ({ label, value, unit, color, trend, caption, divider }) => (
-  <div className="min-w-0" style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 9 } : undefined}>
+  onClick?: () => void;
+}> = ({ label, value, unit, color, trend, caption, divider, onClick }) => (
+  <div
+    className={`min-w-0${onClick ? ' cursor-pointer' : ''}`}
+    onClick={onClick}
+    style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 9 } : undefined}
+  >
     <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</span>
     <div className="flex items-baseline gap-0.5" style={{ marginTop: 5 }}>
       <span style={{ fontSize: 22, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.05 }}>
@@ -98,6 +113,7 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
 export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
   const [data, setData] = useState<CardiacData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [info, setInfo] = useState<{ title: string; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,8 +163,24 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
 
         {/* Hero: VO2max on anatomical-heart backdrop + VO2max trend */}
         <div className="flex items-stretch gap-3 mb-4">
-          <div className="relative flex flex-col items-center justify-center shrink-0" style={{ width: 116 }}>
-            <img src={heartUrl} alt="" aria-hidden className="absolute pointer-events-none" style={{ width: 104, height: 104, opacity: 0.5, filter: 'saturate(0.4)' }} />
+          <div
+            className="relative flex flex-col items-center justify-center shrink-0 cursor-pointer"
+            style={{ width: 116 }}
+            onClick={() => setInfo(CARDIAC_INFO.vo2)}
+          >
+            {/* heart-real5.svg as a mask, filled with the vital gradient */}
+            <div
+              aria-hidden
+              className="absolute pointer-events-none"
+              style={{
+                width: 94, height: 144, opacity: 0.6,
+                WebkitMaskImage: `url(${heartUrl})`, maskImage: `url(${heartUrl})`,
+                WebkitMaskSize: 'contain', maskSize: 'contain',
+                WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center', maskPosition: 'center',
+                background: `linear-gradient(160deg, ${RED} 0%, ${BLUE} 55%, ${GREEN} 100%)`,
+              }}
+            />
             <div className="relative flex flex-col items-center">
               <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. VO₂max</span>
               <span style={{ fontSize: 33, fontWeight: 900, color: data.vo2maxColor, lineHeight: 1, fontVariantNumeric: 'tabular-nums', textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>
@@ -178,10 +210,10 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
 
         {/* Vitals */}
         <div className="grid grid-cols-4 gap-2 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <VitalTile label="Resting HR" value={data.restingHr} unit="bpm" color={BLUE} trend={<Trend delta={data.restingHrDelta} goodDown />} />
-          <VitalTile label="HRV" value={data.hrv} unit="ms" color={AMBER} trend={<Trend delta={data.hrvDelta} unit="ms" />} divider />
-          <VitalTile label="Max HR" value={data.maxHr} unit="bpm" color={RED} caption={data.maxHrFromEffort ? 'from workout' : 'daily high'} divider />
-          <VitalTile label="HR reserve" value={data.hrReserve} unit="bpm" color={GREEN} caption="wider = fitter" divider />
+          <VitalTile label="Resting HR" value={data.restingHr} unit="bpm" color={BLUE} trend={<Trend delta={data.restingHrDelta} goodDown />} onClick={() => setInfo(CARDIAC_INFO.resting)} />
+          <VitalTile label="HRV" value={data.hrv} unit="ms" color={AMBER} trend={<Trend delta={data.hrvDelta} unit="ms" />} divider onClick={() => setInfo(CARDIAC_INFO.hrv)} />
+          <VitalTile label="Max HR" value={data.maxHr} unit="bpm" color={RED} caption={data.maxHrFromEffort ? 'from workout' : 'daily high'} divider onClick={() => setInfo(CARDIAC_INFO.maxhr)} />
+          <VitalTile label="HR reserve" value={data.hrReserve} unit="bpm" color={GREEN} caption="wider = fitter" divider onClick={() => setInfo(CARDIAC_INFO.reserve)} />
         </div>
 
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.58)', lineHeight: 1.45, marginTop: 16 }}>{advice}</p>
@@ -190,6 +222,22 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
           <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.34)', marginTop: 8, textAlign: 'center' }}>
             VO₂max is estimated from your peak HR seen so far. Do a hard session to sharpen it — no max-effort day is in this window yet.
           </p>
+        )}
+
+        {info && (
+          <div
+            onClick={() => setInfo(null)}
+            className="absolute flex items-center justify-center"
+            style={{ inset: -8, background: 'rgba(8,10,14,0.72)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', zIndex: 30, padding: 12, borderRadius: 20 }}
+          >
+            <div className="rounded-2xl" style={{ background: '#1a2030', border: '1px solid #1e2638', padding: '16px 18px', maxWidth: 260, boxShadow: '0 16px 40px rgba(0,0,0,0.55)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: 'white' }}>{info.title}</span>
+                <button type="button" onClick={() => setInfo(null)} aria-label="Close" style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.55)', fontSize: 17, lineHeight: 1, padding: 2 }}>✕</button>
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.5, color: 'rgba(255,255,255,0.62)' }}>{info.text}</div>
+            </div>
+          </div>
         )}
       </div>
     </div>

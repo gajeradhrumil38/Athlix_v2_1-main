@@ -27,6 +27,16 @@ const confidenceMeta = {
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
+// Plain-English explanations shown when a metric is tapped.
+const LOAD_INFO: Record<string, { title: string; text: string }> = {
+  acwr: { title: 'Acute : Chronic load', text: 'Your recent 7-day training vs. your usual 28-day baseline. Around 0.8–1.3 is the safe "matched" zone; much higher means you are ramping up faster than your body has adapted to (injury risk); much lower means you are backing off and losing fitness.' },
+  fitness: { title: 'Fitness (CTL)', text: 'Your built-up training base, a ~42-day average of load. It builds slowly and fades slowly — think of it as your savings account. Higher = fitter.' },
+  fatigue: { title: 'Fatigue (ATL)', text: 'Tiredness from your recent hard sessions, a ~7-day average. It builds fast and fades fast — like this week\'s credit-card balance.' },
+  form: { title: 'Form', text: 'Fitness minus Fatigue — how fresh you are right now. Positive means rested and ready to perform; negative means you are carrying fatigue (normal in a hard block); around zero is balanced.' },
+  monotony: { title: 'Monotony', text: 'How same-y your training is day to day. High monotony means every day looks alike — doing the same medium load daily is actually harder on your body than mixing truly easy and truly hard days.' },
+  strain: { title: 'Weekly strain', text: 'Foster\'s strain: your weekly load multiplied by monotony. It is the actual overtraining-risk number — high weekly strain plus high monotony flags elevated injury/illness risk.' },
+};
+
 // A single "keep an eye on this" alert, most-urgent first. Returns null when
 // nothing warrants attention (the amber pill is then hidden).
 function computeWatch(recovery: WhoopRecovery[], m: LoadMetrics): { text: string; color: string } | null {
@@ -110,6 +120,7 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
   const [metrics, setMetrics] = useState<LoadMetrics | null>(null);
   const [recovery, setRecovery] = useState<WhoopRecovery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [info, setInfo] = useState<{ title: string; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,7 +193,9 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
 
         {/* Hero: arc gauge + coverage / acute-load stats + legend */}
         <div className="flex items-start gap-3 mb-4">
-          <ArcGauge acwr={metrics.acwr} color={acwr?.color || BLUE} label={acwr?.label || '—'} show={metrics.hasAcwrBaseline} />
+          <div className="cursor-pointer" onClick={() => setInfo(LOAD_INFO.acwr)}>
+            <ArcGauge acwr={metrics.acwr} color={acwr?.color || BLUE} label={acwr?.label || '—'} show={metrics.hasAcwrBaseline} />
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex gap-4 mb-3.5">
               <div className="min-w-0">
@@ -259,15 +272,15 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
 
         {/* Fitness / Fatigue / Form */}
         <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <MetricCol label="Fitness" badge={{ text: 'CTL', color: BLUE }} value={metrics.ctl.toFixed(1)} caret={ctlDelta > 0 ? GREEN : undefined} tone="white" caption="42-day avg" />
-          <MetricCol label="Fatigue" badge={{ text: 'ATL', color: RED }} value={metrics.atl.toFixed(1)} tone="white" caption="7-day avg" divider />
-          <MetricCol label="Form" value={`${metrics.form > 0 ? '+' : ''}${metrics.form.toFixed(1)}`} caret={metrics.form > 0 ? (form?.color || GREEN) : undefined} tone={form?.color} caption="Fitness − Fatigue" divider />
+          <MetricCol label="Fitness" badge={{ text: 'CTL', color: BLUE }} value={metrics.ctl.toFixed(1)} caret={ctlDelta > 0 ? GREEN : undefined} tone="white" caption="42-day avg" onClick={() => setInfo(LOAD_INFO.fitness)} />
+          <MetricCol label="Fatigue" badge={{ text: 'ATL', color: RED }} value={metrics.atl.toFixed(1)} tone="white" caption="7-day avg" divider onClick={() => setInfo(LOAD_INFO.fatigue)} />
+          <MetricCol label="Form" value={`${metrics.form > 0 ? '+' : ''}${metrics.form.toFixed(1)}`} caret={metrics.form > 0 ? (form?.color || GREEN) : undefined} tone={form?.color} caption="Fitness − Fatigue" divider onClick={() => setInfo(LOAD_INFO.form)} />
         </div>
 
         {/* Monotony / Week strain */}
         <div className="grid grid-cols-2 gap-3 pt-4 mt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <MetricCol label="Monotony" value={metrics.monotony > 0 ? metrics.monotony.toFixed(2) : '—'} caret={metrics.monotony >= 2 ? RED : undefined} tone={mono?.color} caption={(mono?.label ?? '—').toLowerCase()} />
-          <MetricCol label="Week strain" value={metrics.weeklyStrain > 0 ? Math.round(metrics.weeklyStrain).toString() : '—'} caret={metrics.weeklyStrain >= 150 ? RED : undefined} tone={strain?.color} caption={(strain?.label ?? '—').toLowerCase()} divider />
+          <MetricCol label="Monotony" value={metrics.monotony > 0 ? metrics.monotony.toFixed(2) : '—'} caret={metrics.monotony >= 2 ? RED : undefined} tone={mono?.color} caption={(mono?.label ?? '—').toLowerCase()} onClick={() => setInfo(LOAD_INFO.monotony)} />
+          <MetricCol label="Week strain" value={metrics.weeklyStrain > 0 ? Math.round(metrics.weeklyStrain).toString() : '—'} caret={metrics.weeklyStrain >= 150 ? RED : undefined} tone={strain?.color} caption={(strain?.label ?? '—').toLowerCase()} divider onClick={() => setInfo(LOAD_INFO.strain)} />
         </div>
 
         {thin && (
@@ -275,6 +288,22 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
             <Activity className="w-3 h-3" />
             {metrics.daysOfData} observed days. Accuracy improves after ~4 weeks.
           </p>
+        )}
+
+        {info && (
+          <div
+            onClick={() => setInfo(null)}
+            className="absolute flex items-center justify-center"
+            style={{ inset: -8, background: 'rgba(8,10,14,0.72)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', zIndex: 30, padding: 12, borderRadius: 20 }}
+          >
+            <div className="rounded-2xl" style={{ background: '#1a2030', border: '1px solid #1e2638', padding: '16px 18px', maxWidth: 240, boxShadow: '0 16px 40px rgba(0,0,0,0.55)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: 'white' }}>{info.title}</span>
+                <button type="button" onClick={() => setInfo(null)} aria-label="Close" style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.55)', fontSize: 17, lineHeight: 1, padding: 2 }}>✕</button>
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.5, color: 'rgba(255,255,255,0.62)' }}>{info.text}</div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -289,8 +318,13 @@ const MetricCol: React.FC<{
   caret?: string;
   badge?: { text: string; color: string };
   divider?: boolean;
-}> = ({ label, value, tone = 'white', caption, caret, badge, divider }) => (
-  <div className="min-w-0" style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 11 } : undefined}>
+  onClick?: () => void;
+}> = ({ label, value, tone = 'white', caption, caret, badge, divider, onClick }) => (
+  <div
+    className={`min-w-0${onClick ? ' cursor-pointer' : ''}`}
+    onClick={onClick}
+    style={divider ? { borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: 11 } : undefined}
+  >
     <div className="flex items-center gap-1.5" style={{ marginBottom: 6 }}>
       <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       {badge && (
