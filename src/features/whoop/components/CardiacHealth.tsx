@@ -215,7 +215,7 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
               <span style={{ fontSize: 12.5, fontWeight: 800, color: data.vo2maxColor, marginTop: 3 }}>{data.vo2maxLabel}</span>
             </div>
           </div>
-          <div className="flex-1 min-w-0 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex-1 min-w-0 p-3" style={{ background: 'radial-gradient(120% 100% at 50% 45%, rgba(255,255,255,0.035) 0%, transparent 72%)' }}>
             <div className="flex items-center justify-between mb-1.5">
               <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>VO₂max trend</span>
               {vo2Vals.length >= 2 && vo2DeltaRounded !== 0 && (
