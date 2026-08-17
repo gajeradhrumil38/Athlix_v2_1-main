@@ -145,13 +145,13 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
         : 'Vitals are steady — factor this into recovery and training load before pushing intensity.';
 
   return (
-    <div className="relative rounded-2xl p-4 overflow-hidden" style={{ background: 'linear-gradient(160deg,#1a1216 0%,#0f0d12 100%)', border: '1px solid rgba(248,113,113,0.14)', boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset' }}>
-      <CardGlow tone={RED} />
+    <div className="relative rounded-2xl p-4 overflow-hidden" style={{ background: 'linear-gradient(160deg,#111821 0%,#090d13 100%)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset' }}>
+      <CardGlow tone="#54617a" />
       <div className="relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center rounded-xl shrink-0" style={{ width: 38, height: 38, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.2)' }}>
+            <span className="flex items-center justify-center rounded-xl shrink-0" style={{ width: 38, height: 38, background: 'rgba(120,140,170,0.12)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <Heart style={{ color: RED, width: 17, height: 17 }} />
             </span>
             <span style={{ fontSize: 17, fontWeight: 800, color: 'white', letterSpacing: '0.01em' }}>Cardiac Health</span>
@@ -173,12 +173,12 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
               aria-hidden
               className="absolute pointer-events-none"
               style={{
-                width: 94, height: 144, opacity: 0.6,
+                width: 94, height: 144, opacity: 0.16,
                 WebkitMaskImage: `url(${heartUrl})`, maskImage: `url(${heartUrl})`,
                 WebkitMaskSize: 'contain', maskSize: 'contain',
                 WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
                 WebkitMaskPosition: 'center', maskPosition: 'center',
-                background: `linear-gradient(160deg, ${RED} 0%, ${BLUE} 55%, ${GREEN} 100%)`,
+                background: 'linear-gradient(180deg, #ccd3dd 0%, #8692a4 100%)',
               }}
             />
             <div className="relative flex flex-col items-center">
