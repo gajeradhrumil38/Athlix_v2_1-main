@@ -89,22 +89,47 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
       const y = h - pad - ((v - min) / range) * (h - 2 * pad);
       return [x, y] as const;
     });
-    const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+    // Smooth the series with a Catmull-Rom → cubic-Bézier spline.
+    const smooth = (p: readonly (readonly [number, number])[]): string => {
+      let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
+      const t = 0.16; // tension: lower = tighter to the points
+      for (let i = 0; i < p.length - 1; i++) {
+        const p0 = p[i - 1] ?? p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] ?? p[i + 1];
+        const c1x = p1[0] + (p2[0] - p0[0]) * t, c1y = p1[1] + (p2[1] - p0[1]) * t;
+        const c2x = p2[0] - (p3[0] - p1[0]) * t, c2y = p2[1] - (p3[1] - p1[1]) * t;
+        d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+      }
+      return d;
+    };
+    const line = smooth(pts);
     const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
     return { line, area, last: pts[pts.length - 1] };
   }, [values]);
 
   if (!path) return <div style={{ height: h }} className="flex items-center justify-center"><span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Building trend…</span></div>;
+  const rows = [0.28, 0.5, 0.72];
+  const cols = [0.2, 0.4, 0.6, 0.8];
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
       <defs>
         <linearGradient id="vo2fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={GREEN} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={GREEN} stopOpacity="0.26" />
           <stop offset="100%" stopColor={GREEN} stopOpacity="0" />
         </linearGradient>
+        {/* radial fade so the grid melts out at the edges */}
+        <radialGradient id="vo2gridFade" cx="50%" cy="50%" r="62%">
+          <stop offset="0%" stopColor="#fff" />
+          <stop offset="58%" stopColor="#fff" />
+          <stop offset="100%" stopColor="#000" />
+        </radialGradient>
+        <mask id="vo2gridMask"><rect x="0" y="0" width={w} height={h} fill="url(#vo2gridFade)" /></mask>
       </defs>
+      <g mask="url(#vo2gridMask)" opacity="0.11">
+        {rows.map((f, i) => <line key={`r${i}`} x1="0" y1={h * f} x2={w} y2={h * f} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+        {cols.map((f, i) => <line key={`c${i}`} x1={w * f} y1="0" x2={w * f} y2={h} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+      </g>
       <path d={path.area} fill="url(#vo2fill)" />
-      <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={path.line} fill="none" stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       <circle cx={path.last[0]} cy={path.last[1]} r={3.5} fill={GREEN} />
     </svg>
   );
