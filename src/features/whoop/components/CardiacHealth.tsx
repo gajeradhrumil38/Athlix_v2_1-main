@@ -117,12 +117,13 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
             <stop offset="0%" stopColor={GREEN} stopOpacity="0.26" />
             <stop offset="100%" stopColor={GREEN} stopOpacity="0" />
           </linearGradient>
-          {/* radial fade so the grid melts out at the edges */}
-          <radialGradient id="vo2gridFade" cx="50%" cy="50%" r="62%">
-            <stop offset="0%" stopColor="#fff" />
-            <stop offset="58%" stopColor="#fff" />
+          {/* left→right fade so the grid dissolves at both ends (no box edges) */}
+          <linearGradient id="vo2gridFade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#000" />
+            <stop offset="16%" stopColor="#fff" />
+            <stop offset="84%" stopColor="#fff" />
             <stop offset="100%" stopColor="#000" />
-          </radialGradient>
+          </linearGradient>
           <mask id="vo2gridMask"><rect x="0" y="0" width={w} height={h} fill="url(#vo2gridFade)" /></mask>
         </defs>
         <g mask="url(#vo2gridMask)" opacity="0.11">
@@ -231,7 +232,7 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
               <span style={{ fontSize: 12.5, fontWeight: 800, color: data.vo2maxColor, marginTop: 3 }}>{data.vo2maxLabel}</span>
             </div>
           </div>
-          <div className="flex-1 min-w-0 p-3" style={{ background: 'radial-gradient(120% 100% at 50% 45%, rgba(255,255,255,0.035) 0%, transparent 72%)' }}>
+          <div className="flex-1 min-w-0 p-3">
             <div className="flex items-center justify-between mb-1.5">
               <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>VO₂max trend</span>
               {vo2Vals.length >= 2 && vo2DeltaRounded !== 0 && (
