@@ -19,6 +19,7 @@ import { Log } from './pages/Log';
 import { Timeline } from './pages/Timeline';
 import { Settings } from './pages/Settings';
 import { CoachDashboard } from './pages/CoachDashboard';
+import { TraineeDetail } from './pages/TraineeDetail';
 import { Progress } from './pages/Progress';
 import { DashboardLayoutEditor } from './pages/DashboardLayoutEditor';
 import { ActiveRun } from './features/running/pages/ActiveRun';
@@ -91,6 +92,7 @@ const AppRoutes = () => {
         <Route path="food/history" element={<FoodHistoryPage />} />
         <Route path="skincare" element={<SkincareRoutinePage />} />
         <Route path="coach" element={<CoachDashboard />} />
+        <Route path="coach/trainee/:id" element={<TraineeDetail />} />
       </Route>
     </Routes>
   );
