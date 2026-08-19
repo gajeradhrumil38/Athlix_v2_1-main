@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { AppIcon, IconName } from '../../config/icons';
 import { AiChat } from '../ai/AiChat';
 import { PostWorkoutCoachPill } from '../ai/PostWorkoutCoachPill';
+import { CoachInviteModal } from '../coach/CoachInviteModal';
 import { ProgressBar } from './ProgressBar';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -264,6 +265,9 @@ export const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+
+      {/* App-wide coaching-invite popup (registered users) */}
+      <CoachInviteModal />
 
       {/* ── AI Chat ──────────────────────────────────── */}
       {!isImmersiveRoute && <AiChat />}

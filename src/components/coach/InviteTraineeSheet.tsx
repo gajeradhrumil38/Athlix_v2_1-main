@@ -15,9 +15,15 @@ export const InviteTraineeSheet: React.FC<Props> = ({ open, onClose, onSent }) =
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<null | { registered: boolean; email: string }>(null);
+  const [copied, setCopied] = useState(false);
 
-  const reset = () => { setEmail(''); setError(''); setDone(false); setBusy(false); };
+  const reset = () => { setEmail(''); setError(''); setDone(null); setBusy(false); setCopied(false); };
+
+  const signupLink = typeof window !== 'undefined' ? `${window.location.origin}/signup` : '/signup';
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(signupLink); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ }
+  };
 
   const send = async () => {
     setBusy(true);
@@ -25,9 +31,15 @@ export const InviteTraineeSheet: React.FC<Props> = ({ open, onClose, onSent }) =
     const res = await inviteTrainee(email);
     setBusy(false);
     if (!res.ok) { setError(res.error || 'Could not send.'); return; }
-    setDone(true);
     onSent();
-    setTimeout(() => { onClose(); reset(); }, 1100);
+    // Registered → they get the in-app popup, auto-close. Not registered → hold
+    // the sheet open so the coach can copy the signup link to share.
+    if (res.registered) {
+      setDone({ registered: true, email: email.trim() });
+      setTimeout(() => { onClose(); reset(); }, 1300);
+    } else {
+      setDone({ registered: false, email: email.trim() });
+    }
   };
 
   return (
@@ -54,12 +66,42 @@ export const InviteTraineeSheet: React.FC<Props> = ({ open, onClose, onSent }) =
             </div>
 
             {done ? (
-              <div className="px-6 py-8 flex flex-col items-center gap-2">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'var(--accent)', color: '#000' }}>
-                  <AppIcon name="Check" size="lg" />
-                </span>
-                <p className="text-[17px] font-semibold text-[var(--text-primary)] mt-1">Invite sent</p>
-              </div>
+              done.registered ? (
+                <div className="px-6 py-8 flex flex-col items-center gap-2 text-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'var(--accent)', color: '#000' }}>
+                    <AppIcon name="Check" size="lg" />
+                  </span>
+                  <p className="text-[18px] font-bold text-[var(--text-primary)] mt-1">Invite sent</p>
+                  <p className="text-[14px] text-[var(--text-muted)]">They'll get a pop-up in their app to accept.</p>
+                </div>
+              ) : (
+                <div className="px-6 pt-4 pb-7 text-center">
+                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full mb-3" style={{ background: 'var(--bg-elevated)', color: 'var(--accent)' }}>
+                    <AppIcon name="Mail" size="lg" />
+                  </span>
+                  <p className="text-[18px] font-bold text-[var(--text-primary)]">Not on Athlix yet</p>
+                  <p className="text-[14px] text-[var(--text-secondary)] mt-1 leading-snug">
+                    <span className="text-[var(--text-primary)] font-medium">{done.email}</span> doesn't have an account. The invite is saved — the moment they sign up with this email, it'll pop up for them.
+                  </p>
+                  <p className="text-[13px] text-[var(--text-muted)] mt-3">Share the sign-up link so they can join:</p>
+                  <button
+                    type="button"
+                    onClick={copyLink}
+                    className="w-full h-12 mt-2 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-2"
+                    style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+                  >
+                    <AppIcon name={copied ? 'Check' : 'Forward'} size="sm" /> {copied ? 'Link copied' : 'Copy sign-up link'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); reset(); }}
+                    className="w-full h-12 mt-2 rounded-2xl font-bold text-[16px]"
+                    style={{ background: 'var(--accent)', color: '#000' }}
+                  >
+                    Done
+                  </button>
+                </div>
+              )
             ) : (
               <div className="px-6 pt-3 pb-6">
                 <input

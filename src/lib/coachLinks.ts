@@ -52,14 +52,31 @@ async function myDisplayName(uid: string): Promise<string | null> {
 
 // ── Trainer side ────────────────────────────────────────────────────
 
+// Whether an email already belongs to an Athlix account (drives the in-app
+// invite vs. "get them to sign up" messaging). Boolean only — no data leaks.
+export async function isEmailRegistered(email: string): Promise<boolean> {
+  const clean = email.trim().toLowerCase();
+  if (!clean) return false;
+  try {
+    const { data } = await supabase.rpc('email_is_registered', { p_email: clean });
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
 // Invite a trainee by email. Idempotent-ish: the unique index blocks a second
-// live invite to the same email, surfaced as a friendly error.
-export async function inviteTrainee(email: string): Promise<{ ok: boolean; error?: string }> {
+// live invite to the same email, surfaced as a friendly error. Returns whether
+// the invitee is already registered: if so they'll get the in-app popup; if not,
+// the pending invite waits and surfaces the moment they sign up with this email.
+export async function inviteTrainee(email: string): Promise<{ ok: boolean; error?: string; registered?: boolean }> {
   const u = await me();
   if (!u) return { ok: false, error: 'Not signed in.' };
   const clean = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return { ok: false, error: 'Enter a valid email.' };
   if (clean === (u.email ?? '').toLowerCase()) return { ok: false, error: "That's your own email." };
+
+  const registered = await isEmailRegistered(clean);
 
   const { error } = await supabase.from('coach_links').insert({
     trainer_id: u.id,
@@ -72,7 +89,7 @@ export async function inviteTrainee(email: string): Promise<{ ok: boolean; error
     if (error.code === '23505') return { ok: false, error: 'You already have a live invite for that email.' };
     return { ok: false, error: error.message };
   }
-  return { ok: true };
+  return { ok: true, registered };
 }
 
 // Every link this trainer created (pending + accepted + past).
