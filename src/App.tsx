@@ -71,8 +71,15 @@ const RedirectToStatic = ({ path }: { path: string }) => {
 // A coach's home IS their coaching dashboard — one clear dashboard per account,
 // no athlete/coach duplication. Trainers are redirected to /coach (so it renders
 // under its correctly-padded route); athletes get the normal Home.
+//
+// Critically, we must NOT render a dashboard until the role is actually known.
+// On refresh the SPA gets its session injected async, so there's a window where
+// `user` is set but `profile` is still loading (loading has already flipped
+// false from the prior sync) — rendering Home there and then redirecting a coach
+// to /coach caused an athlete→coach flash. Wait for the profile to resolve.
 const RoleHome = () => {
-  const { profile } = useAuth();
+  const { user, profile, loading } = useAuth();
+  if (loading || (user && !profile)) return <LoadingScreen />;
   return profile?.is_trainer ? <Navigate to="/coach" replace /> : <Home />;
 };
 
