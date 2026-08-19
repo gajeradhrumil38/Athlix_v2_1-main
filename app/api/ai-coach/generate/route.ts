@@ -12,8 +12,17 @@ const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 
 // Groq is primary (much larger free daily quota, very fast); Gemini is the
 // fallback. Each user can save their own Groq key (own quota, no shared-key
-// rate-limit); otherwise a single shared server key is used if present.
-const SHARED_GROQ_KEY = process.env.GROQ_API_KEY;
+// rate-limit); otherwise a shared server key pool is used.
+//
+// GROQ_API_KEY may be a single key OR a comma-separated pool. TPM rate limits
+// are per-account, so rotating across several shared keys multiplies the free
+// ceiling for the whole user base — the pragmatic stand-in for per-user keys
+// (Groq has no public API to mint one key per user). Order is preserved; the
+// first key is tried first, so a single-key deployment behaves exactly as before.
+const SHARED_GROQ_KEYS = (process.env.GROQ_API_KEY || '')
+  .split(',')
+  .map((k) => k.trim())
+  .filter(Boolean);
 // Model ladder: try the best model first, and on a rate-limit (429) or 5xx drop
 // to the next — so we use quality when there's TPM headroom and never hit the
 // wall. Primary openai/gpt-oss-120b (flagship open-weight, 131K ctx), fallback
@@ -44,60 +53,88 @@ export async function POST(req: NextRequest) {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // The user's own Groq key wins over the shared server key.
-  const groqKey = keyRow?.groq_api_key || SHARED_GROQ_KEY;
+  // The user's own Groq key wins over the shared pool (own quota, no shared-key
+  // rate-limit). Then the shared pool is rotated so one account's TPM ceiling
+  // isn't the whole app's ceiling. Deduped, in priority order.
+  const groqKeys = Array.from(new Set([keyRow?.groq_api_key, ...SHARED_GROQ_KEYS].filter(Boolean) as string[]));
 
   const { model, stream, ...body } = await req.json();
 
   // ── Groq (primary) — text-only. Image requests (food scanner) skip to Gemini
   // since Groq's text models can't see images.
-  if (groqKey && !containsImage(body.contents)) {
-    // Walk the model ladder. On a 429 (TPM/rate-limit) or 5xx, drop to the next
-    // (smaller, higher-limit) model instead of retrying the SAME one — retrying
-    // a 429 immediately just amplifies it. A clean 4xx (bad request) stops the
-    // ladder. First OK response wins (stream starts only after a 200).
+  if (groqKeys.length && !containsImage(body.contents)) {
+    // Rotate over (key × model). On a 429 (TPM/rate-limit) or 5xx, move on to
+    // the next model, then the next KEY — a different account has a fresh quota,
+    // which is the highest-value move for a rate limit. A retired model is
+    // skipped (Groq rotates them). A genuine 4xx (bad request) stops everything.
+    // First OK response wins (stream starts only after a 200).
     let groqErr: { status: number; message: string } | null = null;
-    for (const gmodel of GROQ_MODELS) {
-      const groqBody: Record<string, unknown> = { ...translateToGroq(body, gmodel), stream: !!stream };
-      if (stream) groqBody.stream_options = { include_usage: true };
-      try {
-        const gres = await fetch(GROQ_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-          body: JSON.stringify(groqBody),
-        });
+    let rateLimited = false;
+    let retryAfter = 0; // seconds Groq asked us to wait, if any
+    let badRequest = false;
 
-        if (gres.ok && gres.body) {
-          if (stream) return new Response(groqStreamToGemini(gres.body), { status: 200, headers: SSE_HEADERS });
-          return NextResponse.json(groqToGeminiResponse(await gres.json()));
+    outer:
+    for (const groqKey of groqKeys) {
+      for (const gmodel of GROQ_MODELS) {
+        const groqBody: Record<string, unknown> = { ...translateToGroq(body, gmodel), stream: !!stream };
+        if (stream) groqBody.stream_options = { include_usage: true };
+        try {
+          const gres = await fetch(GROQ_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+            body: JSON.stringify(groqBody),
+          });
+
+          if (gres.ok && gres.body) {
+            if (stream) return new Response(groqStreamToGemini(gres.body), { status: 200, headers: SSE_HEADERS });
+            return NextResponse.json(groqToGeminiResponse(await gres.json()));
+          }
+
+          const eb = await gres.json().catch(() => ({}));
+          groqErr = { status: gres.status, message: eb?.error?.message || `Groq error ${gres.status}` };
+
+          if (gres.status === 429) {
+            rateLimited = true;
+            // Honor Groq's own backoff hint (header or body) so the client can
+            // wait exactly long enough — no more, no less.
+            const hdr = Number(gres.headers.get('retry-after'));
+            const m = /try again in ([\d.]+)s/i.exec(groqErr.message);
+            const secs = Number.isFinite(hdr) && hdr > 0 ? hdr : m ? Math.ceil(Number(m[1])) : 0;
+            if (secs > retryAfter) retryAfter = secs;
+            continue; // next model, then next key
+          }
+          if (gres.status >= 500) continue; // transient upstream → next model/key
+          // A missing/inaccessible/retired model must NOT kill the request —
+          // Groq rotates models, so fall through. Only a genuine bad request stops.
+          const modelUnavailable =
+            gres.status === 404 ||
+            eb?.error?.code === 'model_not_found' ||
+            eb?.error?.code === 'model_decommissioned' ||
+            /does not exist|do not have access|model_not_found|decommission|deprecat|no longer|unavailable/i.test(groqErr.message);
+          if (modelUnavailable) continue;
+          badRequest = true;
+          break outer; // genuine 4xx bad request → don't try other models/keys
+        } catch (e) {
+          groqErr = { status: 502, message: e instanceof Error ? e.message : 'Groq request failed' };
+          continue; // network blip → try the next model/key
         }
-
-        const eb = await gres.json().catch(() => ({}));
-        groqErr = { status: gres.status, message: eb?.error?.message || `Groq error ${gres.status}` };
-        // A missing/inaccessible/retired model must NOT kill the request — Groq
-        // rotates models, so fall through to the next one in the ladder (and
-        // ultimately Gemini). Only a genuine bad-request (malformed prompt, etc.)
-        // stops the ladder.
-        const modelUnavailable =
-          gres.status === 404 ||
-          eb?.error?.code === 'model_not_found' ||
-          eb?.error?.code === 'model_decommissioned' ||
-          /does not exist|do not have access|model_not_found|decommission|deprecat|no longer|unavailable/i.test(groqErr.message);
-        if (gres.status === 429 || gres.status >= 500 || modelUnavailable) continue; // try the next model
-        break; // genuine 4xx bad request → don't try other models
-      } catch (e) {
-        groqErr = { status: 502, message: e instanceof Error ? e.message : 'Groq request failed' };
-        continue; // network blip → try the next model
       }
     }
 
-    // Groq failed after retries. Prefer the Gemini fallback if there's a key;
-    // otherwise surface Groq's REAL error (not a misleading "no key") so the
-    // failure is diagnosable instead of silent.
+    // Groq failed. Prefer the Gemini fallback if the user has a key; otherwise
+    // surface a diagnosable, actionable error. A rate limit is distinct from a
+    // hard failure: it carries RATE_LIMITED + retry_after so the client can
+    // auto-retry silently instead of dead-ending on "coach is busy".
     if (!keyRow?.gemini_api_key && groqErr) {
+      if (rateLimited && !badRequest) {
+        return NextResponse.json(
+          { error: { code: 'RATE_LIMITED', message: 'The coach is at its shared free-tier limit right now.', retry_after: retryAfter || undefined } },
+          { status: 429, headers: retryAfter ? { 'Retry-After': String(retryAfter) } : undefined },
+        );
+      }
       return NextResponse.json(
         { error: { code: 'PROVIDER_ERROR', message: `Coach service error — ${groqErr.message}` } },
-        { status: groqErr.status === 429 ? 429 : 502 },
+        { status: 502 },
       );
     }
   }

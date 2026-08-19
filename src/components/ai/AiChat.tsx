@@ -398,6 +398,7 @@ interface Message {
   loggedExercise?: { name: string; sets: number; reps: number; weight?: number; unit?: string };
   loggedStat?: LoggedStat;
   logRouting?: { added: number; missing: string[] };
+  keyCta?: boolean;               // render "add your own free Groq key" button
 }
 
 interface ApiUsage {
@@ -1846,6 +1847,41 @@ function instantOvertrainingAnswer(insights: InsightsContext | null): string | n
   }
   return `✅ **No — you're not overtraining.** Your load and recovery markers are in a healthy range, so you're clear to train as planned.${metricLine}`;
 }
+function isSleepDebtIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 70) return false;
+  return /\bsleep debt\b/.test(t) || /(how('?s| is| much)?).*(sleep)/.test(t) || /\bam i sleeping enough\b/.test(t) || /\bsleep(ing)? (bad|poor|enough|ok)\b/.test(t);
+}
+function instantSleepDebtAnswer(insights: InsightsContext | null): string | null {
+  const sd = insights?.sleep_debt;
+  if (!sd) return null;
+  const metric = `\n\n_Last night ${sd.last_night_hours}h vs ~${sd.need_hours}h need · ${sd.nights} nights tracked_`;
+  if (sd.debt_hours_7d >= 5) return `😴 **You're carrying ~${sd.debt_hours_7d}h of sleep debt this week** — that's enough to blunt recovery, mood and strength. Bank an extra 45–60 min the next few nights before adding hard training.${metric}`;
+  if (sd.debt_hours_7d >= 2) return `🟡 **About ~${sd.debt_hours_7d}h of sleep debt this week** — mild, but worth clearing. An earlier night or two puts you back to baseline.${metric}`;
+  return `✅ **Sleep's in good shape** — only ~${sd.debt_hours_7d}h debt this week, nothing that'll hold your training back.${metric}`;
+}
+function isStrainTargetIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 70) return false;
+  return /\b(strain (target|goal|should|today)|how (hard|much) should i (train|push|go)|target strain|how much strain)\b/.test(t);
+}
+function instantStrainTargetAnswer(insights: InsightsContext | null): string | null {
+  const st = insights?.strain_target;
+  if (!st) return null;
+  const cur = st.today != null ? ` You're at **${st.today}** so far — ${st.today < st.low ? 'room to push' : st.today > st.high ? 'ease off the gas' : "right in the zone"}.` : '';
+  return `🎯 **Aim for a strain of ${st.low}–${st.high} today** (your recovery is ${st.recovery}%, so that's the sweet spot between stimulus and dig-a-hole).${cur}`;
+}
+function isRecoveryForecastIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 70) return false;
+  return /\b(recovery forecast|how (will i|much will i) recover|recover(y)? tomorrow|will i (be )?recover|should i (train|rest) tomorrow)\b/.test(t);
+}
+function instantRecoveryForecastAnswer(insights: InsightsContext | null): string | null {
+  const f = insights?.recovery_forecast;
+  if (!f) return null;
+  const learning = f.blend_weight < 0.4 ? '\n\n_(Your personal model is still learning — this sharpens as you log more.)_' : '';
+  return `🔮 **Tomorrow's recovery forecast:**\n\n• Train the plan (~${f.planned_strain} strain) → **~${f.if_train}%**\n• Rest today → **~${f.if_rest}%**\n\nThat's a ${Math.max(0, f.if_rest - f.if_train)}-point trade for training today — usually worth it unless you're already dragging.${learning}`;
+}
 function instantWeekAnswer(workouts: WorkoutWithExercises[]): string {
   const now = Date.now();
   const week = workouts.filter((w) => (now - parseWorkoutDate(w.date).getTime()) <= 7 * 86_400_000);
@@ -2116,6 +2152,20 @@ export const AiChat: React.FC = () => {
         }
       }
 
+      // Other data-driven questions answered straight from today's insights —
+      // no LLM, no rate limit. Each falls through if its signal isn't available.
+      for (const answer of [
+        isSleepDebtIntent(text) ? instantSleepDebtAnswer(insights) : null,
+        isStrainTargetIntent(text) ? instantStrainTargetAnswer(insights) : null,
+        isRecoveryForecastIntent(text) ? instantRecoveryForecastAnswer(insights) : null,
+      ]) {
+        if (answer) {
+          setMessages((prev) => [...prev, { role: 'model', text: answer }]);
+          setLoading(false);
+          return;
+        }
+      }
+
       // Charts are computed client-side from logged data — they do NOT need the
       // LLM. Declared out here so if the model call rate-limits, the catch can
       // still show the chart (the whole point of a "plot X" request).
@@ -2210,6 +2260,18 @@ export const AiChat: React.FC = () => {
             }
             if (res.status === 400 && errMsg.includes('API_KEY')) {
               throw new Error('INVALID_KEY: Your API key is invalid. Check it in Settings.');
+            }
+            // Shared-pool rate limit. Auto-retry ONCE, silently, honoring the
+            // server's Retry-After (bounded so the UI never hangs); if it still
+            // fails, tag it RATE_LIMITED so the catch can offer the key CTA.
+            if (res.status === 429 && errBody?.error?.code === 'RATE_LIMITED') {
+              if (attempt < RETRY_DELAYS.length) {
+                const hinted = Number(errBody?.error?.retry_after) * 1000;
+                const waitMs = Math.min(Number.isFinite(hinted) && hinted > 0 ? hinted : RETRY_DELAYS[attempt], 8000);
+                await new Promise((r) => setTimeout(r, waitMs));
+                continue;
+              }
+              throw new Error('RATE_LIMITED: The coach is at its shared free-tier limit right now. Add your own free Groq key (30s) for your own quota, or try again in a moment.');
             }
             if (isOverloaded(res.status, errMsg) && attempt < RETRY_DELAYS.length) {
               await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
@@ -2350,6 +2412,17 @@ export const AiChat: React.FC = () => {
           return;
         }
         const raw: string = err?.message || 'Something went wrong.';
+        // After the silent auto-retry has already been spent, a rate limit is a
+        // dead-end unless the user gets their own quota — so offer that directly
+        // instead of "tap again", which just amplifies the shared-key limit.
+        if (raw.startsWith('RATE_LIMITED:')) {
+          setMessages((prev) => [...prev, {
+            role: 'model',
+            text: "⏳ The coach is at its shared free-tier limit right now. Add your own **free** Groq key for your own quota — takes about 30 seconds and it'll never happen again.",
+            keyCta: true,
+          }]);
+          return;
+        }
         const isRateLimit = /rate limit|too many requests|tokens per minute|\bTPM\b|try again in/i.test(raw);
         const display = isRateLimit
           ? "⏳ The coach is busy right now — give it a few seconds and tap send again."
@@ -3861,6 +3934,26 @@ const ChatContent: React.FC<ChatContentProps> = ({
 
                 {m.role === 'model' && m.chart && (
                   <CoachChartCard chart={m.chart} />
+                )}
+
+                {m.role === 'model' && m.keyCta && (
+                  <button
+                    type="button"
+                    onClick={onGoSettings}
+                    className="self-start inline-flex items-center gap-1.5 mt-1.5 transition-all active:scale-95"
+                    style={{
+                      padding: '8px 13px',
+                      borderRadius: 10,
+                      background: 'var(--accent)',
+                      border: 'none',
+                      color: '#000',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <SettingsIcon className="w-3.5 h-3.5" />
+                    Add my free Groq key
+                  </button>
                 )}
 
                 {m.role === 'model' && m.templateAction && (
