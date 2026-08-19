@@ -1256,33 +1256,33 @@ function getSuggestions(
   workouts: WorkoutWithExercises[],
   foodScans: FoodScan[],
   recentRuns: SavedRun[],
+  whoopData?: WhoopAllData | null,
+  insights?: InsightsContext | null,
 ): string[] {
-  const trainedToday = workouts.some((w) => calDaysSince(w.date) === 0);
   const hasFood = foodScans.length > 0;
   const hasRuns = recentRuns.length > 0;
+  const topLift = mostFrequentExerciseName(workouts);
+  const rec = whoopData?.recovery?.[0]?.recovery_score;
 
-  if (trainedToday) {
-    return [
-      hasFood ? "How are my macros looking today?" : 'My weight today is 78 kg',
-      'I stayed clean today',
-      'Any recovery tips for what I trained?',
-      hasRuns ? 'How is my running pace improving?' : 'What should I focus on next session?',
-    ];
+  // Contextual chips first — matched to the user's CURRENT state, and mapped to
+  // the instant (LLM-free) answers where possible so they respond immediately.
+  const chips: string[] = [];
+  if (rec != null && rec > 0 && rec < 40) chips.push('Should I rest today?');
+  if (insights?.overreaching && insights.overreaching.level !== 'ok') chips.push('Am I overtraining?');
+  if (insights?.sleep_debt && insights.sleep_debt.debt_hours_7d >= 3) chips.push('How bad is my sleep debt?');
+  chips.push('What should I train today?');
+  if (workouts.length > 0) chips.push("How's my week?");
+  if (topLift) chips.push(`Am I improving on ${topLift}?`);
+
+  // Fill the rest from sensible generic prompts (deduped, capped at 6).
+  const generic = workouts.length > 3
+    ? ['Which exercises am I plateauing on?', hasFood ? 'Am I hitting my protein goals?' : 'Log my weight as 75 kg', hasRuns ? "How's my weekly mileage?" : 'Which muscle am I neglecting?']
+    : ['What should I focus on this week?', hasFood ? 'How are my macros today?' : 'Log my weight as 80 kg', hasRuns ? 'Analyse my recent runs' : 'Give me a beginner plan.'];
+  for (const g of generic) {
+    if (chips.length >= 6) break;
+    if (!chips.includes(g)) chips.push(g);
   }
-  if (workouts.length > 3) {
-    return [
-      'Log my weight as 75 kg',
-      hasFood ? "Am I hitting my protein goals?" : 'I stayed strong today',
-      'Which exercises am I plateauing on?',
-      hasRuns ? "How's my weekly mileage?" : "How's my weekly volume looking?",
-    ];
-  }
-  return [
-    'My weight today is 80 kg',
-    'I stayed clean today',
-    'What should I train today?',
-    hasRuns ? 'Analyse my recent runs' : 'Give me a beginner plan.',
-  ];
+  return chips.slice(0, 6);
 }
 
 function mostFrequentExerciseName(workouts: WorkoutWithExercises[]): string | null {
@@ -1755,6 +1755,29 @@ function formatTrainingAnswer(rec: TrainingRecommendation): string {
   return lines.join('\n');
 }
 
+// Two more high-traffic questions that are fully answerable from logged data,
+// so they get an INSTANT, LLM-free answer (always correct, never rate-limits).
+function isImprovingLiftIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 90) return false;
+  return /\b(improv|progress(ing)?|getting (better|stronger|worse)|plateau(ed|ing)?)\b/.test(t)
+    || /\bhow('?s| is)\s+my\s+\w/.test(t); // "how's my bench / squat / …"
+}
+function isWeekRecapIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 80) return false;
+  return /\bhow('?s| is| are|'?re)?\s*(my|the)?\s*(week|training|workouts?)\b/.test(t)
+    || /\bhow am i doing\b/.test(t) || /\bthis week going\b/.test(t) || /\bweekly recap\b/.test(t);
+}
+function instantWeekAnswer(workouts: WorkoutWithExercises[]): string {
+  const now = Date.now();
+  const week = workouts.filter((w) => (now - parseWorkoutDate(w.date).getTime()) <= 7 * 86_400_000);
+  const sessions = new Set(week.map((w) => w.date)).size;
+  if (sessions === 0) return "You haven't logged a workout in the last 7 days — log a session and I'll break your week down.";
+  const totalSets = week.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (Number(e.sets) || 0), 0), 0);
+  return `**${sessions} session${sessions > 1 ? 's' : ''}** this week, **${totalSets} total sets**. Here's your weekly snapshot — tap a ring for detail.`;
+}
+
 /* ── Main AiChat component ─────────────────────────────────────────── */
 export const AiChat: React.FC = () => {
   const { user, profile } = useAuth();
@@ -1950,6 +1973,25 @@ export const AiChat: React.FC = () => {
             return;
           }
         } catch { /* engine unavailable — fall through to the LLM below */ }
+      }
+
+      // "Am I improving on <lift>?" → answer instantly from the exercise's own
+      // trend chart + a one-line verdict, no LLM. Only fires when a specific
+      // logged lift is found; otherwise falls through.
+      if (isImprovingLiftIntent(text)) {
+        const liftChart = buildExerciseVolumeChart(normWorkouts, text, displayUnit);
+        if (liftChart) {
+          setMessages((prev) => [...prev, { role: 'model', text: chartCaption(liftChart), chart: liftChart }]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // "How's my week?" → instant session/set summary + the weekly ring, no LLM.
+      if (isWeekRecapIntent(text)) {
+        setMessages((prev) => [...prev, { role: 'model', text: instantWeekAnswer(normWorkouts), chart: buildWeeklyRingChart(normWorkouts, whoopData) }]);
+        setLoading(false);
+        return;
       }
 
       // Charts are computed client-side from logged data — they do NOT need the
@@ -2537,7 +2579,7 @@ export const AiChat: React.FC = () => {
                 hasKey={!!hasKey}
                 dataReady={dataReady}
                 messages={messages}
-                suggestions={getSuggestions(workouts, foodScans, recentRuns)}
+                suggestions={getSuggestions(workouts, foodScans, recentRuns, whoopData, insights)}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
                 memory={memory}
                 streak={coachStreak(memory, workouts)}
@@ -2606,7 +2648,7 @@ export const AiChat: React.FC = () => {
                 hasKey={!!hasKey}
                 dataReady={dataReady}
                 messages={messages}
-                suggestions={getSuggestions(workouts, foodScans, recentRuns)}
+                suggestions={getSuggestions(workouts, foodScans, recentRuns, whoopData, insights)}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
                 memory={memory}
                 streak={coachStreak(memory, workouts)}
