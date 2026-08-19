@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, Tooltip, CartesianGrid, Cell,
+  ResponsiveContainer, AreaChart, Area, LineChart, Line,
+  XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
@@ -14,7 +14,6 @@ import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from 
 import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
 
 const ACCENT = '#c8ff00';
-const MUSCLE_COLORS = ['#c8ff00', '#4FC3F7', '#ff8080', '#ffd54f', '#b388ff', '#4dff91', '#ff9e6d', '#7fd7ff'];
 
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
@@ -135,9 +134,6 @@ export const TraineeDetail: React.FC = () => {
         <Section title="Training volume">
           {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
         </Section>
-        <Section title="Muscle focus">
-          {dash.workouts.shared ? <MuscleSplit workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
-        </Section>
         <Section title="Personal records">
           {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />}
         </Section>
@@ -198,6 +194,9 @@ const ReadinessRow: React.FC<{ dash: TraineeDashboard }> = ({ dash }) => {
 };
 
 /* ── Weekly headline stats ───────────────────────────────── */
+// "At a glance" — the three things a coach checks first: is this person still
+// active (last trained), training consistently (sessions this week), and how
+// much (sets). Shows even with zero workouts so a quiet trainee is obvious.
 const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
   const stat = useMemo(() => {
     if (!workouts) return null;
@@ -205,18 +204,29 @@ const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts
     const wk = workouts.filter((w) => now - parseDay(w.date) <= 7 * DAY);
     const sessions = new Set(wk.map((w) => w.date)).size;
     const sets = wk.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0), 0), 0);
-    return { sessions, sets };
+    const last = workouts.reduce((m, w) => Math.max(m, parseDay(w.date)), 0);
+    const daysAgo = last ? Math.floor((now - last) / DAY) : null;
+    return { sessions, sets, daysAgo };
   }, [workouts]);
   if (!stat) return null;
+
+  const lastLabel = stat.daysAgo == null ? '—' : stat.daysAgo === 0 ? 'Today' : stat.daysAgo === 1 ? '1d' : `${stat.daysAgo}d`;
+  // Flag a trainee who's gone quiet (no session in a week).
+  const stale = stat.daysAgo != null && stat.daysAgo >= 7;
+
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <Card className="text-center py-5">
-        <p className="text-[40px] font-bold leading-none text-[var(--text-primary)]">{stat.sessions}</p>
-        <p className="text-[13px] text-[var(--text-muted)] mt-1.5">sessions this week</p>
+    <div className="grid grid-cols-3 gap-3">
+      <Card className="text-center py-4">
+        <p className="text-[30px] font-bold leading-none" style={{ color: stale ? '#ff8080' : 'var(--text-primary)' }}>{lastLabel}</p>
+        <p className="text-[12px] text-[var(--text-muted)] mt-1.5">last trained</p>
       </Card>
-      <Card className="text-center py-5">
-        <p className="text-[40px] font-bold leading-none text-[var(--text-primary)]">{stat.sets}</p>
-        <p className="text-[13px] text-[var(--text-muted)] mt-1.5">total sets</p>
+      <Card className="text-center py-4">
+        <p className="text-[30px] font-bold leading-none text-[var(--text-primary)]">{stat.sessions}</p>
+        <p className="text-[12px] text-[var(--text-muted)] mt-1.5">this week</p>
+      </Card>
+      <Card className="text-center py-4">
+        <p className="text-[30px] font-bold leading-none text-[var(--text-primary)]">{stat.sets}</p>
+        <p className="text-[12px] text-[var(--text-muted)] mt-1.5">sets</p>
       </Card>
     </div>
   );
@@ -254,38 +264,6 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
           <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-secondary)' }} formatter={(v: any) => [`${v}`, 'Volume']} />
           <Area type="monotone" dataKey="vol" stroke={ACCENT} strokeWidth={2.5} fill="url(#volFill)" />
         </AreaChart>
-      </ResponsiveContainer>
-    </Card>
-  );
-};
-
-/* ── Muscle split ────────────────────────────────────────── */
-const MuscleSplit: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => {
-  const data = useMemo(() => {
-    const now = Date.now();
-    const map = new Map<string, number>();
-    for (const w of workouts) {
-      if (now - parseDay(w.date) > 28 * DAY) continue;
-      for (const e of w.exercises || []) {
-        const m = (e.muscle_group || 'Other').trim();
-        map.set(m, (map.get(m) || 0) + (e.sets || 0));
-      }
-    }
-    return [...map.entries()].map(([name, sets]) => ({ name, sets })).sort((a, b) => b.sets - a.sets).slice(0, 8);
-  }, [workouts]);
-  if (!data.length) return <Card><Empty text="No exercises in the last 4 weeks." /></Card>;
-  return (
-    <Card>
-      <p className="text-[12px] text-[var(--text-muted)] mb-2">Sets per muscle · last 4 weeks</p>
-      <ResponsiveContainer width="100%" height={Math.max(150, data.length * 30)}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
-          <XAxis type="number" hide />
-          <YAxis type="category" dataKey="name" width={80} tick={{ fill: 'var(--text-secondary)', fontSize: 13 }} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--bg-elevated)' }} formatter={(v: any) => [`${v} sets`, '']} />
-          <Bar dataKey="sets" radius={[0, 6, 6, 0]}>
-            {data.map((_, i) => <Cell key={i} fill={MUSCLE_COLORS[i % MUSCLE_COLORS.length]} />)}
-          </Bar>
-        </BarChart>
       </ResponsiveContainer>
     </Card>
   );
