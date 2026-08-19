@@ -154,9 +154,12 @@ export const Layout: React.FC = () => {
           </span>
         </div>
 
-        {/* Nav links */}
+        {/* Nav links — trainers get a Coach entry right after Home */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => (
+          {(profile?.is_trainer
+            ? [navItems[0], { path: '/coach', icon: 'Coach' as IconName, label: 'Coach' }, ...navItems.slice(1)]
+            : navItems
+          ).map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

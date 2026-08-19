@@ -32,6 +32,10 @@ export interface LocalProfile {
   height_feet: number | null;
   height_inches: number | null;
   created_at: string;
+  // Trainer role (coaching feature). Optional — absent on legacy/local profiles.
+  is_trainer?: boolean;
+  trainer_display_name?: string | null;
+  trainer_bio?: string | null;
 }
 
 export interface LocalWorkout {
