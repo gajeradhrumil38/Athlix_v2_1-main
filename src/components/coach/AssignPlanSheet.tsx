@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
+import { Stepper } from '../shared/Stepper';
 import { ExercisePicker } from '../log/ExercisePicker';
 import { assignPlan, type NewPlanExercise } from '../../lib/assignedPlans';
 
-// Trainer builds a plan: a name + exercises picked from the SAME searchable
-// catalog the athlete uses, each with sets/reps/weight. Big fields, one Assign.
+// Trainer builds a program: exercises picked from the SAME searchable catalog the
+// athlete uses, each prescribed with sets / reps / weight / rest via the shared
+// Stepper, reorderable, then assigned in one tap.
 interface Props { open: boolean; traineeId: string; traineeName: string; onClose: () => void; onAssigned: () => void; }
 
-type Row = { name: string; sets: string; reps: string; weight: string };
+type Row = { name: string; sets: number; reps: number; weight: number; rest: number };
 
 export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, onClose, onAssigned }) => {
   const [title, setTitle] = useState('');
@@ -20,16 +22,21 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   const reset = () => { setTitle(''); setRows([]); setError(''); setBusy(false); setPicking(false); };
   const close = () => { onClose(); reset(); };
 
-  const update = (i: number, k: keyof Row, v: string) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+  const set = (i: number, k: keyof Row, v: number) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
   const removeRow = (i: number) => setRows((p) => p.filter((_, idx) => idx !== i));
+  const move = (i: number, dir: -1 | 1) => setRows((p) => {
+    const j = i + dir;
+    if (j < 0 || j >= p.length) return p;
+    const next = [...p]; [next[i], next[j]] = [next[j], next[i]]; return next;
+  });
   const addExercise = (name: string, sets?: number, reps?: number) =>
-    setRows((p) => [...p, { name, sets: String(sets || 3), reps: String(reps || 10), weight: '' }]);
+    setRows((p) => [...p, { name, sets: sets || 3, reps: reps || 10, weight: 0, rest: 90 }]);
 
   const submit = async () => {
     setBusy(true); setError('');
     const exercises: NewPlanExercise[] = rows
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name, sets: Number(r.sets), reps: Number(r.reps), weight: Number(r.weight) }));
+      .map((r) => ({ name: r.name, sets: r.sets, reps: r.reps, weight: r.weight, rest: r.rest }));
     const res = await assignPlan(traineeId, { title, exercises });
     setBusy(false);
     if (!res.ok) { setError(res.error || 'Could not assign.'); return; }
@@ -75,17 +82,27 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 <div className="space-y-3">
                   {rows.map((r, i) => (
                     <div key={i} className="rounded-2xl p-3" style={{ background: 'var(--bg-elevated)' }}>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="shrink-0 text-[12px] font-bold w-5 text-center text-[var(--text-muted)]">{i + 1}</span>
                         <p className="flex-1 text-[16px] font-semibold text-[var(--text-primary)] truncate">{r.name}</p>
+                        <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--text-secondary)] disabled:opacity-25">
+                          <AppIcon name="ExpandDown" size="sm" /><span className="sr-only">up</span>
+                        </button>
+                        <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label="Move down"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--text-secondary)] disabled:opacity-25 rotate-180">
+                          <AppIcon name="ExpandDown" size="sm" />
+                        </button>
                         <button type="button" onClick={() => removeRow(i)} aria-label="Remove"
-                          className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
+                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
                           <AppIcon name="Trash" size="sm" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 mt-2">
-                        <NumField label="Sets" value={r.sets} onChange={(v) => update(i, 'sets', v)} />
-                        <NumField label="Reps" value={r.reps} onChange={(v) => update(i, 'reps', v)} />
-                        <NumField label="Weight" value={r.weight} onChange={(v) => update(i, 'weight', v)} />
+                      <div className="grid grid-cols-2 gap-2 mt-2.5">
+                        <Stepper label="Sets" value={r.sets} min={1} max={20} onChange={(v) => set(i, 'sets', v)} />
+                        <Stepper label="Reps" value={r.reps} min={1} max={100} onChange={(v) => set(i, 'reps', v)} />
+                        <Stepper label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
+                        <Stepper label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
                       </div>
                     </div>
                   ))}
@@ -133,16 +150,3 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     </AnimatePresence>
   );
 };
-
-const NumField: React.FC<{ label: string; value: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
-  <div>
-    <label className="block text-[11px] font-medium text-[var(--text-muted)] mb-1 px-1">{label}</label>
-    <input
-      inputMode="numeric"
-      value={value}
-      onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))}
-      className="w-full h-11 rounded-xl px-3 text-[16px] text-center outline-none"
-      style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-    />
-  </div>
-);
