@@ -86,9 +86,18 @@ export default function SignupPage() {
         setLoading(false);
         return;
       }
-      setErrorMessage(message.includes('network') || message.includes('fetch')
-        ? 'Connection issue. Please try again.'
-        : 'Unable to create your account right now. Please try again.');
+      // A 429 / email-send-rate-limit is NOT a broken account — surface it
+      // honestly so the user waits instead of hammering "Create account".
+      const isRateLimit = (error as { status?: number }).status === 429
+        || error.code === 'over_email_send_rate_limit'
+        || message.includes('rate limit');
+      setErrorMessage(
+        isRateLimit
+          ? 'Too many sign-up attempts right now. Please wait a few minutes and try again — and check your inbox, an earlier confirmation email may already be waiting.'
+          : message.includes('network') || message.includes('fetch')
+            ? 'Connection issue. Please try again.'
+            : 'Unable to create your account right now. Please try again.',
+      );
       setLoading(false);
       return;
     }
