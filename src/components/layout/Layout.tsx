@@ -5,6 +5,7 @@ import { AppIcon, IconName } from '../../config/icons';
 import { AiChat } from '../ai/AiChat';
 import { PostWorkoutCoachPill } from '../ai/PostWorkoutCoachPill';
 import { CoachInviteModal } from '../coach/CoachInviteModal';
+import { AssignedPlanModal } from '../coach/AssignedPlanModal';
 import { ProgressBar } from './ProgressBar';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -266,8 +267,9 @@ export const Layout: React.FC = () => {
         </div>
       </main>
 
-      {/* App-wide coaching-invite popup (registered users) */}
+      {/* App-wide coaching popups: pending invites + newly-assigned plans */}
       <CoachInviteModal />
+      <AssignedPlanModal />
 
       {/* ── AI Chat ──────────────────────────────────── */}
       {!isImmersiveRoute && <AiChat />}

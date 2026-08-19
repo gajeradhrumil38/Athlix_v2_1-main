@@ -44,7 +44,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
           className="fixed inset-0 z-[70] flex items-end justify-center"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={close}
-          style={{ background: 'rgba(0,0,0,0.6)' }}
+          style={{ background: 'rgba(3,5,9,0.94)' }}
         >
           <motion.div
             className="w-full max-w-md rounded-t-3xl overflow-hidden flex flex-col"

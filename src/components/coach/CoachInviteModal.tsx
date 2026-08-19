@@ -65,7 +65,7 @@ export const CoachInviteModal: React.FC = () => {
           <motion.div
             className="fixed inset-0 z-[80] flex items-center justify-center px-5"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ background: 'rgba(0,0,0,0.66)' }}
+            style={{ background: '#05070b' }}
           >
             <motion.div
               className="w-full max-w-[380px] rounded-3xl overflow-hidden"
