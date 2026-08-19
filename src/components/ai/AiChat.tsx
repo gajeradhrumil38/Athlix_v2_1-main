@@ -19,7 +19,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus, RotateCcw, Pencil } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus, RotateCcw, Pencil, Mic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { format, subDays } from 'date-fns';
@@ -1267,6 +1267,7 @@ function getSuggestions(
   // Contextual chips first — matched to the user's CURRENT state, and mapped to
   // the instant (LLM-free) answers where possible so they respond immediately.
   const chips: string[] = [];
+  chips.push("Today's briefing");
   if (rec != null && rec > 0 && rec < 40) chips.push('Should I rest today?');
   if (insights?.overreaching && insights.overreaching.level !== 'ok') chips.push('Am I overtraining?');
   if (insights?.sleep_debt && insights.sleep_debt.debt_hours_7d >= 3) chips.push('How bad is my sleep debt?');
@@ -1769,6 +1770,11 @@ function isWeekRecapIntent(text: string): boolean {
   return /\bhow('?s| is| are|'?re)?\s*(my|the)?\s*(week|training|workouts?)\b/.test(t)
     || /\bhow am i doing\b/.test(t) || /\bthis week going\b/.test(t) || /\bweekly recap\b/.test(t);
 }
+function isBriefingIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 70) return false;
+  return /\b(brief|briefing|my (daily )?summary|catch me up|what'?s my (day|status|plan)|today'?s? (plan|briefing|summary|status)|morning (report|briefing))\b/.test(t);
+}
 function instantWeekAnswer(workouts: WorkoutWithExercises[]): string {
   const now = Date.now();
   const week = workouts.filter((w) => (now - parseWorkoutDate(w.date).getTime()) <= 7 * 86_400_000);
@@ -1992,6 +1998,31 @@ export const AiChat: React.FC = () => {
         setMessages((prev) => [...prev, { role: 'model', text: instantWeekAnswer(normWorkouts), chart: buildWeeklyRingChart(normWorkouts, whoopData) }]);
         setLoading(false);
         return;
+      }
+
+      // "Today's briefing" → instant, LLM-free fusion of readiness + what to
+      // train + one key insight, from the engine + models.
+      if (isBriefingIntent(text)) {
+        try {
+          const rec = await getTodayTrainingRecommendation(false);
+          if (rec) {
+            const tierWord = rec.readiness_tier === 'green' ? 'ready to push'
+              : rec.readiness_tier === 'yellow' ? 'controlled — quality over volume'
+              : rec.readiness_tier === 'red' ? 'a recovery day' : 'estimated (no fresh WHOOP)';
+            const recPct = whoopData?.recovery?.[0]?.recovery_score;
+            const lines = ['**Today at a glance**'];
+            lines.push(`• Readiness: **${tierWord}**${recPct ? ` (recovery ${recPct}%)` : ''}.`);
+            lines.push(`• Train: **${rec.title}** — ${rec.intensity}${rec.muscles?.length ? ` · ${rec.muscles.slice(0, 3).join(' · ')}` : ''}.`);
+            if (insights?.sleep_debt && insights.sleep_debt.debt_hours_7d >= 3) lines.push(`• Heads-up: ~${insights.sleep_debt.debt_hours_7d}h sleep debt this week — protect sleep.`);
+            else if (insights?.overreaching && insights.overreaching.level !== 'ok') lines.push(`• Watch: ${insights.overreaching.flags.join('; ')}.`);
+            else if (insights?.recovery_forecast) lines.push(`• Do the plan → ~${insights.recovery_forecast.if_train}% recovery tomorrow; rest → ~${insights.recovery_forecast.if_rest}%.`);
+            else if (rec.strain_insight && rec.strain_insight.blend_weight >= 0.4) lines.push(`• Last session cost ${rec.strain_insight.actual_strain} strain — ${rec.strain_insight.verdict}.`);
+            lines.push('\n_Tap the Train Today card to start._');
+            setMessages((prev) => [...prev, { role: 'model', text: lines.join('\n') }]);
+            setLoading(false);
+            return;
+          }
+        } catch { /* engine unavailable — fall through to the LLM */ }
       }
 
       // Charts are computed client-side from logged data — they do NOT need the
@@ -3231,6 +3262,50 @@ const ExerciseQuickForm: React.FC<{
 };
 
 /* ── Inner chat content (shared between mobile sheet + desktop modal) ─ */
+// Voice input — Web Speech API, transcribes speech straight into the input.
+// Renders nothing where the browser doesn't support it (graceful).
+const VoiceButton: React.FC<{ onTranscript: (t: string) => void; disabled?: boolean }> = ({ onTranscript, disabled }) => {
+  const [listening, setListening] = useState(false);
+  const recogRef = useRef<{ stop: () => void; start: () => void } | null>(null);
+  const SR = typeof window !== 'undefined'
+    ? ((window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition
+      || (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition)
+    : undefined;
+  if (!SR) return null;
+  const toggle = () => {
+    if (listening) { recogRef.current?.stop(); return; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = new (SR as any)();
+    r.lang = 'en-US'; r.interimResults = true; r.continuous = false;
+    let finalText = '';
+    r.onresult = (e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const txt = res[0].transcript;
+        if (res.isFinal) finalText += txt; else interim += txt;
+      }
+      onTranscript((finalText + interim).trim());
+    };
+    r.onend = () => { setListening(false); recogRef.current = null; };
+    r.onerror = () => { setListening(false); recogRef.current = null; };
+    recogRef.current = r;
+    try { r.start(); setListening(true); } catch { setListening(false); }
+  };
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={disabled}
+      aria-label={listening ? 'Stop voice input' : 'Voice input'}
+      className="flex items-center justify-center shrink-0 disabled:opacity-35 active:scale-95 transition-all"
+      style={{ width: 44, height: 44, borderRadius: 8, border: 'none', background: listening ? 'var(--accent)' : 'var(--bg-elevated)', cursor: 'pointer' }}
+    >
+      <Mic className="w-4 h-4" style={{ color: listening ? '#000' : 'var(--text-secondary)' }} />
+    </button>
+  );
+};
+
 interface ChatContentProps {
   hasKey: boolean;
   dataReady: boolean;
@@ -3978,6 +4053,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
               }}
             />
           </div>
+          <VoiceButton onTranscript={onInput} disabled={loading || !dataReady} />
           <button
             onClick={onSend}
             disabled={loading || !input.trim() || !dataReady}
