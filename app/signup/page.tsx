@@ -33,6 +33,7 @@ export default function SignupPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
+  const [accountType, setAccountType] = useState<'athlete' | 'coach'>('athlete');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -71,7 +72,10 @@ export default function SignupPage() {
       email: sanitizedEmail,
       password,
       options: {
-        data: { full_name: sanitizedName },
+        // is_trainer is read by the handle_new_user DB trigger to seed the
+        // profile — self-serve coach signup is safe because a coach sees nothing
+        // until a trainee accepts an invite and chooses what to share.
+        data: { full_name: sanitizedName, is_trainer: accountType === 'coach' },
         emailRedirectTo,
       },
     });
@@ -211,6 +215,36 @@ export default function SignupPage() {
           )}
 
           <form onSubmit={handleSignup} noValidate className="space-y-4">
+            {/* Account type — athlete vs coach */}
+            <div>
+              <span className="brand-label">{"I'm signing up as"}</span>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { key: 'athlete', label: 'Athlete', hint: 'Track my training' },
+                  { key: 'coach', label: 'Coach', hint: 'Train other people' },
+                ] as const).map((opt) => {
+                  const active = accountType === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setAccountType(opt.key)}
+                      disabled={loading}
+                      aria-pressed={active}
+                      className="rounded-xl px-3 py-2.5 text-left transition-colors disabled:opacity-50"
+                      style={{
+                        background: active ? '#C8FF00' : '#1a1a1a',
+                        border: `1px solid ${active ? '#C8FF00' : '#2a2a2a'}`,
+                      }}
+                    >
+                      <span className="block text-[15px] font-bold" style={{ color: active ? '#0a0a0a' : '#f0f0f0' }}>{opt.label}</span>
+                      <span className="block text-[12px]" style={{ color: active ? 'rgba(10,10,10,0.7)' : '#888' }}>{opt.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Full name */}
             <div>
               <label htmlFor="full-name" className="brand-label">Full name</label>
