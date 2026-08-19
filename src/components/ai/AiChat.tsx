@@ -72,6 +72,7 @@ import {
   type ChatSession,
   type StoredChatMessage,
   getSessions,
+  loadSessions,
   resolveActiveSession,
   startFreshSession,
   persistActiveMessages,
@@ -1888,9 +1889,18 @@ export const AiChat: React.FC = () => {
   useEffect(() => {
     if (!user?.id || hydratedForUser.current === user.id) return;
     hydratedForUser.current = user.id;
-    const active = resolveActiveSession(user.id);
-    setActiveSessionId(active.id);
-    if (active.messages.length) setMessages(active.messages as unknown as Message[]);
+    let cancelled = false;
+    (async () => {
+      // Pull the user's chat history from the cloud into the cache first, then
+      // resolve today's active session and hydrate its messages.
+      await loadSessions(user.id);
+      if (cancelled) return;
+      const active = resolveActiveSession(user.id);
+      setActiveSessionId(active.id);
+      if (active.messages.length) setMessages(active.messages as unknown as Message[]);
+      setSessions(getSessions(user.id));
+    })();
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   useEffect(() => {

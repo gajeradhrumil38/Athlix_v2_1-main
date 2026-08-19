@@ -1,10 +1,13 @@
 import { format } from 'date-fns';
+import { supabase } from './supabase';
 
 // Durable chat-session history for the AI coach. A "session" is one day's
-// conversation: opening the coach on a new day starts a fresh session, and past
-// days are kept in a list so the user can scroll back through them from the
-// history menu. Stored in localStorage (survives tab close / day change, unlike
-// the old per-tab sessionStorage blob), keyed per user.
+// conversation. Stored in the CLOUD (public.coach_chat_sessions, one row per
+// session) so it follows the user across devices and is never kept on-device.
+// The client holds only an in-memory cache (source of truth is Supabase);
+// loadSessions() hydrates it on chat open and every write upserts to the cloud.
+// All cloud calls degrade gracefully — if the table is unreachable the coach
+// still works with in-memory sessions for the current app session.
 //
 // Messages are stored loosely (StoredChatMessage) to avoid a circular import
 // with the AiChat Message type — the component casts on the way in and out.
@@ -16,7 +19,7 @@ export interface StoredChatMessage {
 }
 
 export interface ChatSession {
-  id: string;          // unique per session (usually the date; +suffix for extra same-day sessions)
+  id: string;          // unique per session
   date: string;        // yyyy-MM-dd it started
   title: string;       // subject line — the first user message, trimmed
   messages: StoredChatMessage[];
@@ -24,10 +27,13 @@ export interface ChatSession {
 }
 
 const MAX_SESSIONS = 40;
-const listKey = (uid?: string | null) => `athlix:coach_sessions:${uid || 'anon'}`;
-const activeKey = (uid?: string | null) => `athlix:coach_active:${uid || 'anon'}`;
 const todayIso = () => format(new Date(), 'yyyy-MM-dd');
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+
+// ── In-memory cache (no on-device persistence) ─────────────────────
+let cache: ChatSession[] = [];
+let cacheUid: string | null = null;
+let activeId: string | null = null;
 
 export function deriveTitle(messages: StoredChatMessage[]): string {
   const firstUser = messages.find((m) => m.role === 'user' && String(m.text || '').trim());
@@ -37,59 +43,65 @@ export function deriveTitle(messages: StoredChatMessage[]): string {
   return clean.length > 46 ? `${clean.slice(0, 46)}…` : clean;
 }
 
-export function getSessions(uid?: string | null): ChatSession[] {
+// Hydrate the cache from the cloud. Call once when the chat opens.
+export async function loadSessions(uid?: string | null): Promise<ChatSession[]> {
+  if (!uid) { cache = []; cacheUid = null; activeId = null; return []; }
+  cacheUid = uid;
   try {
-    const raw = localStorage.getItem(listKey(uid));
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as ChatSession[];
-    return Array.isArray(arr) ? arr : [];
+    const { data } = await supabase
+      .from('coach_chat_sessions')
+      .select('session_id, date, title, messages, updated_at')
+      .eq('user_id', uid)
+      .order('updated_at', { ascending: false })
+      .limit(MAX_SESSIONS);
+    cache = (data ?? []).map((r) => {
+      const row = r as { session_id: string; date: string; title: string; messages: unknown; updated_at: string };
+      return {
+        id: row.session_id,
+        date: row.date,
+        title: row.title,
+        messages: Array.isArray(row.messages) ? (row.messages as StoredChatMessage[]) : [],
+        updatedAt: row.updated_at,
+      };
+    });
   } catch {
-    return [];
+    // Table missing / offline — operate in-memory for this app session.
   }
+  return cache;
 }
 
-function writeSessions(uid: string | null | undefined, sessions: ChatSession[]) {
-  try { localStorage.setItem(listKey(uid), JSON.stringify(sessions.slice(0, MAX_SESSIONS))); } catch { /* ignore */ }
+export function getSessions(uid?: string | null): ChatSession[] {
+  if (uid && cacheUid && uid !== cacheUid) return [];
+  return cache;
 }
 
-function getActiveId(uid?: string | null): string | null {
-  try { return localStorage.getItem(activeKey(uid)); } catch { return null; }
+export function setActiveSession(_uid: string | null | undefined, id: string) {
+  activeId = id;
 }
 
-export function setActiveSession(uid: string | null | undefined, id: string) {
-  try { localStorage.setItem(activeKey(uid), id); } catch { /* ignore */ }
-}
-
-// The session we should be showing right now. If the active session is missing
-// or belongs to an earlier day, a fresh empty session for today is created and
-// made active (this is the "new session per day" behaviour).
-export function resolveActiveSession(uid?: string | null): ChatSession {
-  const sessions = getSessions(uid);
-  const activeId = getActiveId(uid);
-  const active = sessions.find((s) => s.id === activeId);
+// The session to show right now. If the active one is missing or from an
+// earlier day, a fresh empty session for today is created and made active.
+export function resolveActiveSession(_uid?: string | null): ChatSession {
+  const active = cache.find((s) => s.id === activeId);
   if (active && active.date === todayIso()) return active;
-
-  // Start a fresh session for today.
   const fresh: ChatSession = { id: newId(), date: todayIso(), title: 'New chat', messages: [], updatedAt: new Date().toISOString() };
-  writeSessions(uid, [fresh, ...sessions]);
-  setActiveSession(uid, fresh.id);
+  cache = [fresh, ...cache].slice(0, MAX_SESSIONS);
+  activeId = fresh.id;
   return fresh;
 }
 
 // Force a brand-new session (the "New chat" action), even mid-day.
-export function startFreshSession(uid?: string | null): ChatSession {
-  const sessions = getSessions(uid).filter((s) => s.messages.length > 0); // drop empty leftovers
+export function startFreshSession(_uid?: string | null): ChatSession {
+  cache = cache.filter((s) => s.messages.length > 0); // drop empty leftovers
   const fresh: ChatSession = { id: newId(), date: todayIso(), title: 'New chat', messages: [], updatedAt: new Date().toISOString() };
-  writeSessions(uid, [fresh, ...sessions]);
-  setActiveSession(uid, fresh.id);
+  cache = [fresh, ...cache].slice(0, MAX_SESSIONS);
+  activeId = fresh.id;
   return fresh;
 }
 
-// Persist the current messages into the active session (upsert), refreshing its
-// title + timestamp and floating it to the top of the list.
+// Persist the active session's messages: update the cache and upsert to cloud.
 export function persistActiveMessages(uid: string | null | undefined, id: string, messages: StoredChatMessage[]) {
-  const sessions = getSessions(uid);
-  const existing = sessions.find((s) => s.id === id);
+  const existing = cache.find((s) => s.id === id);
   const updated: ChatSession = {
     id,
     date: existing?.date || todayIso(),
@@ -97,13 +109,20 @@ export function persistActiveMessages(uid: string | null | undefined, id: string
     messages,
     updatedAt: new Date().toISOString(),
   };
-  const rest = sessions.filter((s) => s.id !== id);
-  writeSessions(uid, [updated, ...rest]);
+  cache = [updated, ...cache.filter((s) => s.id !== id)].slice(0, MAX_SESSIONS);
+  if (!uid) return;
+  supabase
+    .from('coach_chat_sessions')
+    .upsert(
+      { user_id: uid, session_id: id, date: updated.date, title: updated.title, messages, updated_at: updated.updatedAt },
+      { onConflict: 'user_id,session_id' },
+    )
+    .then(() => {}, () => {}); // fire-and-forget; failures are non-fatal
 }
 
 export function deleteSession(uid: string | null | undefined, id: string) {
-  writeSessions(uid, getSessions(uid).filter((s) => s.id !== id));
-  if (getActiveId(uid) === id) {
-    try { localStorage.removeItem(activeKey(uid)); } catch { /* ignore */ }
-  }
+  cache = cache.filter((s) => s.id !== id);
+  if (activeId === id) activeId = null;
+  if (!uid) return;
+  supabase.from('coach_chat_sessions').delete().eq('user_id', uid).eq('session_id', id).then(() => {}, () => {});
 }
