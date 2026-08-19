@@ -1821,6 +1821,31 @@ function isBriefingIntent(text: string): boolean {
   if (t.length > 70) return false;
   return /\b(brief|briefing|my (daily )?summary|catch me up|what'?s my (day|status|plan)|today'?s? (plan|briefing|summary|status)|morning (report|briefing))\b/.test(t);
 }
+function isOvertrainingIntent(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.length > 70) return false;
+  return /\b(overtrain(ing|ed)?|overreach(ing|ed)?|over ?training|training too (much|hard)|doing too much|need (a |to )?rest|burn(ing|t|ed) out|burnout|am i recovered|pushing too hard)\b/.test(t);
+}
+// "Am I overtraining?" → answer instantly from the overreaching early-warning
+// insight (ACWR / HRV-CV / RHR), no LLM — so this common question never hits a
+// rate limit. Returns null when there's no WHOOP-derived signal to judge from,
+// so the caller falls through to the LLM.
+function instantOvertrainingAnswer(insights: InsightsContext | null): string | null {
+  const or = insights?.overreaching;
+  if (!or) return null;
+  const metrics: string[] = [];
+  if (or.acwr != null) metrics.push(`ACWR ${or.acwr} (sweet spot 0.8–1.3)`);
+  if (or.hrv_cv != null) metrics.push(`HRV variability ${or.hrv_cv}%`);
+  if (or.rhr_delta) metrics.push(`resting HR ${or.rhr_delta > 0 ? '+' : ''}${or.rhr_delta} bpm vs baseline`);
+  const metricLine = metrics.length ? `\n\n_${metrics.join(' · ')}_` : '';
+  if (or.level === 'high') {
+    return `⚠️ **Yes — your body is flashing warning signs.**\n\n${or.flags.map((f) => `• ${f}`).join('\n')}\n\nBack off for 1–2 days: swap a hard session for a recovery day or easy Zone-2, and prioritise sleep. Re-check once your recovery trends back up.${metricLine}`;
+  }
+  if (or.level === 'watch') {
+    return `🟡 **Not overtrained, but a couple of early signs to watch.**\n\n${or.flags.map((f) => `• ${f}`).join('\n')}\n\nYou're fine to train — just keep intensity honest to how you feel and don't stack another overreach on top. Protect sleep tonight.${metricLine}`;
+  }
+  return `✅ **No — you're not overtraining.** Your load and recovery markers are in a healthy range, so you're clear to train as planned.${metricLine}`;
+}
 function instantWeekAnswer(workouts: WorkoutWithExercises[]): string {
   const now = Date.now();
   const week = workouts.filter((w) => (now - parseWorkoutDate(w.date).getTime()) <= 7 * 86_400_000);
@@ -2078,6 +2103,17 @@ export const AiChat: React.FC = () => {
             return;
           }
         } catch { /* engine unavailable — fall through to the LLM */ }
+      }
+
+      // "Am I overtraining?" → answer instantly from the overreaching insight
+      // (no LLM, no rate limit). Falls through when there's no WHOOP signal.
+      if (isOvertrainingIntent(text)) {
+        const answer = instantOvertrainingAnswer(insights);
+        if (answer) {
+          setMessages((prev) => [...prev, { role: 'model', text: answer }]);
+          setLoading(false);
+          return;
+        }
       }
 
       // Charts are computed client-side from logged data — they do NOT need the
