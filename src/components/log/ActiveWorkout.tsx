@@ -657,6 +657,49 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     addExerciseInFlightRef.current = false;
   }, [showExercisePicker]);
 
+  // Seed pre-loaded exercises (e.g. a Train Today plan) that arrived with empty
+  // sets and no history — with the user's previous-session values, the same
+  // prefill a manually-added exercise gets. Runs once on mount.
+  const planSeededRef = useRef(false);
+  useEffect(() => {
+    if (planSeededRef.current || !user) return;
+    planSeededRef.current = true;
+    const bare = workout.exercises.filter((ex) => !ex.lastSession && ex.sets.every((s) => !s.done && !s.weight && !s.reps));
+    if (!bare.length) return;
+    let cancelled = false;
+    (async () => {
+      for (const ex of bare) {
+        try {
+          const resp = await getLastExerciseSession(user.id, ex.name);
+          const fetched = resp?.lastSession as {
+            date: string; sets: number; reps: number; weight: number; unit?: string;
+            totalVolume?: number; perSetData?: { weight: number; reps: number }[];
+          } | null | undefined;
+          if (!fetched || cancelled) continue;
+          const inputType = resolveEffectiveInputType(ex.name, typeOverrides);
+          const fromUnit: WeightUnit = (fetched.unit as WeightUnit) ?? weightUnit;
+          const toDisplay = (w: number) => convertWeight(Number(w) || 0, fromUnit, weightUnit);
+          const clampW = (w: number) => inputType === 'reps_only' ? 0 : inputType === 'time_only' ? Math.max(0, Math.min(120, w)) : Math.max(0, Math.min(9999, w));
+          const clampR = (r: number) => Math.max(0, Math.min(999, Number(r) || 0));
+          const perSet = (fetched as { perSetData?: { weight: number; reps: number }[] }).perSetData;
+          const seeded = (perSet && perSet.length)
+            ? perSet.map((s) => { const w = clampW(toDisplay(s.weight)); const r = clampR(s.reps); return { id: createSetId(), weight: w, reps: r, done: false, planned_weight: inputType === 'reps_only' ? null : w, planned_reps: r }; })
+            : Array.from({ length: Math.max(1, Math.min(20, Number(fetched.sets) || 1)) }, () => { const w = clampW(toDisplay(fetched.weight)); const r = clampR(fetched.reps); return { id: createSetId(), weight: w, reps: r, done: false, planned_weight: inputType === 'reps_only' ? null : w, planned_reps: r }; });
+          setWorkout((prev) => prev ? {
+            ...prev,
+            exercises: prev.exercises.map((e) => {
+              if (e.id !== ex.id) return e;
+              if (!e.sets.every((s) => !s.done && !s.weight && !s.reps)) return e; // user already touched it
+              return { ...e, sets: seeded, lastSession: { date: fetched.date, sets: fetched.sets, reps: fetched.reps, weight: fetched.weight, unit: (fetched.unit as WeightUnit) ?? weightUnit, totalVolume: fetched.totalVolume } };
+            }),
+          } : null);
+        } catch { /* no history — leave the exercise empty */ }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleClearPrefill = () => {
     const exercise = workout.exercises[activeIndex];
     if (!exercise) return;

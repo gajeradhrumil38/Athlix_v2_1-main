@@ -964,7 +964,17 @@ async function generateRecommendation(sb: any, userId: string, forceWhoop: boole
   }, { onConflict: 'user_id,model_name' }).then(({ error }: any) => { if (error) console.error('preference model upsert failed:', error.message); });
 
   const ranked = scoreCandidates(createCandidates(muscleState), muscleState, readiness, load, pref.weights);
-  const best = ranked[0] ?? createCandidates(muscleState)[0];
+  let best = ranked[0] ?? createCandidates(muscleState)[0];
+
+  // New user with no logged training: every muscle is equally "due", so the
+  // scorer would pick the same day-type every day. Rotate push→pull→legs by
+  // date instead, so a beginner gets a varied, balanced intro to build on.
+  if (gym.length === 0 && readiness.tier !== 'red') {
+    const rotation: RecType[] = ['push', 'pull', 'legs'];
+    const dayNum = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / 86_400_000);
+    const pick = rotation[((dayNum % rotation.length) + rotation.length) % rotation.length];
+    best = ranked.find((c) => c.type === pick) ?? best;
+  }
   const intensity = pickIntensity(best.type, readiness, load);
   const exercises = adjustExercises(best.type, intensity);
   const confidence = confidenceScore(whoop, gym, load);

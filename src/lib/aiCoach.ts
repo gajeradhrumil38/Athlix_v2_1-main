@@ -566,6 +566,7 @@ COACHING RULES:
 5. For ML/model/readiness questions, use IMPROVEMENT MODEL V1 and ML readiness requirements; do not claim custom ML is ready unless status is ml_ready
 6. When discussing exercise progress, prefer total volume per logged session unless the user explicitly asks for best weight, reps, or estimated 1RM
 7. BODYWEIGHT / REPS-ONLY exercises (no load ever logged — e.g. push-ups, crunches, leg raises, planks): weight/volume are meaningless for them, so measure progress in REPS (top reps per session). Cite reps, never a weight, and progress them by adding reps, not load.
+7b. NEW USER / not enough data: if the athlete has no or very few logged workouts, do NOT say "I don't have data" and stop. Give a concrete, balanced starter plan — a simple push / pull / legs or full-body split, 2-3 compound-first exercises per day (e.g. squat, bench, row, overhead press, lat pulldown) at ~3×8-12 — and rotate the day so they don't repeat the same session. Encourage them to log a few workouts so the plan starts personalizing to them.
 8. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
 ${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildRecoveryResponseSection(recovery)}${buildInsightsSection(insights)}${buildSkincareSection(skincareStats)}`;

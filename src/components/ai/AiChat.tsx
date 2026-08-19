@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { aiCoachFetch } from '../../lib/aiCoachFetch';
+import { convertWeight, type WeightUnit } from '../../lib/units';
+import { resolveExerciseInputType } from '../../lib/exerciseTypes';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Area,
@@ -484,6 +486,25 @@ function findExerciseNameForChart(workouts: WorkoutWithExercises[], text: string
 
 type ExerciseMetricKey = 'weight' | 'e1rm' | 'reps' | 'volume';
 
+// Older sets are stored in the unit they were LOGGED in (kg or lbs), so a chart
+// or aggregation that reads ex.weight raw and labels it in the display unit will
+// show e.g. a 2.5kg set as "2.5 lbs". Normalise every set to ONE display unit up
+// front so all downstream maths + labels are consistent and correct.
+function normalizeWorkoutUnits(workouts: WorkoutWithExercises[], to: WeightUnit): WorkoutWithExercises[] {
+  return workouts.map((w) => {
+    if (!w.exercises || !w.exercises.length) return w;
+    return {
+      ...w,
+      exercises: w.exercises.map((ex) => {
+        const from: WeightUnit = ex.unit === 'kg' ? 'kg' : 'lbs';
+        const weight = Number(ex.weight) || 0;
+        if (from === to || weight <= 0) return ex.unit === to ? ex : { ...ex, unit: to };
+        return { ...ex, weight: convertWeight(weight, from, to), unit: to };
+      }),
+    };
+  });
+}
+
 // Pick the y-axis metric from the user's wording. Default is the heaviest set,
 // the most intuitive "am I getting stronger" line — the query can switch it to
 // estimated 1RM, total reps, or tonnage.
@@ -509,10 +530,15 @@ function buildExerciseVolumeChart(workouts: WorkoutWithExercises[], text: string
   // is the "am I getting stronger" signal for these.
   const allSets = workouts.flatMap((w) => (w.exercises || []).filter((ex) => ex.name.toLowerCase() === lowerName));
   const hasWeight = allSets.some((ex) => (Number(ex.weight) || 0) > 0);
-  const repsPeak = !hasWeight;
-  const metric = hasWeight
-    ? pickExerciseMetric(text, unit)
-    : { key: 'reps' as ExerciseMetricKey, label: 'reps', sub: 'Top reps per session' };
+  // A reps-only exercise (pull-ups, plank, yoga…) charts REPS, not weight — use
+  // the exercise's canonical input type so a stray/optional weight can't flip it
+  // to a meaningless weight plot. Also fall back to reps when nothing weighted
+  // has been logged yet.
+  const isRepsOnly = resolveExerciseInputType(exerciseName) === 'reps_only';
+  const repsPeak = isRepsOnly || !hasWeight;
+  const metric = repsPeak
+    ? { key: 'reps' as ExerciseMetricKey, label: 'reps', sub: 'Top reps per session' }
+    : pickExerciseMetric(text, unit);
   const isPeak = metric.key === 'weight' || metric.key === 'e1rm' || repsPeak;
   const points = new Map<string, number>();
 
@@ -1742,6 +1768,10 @@ export const AiChat: React.FC = () => {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [dataReady, setDataReady] = useState(false);
   const [workouts, setWorkouts] = useState<WorkoutWithExercises[]>([]);
+  // Every weight the coach reasons about (charts, prompt, plan prefill) is
+  // normalised to the user's display unit, so kg-logged sets never surface as lbs.
+  const displayUnit: WeightUnit = profile?.unit_preference === 'kg' ? 'kg' : 'lbs';
+  const normWorkouts = useMemo(() => normalizeWorkoutUnits(workouts, displayUnit), [workouts, displayUnit]);
   const [prs, setPrs] = useState<LocalPersonalRecord[]>([]);
   const [foodScans, setFoodScans] = useState<FoodScan[]>([]);
   const [recentRuns, setRecentRuns] = useState<SavedRun[]>([]);
@@ -1923,25 +1953,25 @@ export const AiChat: React.FC = () => {
       let suggestedChart: CoachChart | undefined;
 
       try {
-        const systemPrompt = buildSystemPrompt(profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id), strainCost, recovery, insights);
+        const systemPrompt = buildSystemPrompt(profile, normWorkouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id), strainCost, recovery, insights);
         // Route the chart off the user's CURRENT message only — not the whole
         // recent window — so words from earlier turns (e.g. the coach mentioning
         // "recovery") don't hijack a fresh "plot my volume" request.
         const chartIntentText = text;
         responseChart = buildCoachChart(
           chartIntentText,
-          workouts,
+          normWorkouts,
           foodScans,
           recentRuns,
           whoopData,
-          profile?.unit_preference || 'lbs',
+          displayUnit,
         );
         suggestedChart = responseChart ? undefined : buildSuggestedCoachChart(
           chartIntentText,
-          workouts,
+          normWorkouts,
           foodScans,
           recentRuns,
-          profile?.unit_preference || 'lbs',
+          displayUnit,
         );
 
         // Explicit "plot / chart / show me the trend" request → the chart is
@@ -2163,7 +2193,7 @@ export const AiChat: React.FC = () => {
         setLoading(false);
       }
     },
-    [input, loading, hasKey, model, profile, workouts, prs, foodScans, recentRuns, whoopData, skincareStats, strainCost, recovery, insights, messages, user?.id, navigate],
+    [input, loading, hasKey, model, profile, workouts, normWorkouts, displayUnit, prs, foodScans, recentRuns, whoopData, skincareStats, strainCost, recovery, insights, messages, user?.id, navigate],
   );
 
   // Actually send a hand-off question once the seeded insight message has
@@ -2369,35 +2399,35 @@ export const AiChat: React.FC = () => {
   // Most-recent logged weight per exercise, so a prescribed weighted move with
   // no weight can still show a real number ("· last") instead of an empty box.
   const exerciseWeights: WeightMap = {};
-  for (const w of [...workouts].sort((a, b) => parseWorkoutDate(b.date).getTime() - parseWorkoutDate(a.date).getTime())) {
-    for (const ex of w.exercises || []) {
-      const key = ex.name.toLowerCase();
-      const weight = Number(ex.weight) || 0;
-      if (weight > 0 && !exerciseWeights[key]) exerciseWeights[key] = { weight, unit: ex.unit || 'lb' };
-    }
-  }
-
-  // Per-exercise mini history for inline sparklines on plan cards: top value per
-  // session (weight if it's a weighted lift, else reps), oldest→newest, last 8.
-  const exerciseSparks: Record<string, number[]> = {};
-  {
-    const byEx: Record<string, { weighted: boolean; perDate: Map<string, number> }> = {};
-    for (const w of workouts) {
+    for (const w of [...normWorkouts].sort((a, b) => parseWorkoutDate(b.date).getTime() - parseWorkoutDate(a.date).getTime())) {
       for (const ex of w.exercises || []) {
         const key = ex.name.toLowerCase();
         const weight = Number(ex.weight) || 0;
-        const reps = Number(ex.reps) || 0;
-        const rec = (byEx[key] ||= { weighted: false, perDate: new Map() });
-        if (weight > 0) rec.weighted = true;
-        const v = weight > 0 ? weight : reps;
-        rec.perDate.set(w.date, Math.max(rec.perDate.get(w.date) || 0, v));
+        if (weight > 0 && !exerciseWeights[key]) exerciseWeights[key] = { weight, unit: ex.unit || 'lb' };
       }
     }
-    for (const [key, { perDate }] of Object.entries(byEx)) {
-      const series = [...perDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((e) => e[1]).slice(-8);
-      if (series.length >= 3) exerciseSparks[key] = series;
+
+    // Per-exercise mini history for inline sparklines on plan cards: top value per
+    // session (weight if it's a weighted lift, else reps), oldest→newest, last 8.
+    const exerciseSparks: Record<string, number[]> = {};
+    {
+      const byEx: Record<string, { weighted: boolean; perDate: Map<string, number> }> = {};
+      for (const w of normWorkouts) {
+        for (const ex of w.exercises || []) {
+          const key = ex.name.toLowerCase();
+          const weight = Number(ex.weight) || 0;
+          const reps = Number(ex.reps) || 0;
+          const rec = (byEx[key] ||= { weighted: false, perDate: new Map() });
+          if (weight > 0) rec.weighted = true;
+          const v = weight > 0 ? weight : reps;
+          rec.perDate.set(w.date, Math.max(rec.perDate.get(w.date) || 0, v));
+        }
+      }
+      for (const [key, { perDate }] of Object.entries(byEx)) {
+        const series = [...perDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((e) => e[1]).slice(-8);
+        if (series.length >= 3) exerciseSparks[key] = series;
+      }
     }
-  }
 
   // A measurable goal is only completed once the LOGGED work actually reaches
   // its target — never on creation, never by a premature tap. Reconciles when
