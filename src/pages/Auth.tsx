@@ -37,6 +37,7 @@ export const Auth: React.FC = () => {
   const nameRef = useRef<HTMLInputElement>(null);
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signup');
+  const [accountType, setAccountType] = useState<'athlete' | 'coach'>('athlete');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -157,8 +158,8 @@ export const Auth: React.FC = () => {
 
     try {
       if (isSignUp) {
-        await signUpLocal(trimmedEmail, trimmedPassword, trimmedName || trimmedEmail.split('@')[0]);
-        setSuccess('Account created — welcome to Athlix!');
+        await signUpLocal(trimmedEmail, trimmedPassword, trimmedName || trimmedEmail.split('@')[0], accountType === 'coach');
+        setSuccess(accountType === 'coach' ? 'Coach account created — welcome to Athlix!' : 'Account created — welcome to Athlix!');
       } else {
         await signInLocal(trimmedEmail, trimmedPassword);
         setSuccess('Welcome back!');
@@ -423,6 +424,46 @@ export const Auth: React.FC = () => {
                     className="h-11 w-full rounded-xl border border-white/10 bg-[var(--bg-elevated)] px-3.5 text-[14px] text-white/90 outline-none placeholder:text-white/20 transition-colors focus:border-[var(--accent)]/60 focus:ring-0 disabled:opacity-50"
                     style={inputStyle}
                   />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Account type (sign-up only) — athlete vs coach */}
+            <AnimatePresence initial={false}>
+              {isSignUp && (
+                <motion.div
+                  key="accounttype"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <label className="mb-1.5 block text-[12px] font-medium text-white/50">I'm signing up as</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { key: 'athlete', label: 'Athlete', hint: 'Track my training' },
+                      { key: 'coach', label: 'Coach', hint: 'Train other people' },
+                    ] as const).map((opt) => {
+                      const active = accountType === opt.key;
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => { setAccountType(opt.key); if (error) setError(null); }}
+                          disabled={loading}
+                          className="rounded-xl px-3 py-2.5 text-left transition-colors disabled:opacity-50"
+                          style={{
+                            background: active ? 'var(--accent)' : 'var(--bg-elevated)',
+                            border: `1px solid ${active ? 'var(--accent)' : 'rgba(255,255,255,0.10)'}`,
+                          }}
+                        >
+                          <span className="block text-[15px] font-bold" style={{ color: active ? '#000' : 'rgba(255,255,255,0.9)' }}>{opt.label}</span>
+                          <span className="block text-[11px] mt-0.5" style={{ color: active ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.4)' }}>{opt.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

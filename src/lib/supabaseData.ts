@@ -782,10 +782,13 @@ const normalizeProfile = (userId: string, row: RawRecord | null): LocalProfile =
     height_feet: typeof row?.height_feet === 'number' ? row.height_feet : null,
     height_inches: typeof row?.height_inches === 'number' ? row.height_inches : null,
     created_at: row?.created_at || nowIso(),
+    is_trainer: Boolean(row?.is_trainer),
+    trainer_display_name: (row?.trainer_display_name as string | null) ?? null,
+    trainer_bio: (row?.trainer_bio as string | null) ?? null,
   };
 };
 
-const ensureProfileExists = async (userId: string, email: string | null, fullName?: string | null) => {
+const ensureProfileExists = async (userId: string, email: string | null, fullName?: string | null, asTrainer = false) => {
   const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
     .select('*')
@@ -797,6 +800,13 @@ const ensureProfileExists = async (userId: string, email: string | null, fullNam
   }
 
   if (existingProfile) {
+    // Reconcile trainer intent: the row may have been created by the DB trigger
+    // (or an earlier sign-in) before we knew this account is a coach. Only ever
+    // promotes to trainer — never silently strips it.
+    if (asTrainer && !(existingProfile as RawRecord).is_trainer) {
+      await supabase.from('profiles').update({ is_trainer: true }).eq('id', userId);
+      return normalizeProfile(userId, { ...(existingProfile as RawRecord), is_trainer: true });
+    }
     return normalizeProfile(userId, existingProfile as RawRecord);
   }
 
@@ -812,6 +822,7 @@ const ensureProfileExists = async (userId: string, email: string | null, fullNam
     body_weight_unit: 'lbs',
     height_feet: null,
     height_inches: null,
+    is_trainer: asTrainer,
   };
 
   await upsertRows('profiles', [nextProfile], 'id');
@@ -1258,7 +1269,7 @@ export const subscribeToAuth = (listener: (user: LocalUser | null) => void) => {
   };
 };
 
-export const signUpLocal = async (email: string, password: string, fullName?: string) => {
+export const signUpLocal = async (email: string, password: string, fullName?: string, asTrainer = false) => {
   if (!hasSupabaseConfig) return localData.signUpLocal(email, password, fullName);
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -1268,6 +1279,9 @@ export const signUpLocal = async (email: string, password: string, fullName?: st
     options: {
       data: {
         full_name: fullName || normalizedEmail.split('@')[0],
+        // Durable trainer intent: survives an email-confirmation gap and is
+        // reconciled into the profile on the next sign-in (see signInLocal).
+        is_trainer: asTrainer,
       },
       emailRedirectTo: getAppUrl(),
     },
@@ -1288,7 +1302,7 @@ export const signUpLocal = async (email: string, password: string, fullName?: st
   currentUserCache = toLocalUser(data.user);
   emitAuthChange();
 
-  await ensureProfileExists(data.user.id, data.user.email || normalizedEmail, fullName || null);
+  await ensureProfileExists(data.user.id, data.user.email || normalizedEmail, fullName || null, asTrainer);
   await migrateLegacyDataIfNeeded(data.user.id, data.user.email || normalizedEmail);
 
   if (!currentUserCache) {
@@ -1318,7 +1332,9 @@ export const signInLocal = async (email: string, password: string) => {
   currentUserCache = toLocalUser(data.user);
   emitAuthChange();
 
-  await ensureProfileExists(data.user.id, data.user.email || normalizedEmail, null);
+  // Reconcile trainer intent captured at signup (covers the email-confirmation flow).
+  const wantsTrainer = !!(data.user.user_metadata as { is_trainer?: boolean } | null)?.is_trainer;
+  await ensureProfileExists(data.user.id, data.user.email || normalizedEmail, null, wantsTrainer);
   await migrateLegacyDataIfNeeded(data.user.id, data.user.email || normalizedEmail);
 
   if (!currentUserCache) {
