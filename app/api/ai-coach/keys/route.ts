@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
   // ── Groq key path ── validate against Groq, then persist. Groq is the coach's
   // primary provider, so this is all a user needs to enable it.
   if (trimmedGroq) {
-    const groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    // Probe with a live production model — a retired ID (e.g. the decommissioned
+    // llama-3.3-70b-versatile) would fail key validation for perfectly valid keys.
+    const groqModel = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
     const probe = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${trimmedGroq}` },

@@ -16,12 +16,14 @@ const ALLOWED_MODELS = new Set(['gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 const SHARED_GROQ_KEY = process.env.GROQ_API_KEY;
 // Model ladder: try the best model first, and on a rate-limit (429) or 5xx drop
 // to the next — so we use quality when there's TPM headroom and never hit the
-// wall. Primary llama-3.3-70b (better answers), fallback llama-3.1-8b-instant
-// (much larger free TPM budget). Both overridable; on a paid tier set
-// GROQ_MODEL=openai/gpt-oss-120b, etc.
+// wall. Primary openai/gpt-oss-120b (flagship open-weight, 131K ctx), fallback
+// openai/gpt-oss-20b (much faster/cheaper, larger TPM headroom). These are
+// Groq's PRODUCTION models — they replaced the retired llama-3.3-70b-versatile
+// / llama-3.1-8b-instant, decommissioned 2026-08-16. Both overridable via env;
+// qwen/qwen3.6-27b is a preview-only alternative (avoid as a default).
 const GROQ_MODELS = Array.from(new Set([
-  process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-  process.env.GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant',
+  process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+  process.env.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-20b',
 ]));
 
 const SSE_HEADERS = {
