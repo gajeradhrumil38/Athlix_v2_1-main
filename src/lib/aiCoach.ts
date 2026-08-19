@@ -416,6 +416,7 @@ export function buildSystemPrompt(
   strainCost: StrainCostContext | null = null,
   recovery: RecoveryContext | null = null,
   insights: InsightsContext | null = null,
+  query: string = '',
 ): string {
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
   const name = profile?.full_name || 'Athlete';
@@ -428,6 +429,19 @@ export function buildSystemPrompt(
       : 'not set';
   const unit = profile?.unit_preference || 'lbs';
   const improvementModel = buildImprovementModel(workouts, prs, foodScans, recentRuns, whoopData, 90);
+
+  // Relevance gating — the system prompt rides on EVERY request, so a bloated
+  // one burns the free-tier tokens-per-minute budget and rate-limits the coach
+  // ("coach is busy"). Only include the off-topic / heavy sections when the
+  // question actually touches them. Empty query (the post-workout pill) keeps
+  // everything. The core training body is always included.
+  const q = (query || '').toLowerCase();
+  const none = q.length === 0;
+  const wantsFood = none || /\b(food|eat|ate|calorie|kcal|protein|carb|macro|nutrition|diet|meal|snack|fat loss|lose weight|cut|bulk|deficit|surplus)\b/.test(q);
+  const wantsRun = none || /\b(run|running|ran|pace|jog|jogging|km|mi|mile|miles|5k|10k|marathon|cardio)\b/.test(q);
+  const wantsSkin = none || /\b(skin|skincare|acne|serum)\b/.test(q);
+  const wantsProgress = none || /\b(improv|progress|plateau|trend|stronger|weaker|gain|1rm|pr|record|volume|neglect|stall|how'?s|how is|how am|how are|this week|this month|weekly|monthly|month|week|doing|better|worse)\b/.test(q);
+  const wantsStrainRec = none || /\b(strain|recover|recovery|readi|sleep|hrv|rhr|rest|fatigue|overtrain|forecast|acwr|whoop|vo2|cardiac|load|train|lift|workout|today|tired|sore|hard|deload|push)\b/.test(q);
 
   // Kept intentionally lean — the system prompt rides on EVERY request, so a
   // bloated one burns the free-tier token-per-minute budget and rate-limits the
@@ -536,7 +550,7 @@ ${thisWeekSection}
 (Treat this as fact: a muscle is "trained this week" ONLY if it's on the Trained line. Never claim otherwise.)
 ${readinessDirective(whoopData)}
 
-${buildImprovementModelSection(improvementModel)}
+${wantsProgress ? buildImprovementModelSection(improvementModel) : ''}
 
 ━━ RECENT SESSIONS (full detail) ━━
 ${detailedSection || '  No workouts logged yet'}
@@ -569,5 +583,5 @@ COACHING RULES:
 7b. NEW USER / not enough data: if the athlete has no or very few logged workouts, do NOT say "I don't have data" and stop. Give a concrete, balanced starter plan — a simple push / pull / legs or full-body split, 2-3 compound-first exercises per day (e.g. squat, bench, row, overhead press, lat pulldown) at ~3×8-12 — and rotate the day so they don't repeat the same session. Encourage them to log a few workouts so the plan starts personalizing to them.
 8. For nutrition/science questions use Google Search for current evidence${toolCallingRule}
 
-${buildCoachMemorySection(memory, workouts)}${buildFoodSection(foodScans)}${buildRunSection(recentRuns)}${buildWhoopSection(whoopData)}${buildWhoopActivitySection(whoopData)}${buildStrainCostSection(strainCost)}${buildRecoveryResponseSection(recovery)}${buildInsightsSection(insights)}${buildSkincareSection(skincareStats)}`;
+${buildCoachMemorySection(memory, workouts)}${wantsFood ? buildFoodSection(foodScans) : ''}${wantsRun ? buildRunSection(recentRuns) : ''}${buildWhoopSection(whoopData)}${wantsStrainRec ? buildWhoopActivitySection(whoopData) + buildStrainCostSection(strainCost) + buildRecoveryResponseSection(recovery) + buildInsightsSection(insights) : ''}${wantsSkin ? buildSkincareSection(skincareStats) : ''}`;
 }

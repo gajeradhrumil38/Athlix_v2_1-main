@@ -1828,6 +1828,7 @@ export const AiChat: React.FC = () => {
   useEffect(() => {
     if (!open || dataReady || !user?.id) return;
     const load = async () => {
+     try {
       // Pull a full window from the server so charts/trends reflect all the
       // user's data, not just the last handful of sessions.
       const startDate = format(subDays(new Date(), 180), 'yyyy-MM-dd');
@@ -1852,8 +1853,11 @@ export const AiChat: React.FC = () => {
       // Runs and skincare are synchronous (localStorage) — always safe
       setRecentRuns(getRuns());
       setSkincareStats(parseSkincareStats());
-
+     } finally {
+      // Always mark ready so the send gate can never deadlock, even if a
+      // fetch above throws unexpectedly.
       setDataReady(true);
+     }
     };
     load();
   }, [open, user?.id, dataReady]);
@@ -1921,7 +1925,9 @@ export const AiChat: React.FC = () => {
   const send = useCallback(
     async (overrideText?: string) => {
       const text = (overrideText ?? input).trim();
-      if (!text || loading || !hasKey) return;
+      // Don't answer before the user's data has loaded — otherwise the coach
+      // sees empty workouts/WHOOP and wrongly treats them as a new user.
+      if (!text || loading || !hasKey || !dataReady) return;
 
       const userMsg: Message = { role: 'user', text };
       const history = [...messages, userMsg];
@@ -1953,7 +1959,7 @@ export const AiChat: React.FC = () => {
       let suggestedChart: CoachChart | undefined;
 
       try {
-        const systemPrompt = buildSystemPrompt(profile, normWorkouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id), strainCost, recovery, insights);
+        const systemPrompt = buildSystemPrompt(profile, normWorkouts, prs, foodScans, recentRuns, whoopData, skincareStats, 'chat', getCoachMemory(user?.id), strainCost, recovery, insights, text);
         // Route the chart off the user's CURRENT message only — not the whole
         // recent window — so words from earlier turns (e.g. the coach mentioning
         // "recovery") don't hijack a fresh "plot my volume" request.
@@ -2193,7 +2199,7 @@ export const AiChat: React.FC = () => {
         setLoading(false);
       }
     },
-    [input, loading, hasKey, model, profile, workouts, normWorkouts, displayUnit, prs, foodScans, recentRuns, whoopData, skincareStats, strainCost, recovery, insights, messages, user?.id, navigate],
+    [input, loading, hasKey, model, profile, workouts, normWorkouts, displayUnit, prs, foodScans, recentRuns, whoopData, skincareStats, strainCost, recovery, insights, dataReady, messages, user?.id, navigate],
   );
 
   // Actually send a hand-off question once the seeded insight message has
@@ -2529,6 +2535,7 @@ export const AiChat: React.FC = () => {
             ) : (
               <ChatContent
                 hasKey={!!hasKey}
+                dataReady={dataReady}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
@@ -2597,6 +2604,7 @@ export const AiChat: React.FC = () => {
             ) : (
               <ChatContent
                 hasKey={!!hasKey}
+                dataReady={dataReady}
                 messages={messages}
                 suggestions={getSuggestions(workouts, foodScans, recentRuns)}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
@@ -3183,6 +3191,7 @@ const ExerciseQuickForm: React.FC<{
 /* ── Inner chat content (shared between mobile sheet + desktop modal) ─ */
 interface ChatContentProps {
   hasKey: boolean;
+  dataReady: boolean;
   messages: Message[];
   suggestions: string[];
   followUps: string[];
@@ -3227,7 +3236,7 @@ interface ChatContentProps {
 }
 
 const ChatContent: React.FC<ChatContentProps> = ({
-  hasKey, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress, exerciseWeights, exerciseSparks,
+  hasKey, dataReady, messages, suggestions, followUps, memory, streak, todayFeeling, goalProgress, exerciseWeights, exerciseSparks,
   sessions, showHistory, activeSessionId, input, loading, loadingPhase, streamingText, copiedIdx,
   inputRef, bottomRef, onCheckIn, onCompleteGoal, onStartTemplate, onAddPlanToLog,
   onOpenLogger, onCreateMissing,
@@ -3917,7 +3926,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
               onChange={(e) => onInput(e.target.value)}
               onKeyDown={onKey}
               disabled={loading}
-              placeholder="Ask or log — 'bench 3×10 80kg', 'weight 75kg'…"
+              placeholder={dataReady ? "Ask or log — 'bench 3×10 80kg', 'weight 75kg'…" : 'Loading your data…'}
               className="flex-1 text-[14px] outline-none"
               style={{
                 background: 'none',
@@ -3929,7 +3938,7 @@ const ChatContent: React.FC<ChatContentProps> = ({
           </div>
           <button
             onClick={onSend}
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || !dataReady}
             className="flex items-center justify-center shrink-0 disabled:opacity-35 active:scale-95 transition-all"
             style={{
               width: 44,
