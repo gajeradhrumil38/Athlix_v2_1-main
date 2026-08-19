@@ -26,9 +26,17 @@ CREATE TABLE IF NOT EXISTS public.coach_links (
   status        text NOT NULL DEFAULT 'pending'
                 CHECK (status IN ('pending','accepted','declined','revoked')),
   shared_scopes jsonb NOT NULL DEFAULT '{}'::jsonb,
+  -- Denormalized display-name snapshots so each side can render the other's
+  -- name without a cross-user profile read (trainee has no RLS path to a
+  -- trainer's profile; the trainer's roster avoids an extra join per trainee).
+  trainer_name  text,
+  trainee_name  text,
   created_at    timestamptz NOT NULL DEFAULT now(),
   responded_at  timestamptz
 );
+-- Idempotent for re-apply on an already-created table.
+ALTER TABLE public.coach_links ADD COLUMN IF NOT EXISTS trainer_name text;
+ALTER TABLE public.coach_links ADD COLUMN IF NOT EXISTS trainee_name text;
 -- one live invite per (trainer, email); one link per (trainer, trainee)
 CREATE UNIQUE INDEX IF NOT EXISTS coach_links_trainer_email_uq
   ON public.coach_links (trainer_id, lower(invited_email))

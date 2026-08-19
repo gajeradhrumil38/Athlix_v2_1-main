@@ -12,6 +12,7 @@ import { convertWeight, type WeightUnit } from '../lib/units';
 import { whoopService } from '../features/whoop/services/whoopService';
 import { useAiCoachKey } from '../hooks/useAiCoachKey';
 import { aiCoachFetch } from '../lib/aiCoachFetch';
+import { CoachesPanel } from '../components/coach/CoachesPanel';
 
 /* ── WHOOP connect sub-section ─────────────────────────────── */
 const WhoopConnect: React.FC<{ userId: string }> = ({ userId }) => {
@@ -807,6 +808,9 @@ export const Settings: React.FC = () => {
         </div>
         <WhoopConnect userId={user?.id ?? ''} />
       </SectionCard>
+
+      {/* ── Coaches (trainee side) ────────────── */}
+      <CoachesPanel />
 
       {/* ── AI Assistant ──────────────────────── */}
       <SectionCard title="AI Assistant">
