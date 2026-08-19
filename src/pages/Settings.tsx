@@ -13,7 +13,6 @@ import { whoopService } from '../features/whoop/services/whoopService';
 import { useAiCoachKey } from '../hooks/useAiCoachKey';
 import { aiCoachFetch } from '../lib/aiCoachFetch';
 import { CoachesPanel } from '../components/coach/CoachesPanel';
-import { AppIcon } from '../config/icons';
 
 /* ── WHOOP connect sub-section ─────────────────────────────── */
 const WhoopConnect: React.FC<{ userId: string }> = ({ userId }) => {
@@ -539,24 +538,6 @@ export const Settings: React.FC = () => {
           </button>
         )}
       </section>
-
-      {/* ── Trainer entry (mobile-reachable dashboard link) ── */}
-      {profile?.is_trainer && (
-        <Link
-          to="/coach"
-          className="glass-card flex items-center gap-4 px-5 py-4 active:scale-[0.99] transition-transform"
-        >
-          <span className="shrink-0 flex h-11 w-11 items-center justify-center rounded-2xl"
-            style={{ background: 'var(--accent)', color: '#000' }}>
-            <AppIcon name="Coach" size="md" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[17px] font-semibold text-[var(--text-primary)]">Trainer dashboard</p>
-            <p className="text-[13px] text-[var(--text-muted)] mt-0.5">See your trainees &amp; assign plans</p>
-          </div>
-          <AppIcon name="Forward" size="md" />
-        </Link>
-      )}
 
       {/* ── Preferences ───────────────────────── */}
       <SectionCard title="Preferences">

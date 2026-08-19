@@ -154,12 +154,10 @@ export const Layout: React.FC = () => {
           </span>
         </div>
 
-        {/* Nav links — trainers get a Coach entry right after Home */}
+        {/* Nav links — a coach's Home already IS the coaching dashboard, so no
+            separate Coach item is needed. */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {(profile?.is_trainer
-            ? [navItems[0], { path: '/coach', icon: 'Coach' as IconName, label: 'Coach' }, ...navItems.slice(1)]
-            : navItems
-          ).map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

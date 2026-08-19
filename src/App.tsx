@@ -68,6 +68,14 @@ const RedirectToStatic = ({ path }: { path: string }) => {
   return null;
 };
 
+// A coach's home IS their coaching dashboard — one clear dashboard per account,
+// no athlete/coach duplication. Trainers are redirected to /coach (so it renders
+// under its correctly-padded route); athletes get the normal Home.
+const RoleHome = () => {
+  const { profile } = useAuth();
+  return profile?.is_trainer ? <Navigate to="/coach" replace /> : <Home />;
+};
+
 const AppRoutes = () => {
   const { isPasswordRecovery } = useAuth();
   const staticBase = '/';
@@ -79,7 +87,7 @@ const AppRoutes = () => {
       <Route path="/privacy" element={<RedirectToStatic path={`${staticBase}privacy.html`} />} />
       <Route path="/terms" element={<RedirectToStatic path={`${staticBase}terms.html`} />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Home />} />
+        <Route index element={<RoleHome />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="log" element={<Log />} />
         <Route path="timeline" element={<Timeline />} />
