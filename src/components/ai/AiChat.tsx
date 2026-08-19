@@ -19,7 +19,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus, RotateCcw, Pencil, Mic } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, Settings as SettingsIcon, Copy, Check, Plus, Minus, Trash2, ExternalLink, BarChart2, Menu, MessageSquarePlus, RotateCcw, Pencil, Mic, Dumbbell, Heart, TrendingUp, Moon, Activity, Flame, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { format, subDays } from 'date-fns';
@@ -1258,14 +1258,32 @@ function getSuggestions(
   recentRuns: SavedRun[],
   whoopData?: WhoopAllData | null,
   insights?: InsightsContext | null,
+  pastTexts: string[] = [],
 ): string[] {
   const hasFood = foodScans.length > 0;
   const hasRuns = recentRuns.length > 0;
   const topLift = mostFrequentExerciseName(workouts);
   const rec = whoopData?.recovery?.[0]?.recovery_score;
 
-  // Contextual chips first — matched to the user's CURRENT state, and mapped to
-  // the instant (LLM-free) answers where possible so they respond immediately.
+  // Pattern from PAST CHATS: what this user actually tends to ask about, so the
+  // suggestions feel learned rather than generic.
+  const past = pastTexts.join('  ').toLowerCase();
+  const askedLift = (() => {
+    let best: string | null = null; let bestN = 0;
+    for (const w of workouts) for (const ex of w.exercises || []) {
+      const n = ex.name.toLowerCase();
+      if (n.length < 3 || !past.includes(n)) continue;
+      const count = past.split(n).length - 1;
+      if (count > bestN) { bestN = count; best = ex.name; }
+    }
+    return best;
+  })();
+  const asksFood = /\b(food|eat|ate|protein|macro|calorie|kcal|diet|meal|cut|bulk)\b/.test(past);
+  const asksRun = /\b(run|running|ran|pace|mile|mileage|5k|10k|cardio)\b/.test(past);
+  const asksRecovery = /\b(recover|sleep|hrv|readi|rest|tired|sore|strain)\b/.test(past);
+
+  // Contextual chips — current state first, then learned patterns — all mapped
+  // to instant (LLM-free) answers where possible so they respond immediately.
   const chips: string[] = [];
   chips.push("Today's briefing");
   if (rec != null && rec > 0 && rec < 40) chips.push('Should I rest today?');
@@ -1273,17 +1291,44 @@ function getSuggestions(
   if (insights?.sleep_debt && insights.sleep_debt.debt_hours_7d >= 3) chips.push('How bad is my sleep debt?');
   chips.push('What should I train today?');
   if (workouts.length > 0) chips.push("How's my week?");
-  if (topLift) chips.push(`Am I improving on ${topLift}?`);
+  // A lift they keep asking about beats the raw most-frequent one.
+  const focusLift = askedLift || topLift;
+  if (focusLift) chips.push(`Am I improving on ${focusLift}?`);
+  if (asksRecovery && !chips.includes('Should I rest today?')) chips.push('How recovered am I?');
+  if (asksFood) chips.push('How are my macros today?');
+  if (asksRun && hasRuns) chips.push("How's my running pace?");
 
   // Fill the rest from sensible generic prompts (deduped, capped at 6).
   const generic = workouts.length > 3
-    ? ['Which exercises am I plateauing on?', hasFood ? 'Am I hitting my protein goals?' : 'Log my weight as 75 kg', hasRuns ? "How's my weekly mileage?" : 'Which muscle am I neglecting?']
-    : ['What should I focus on this week?', hasFood ? 'How are my macros today?' : 'Log my weight as 80 kg', hasRuns ? 'Analyse my recent runs' : 'Give me a beginner plan.'];
+    ? ['Which exercises am I plateauing on?', hasFood ? 'Am I hitting my protein goals?' : 'Which muscle am I neglecting?', hasRuns ? "How's my weekly mileage?" : 'Log my weight as 75 kg']
+    : ['What should I focus on this week?', 'Give me a beginner plan.', 'Log my weight as 80 kg'];
   for (const g of generic) {
     if (chips.length >= 6) break;
     if (!chips.includes(g)) chips.push(g);
   }
   return chips.slice(0, 6);
+}
+
+// The user's recent questions across past chat sessions — used to learn what
+// they tend to ask about and tailor the suggestions accordingly.
+function pastUserTexts(sessions: ChatSession[]): string[] {
+  return sessions
+    .flatMap((s) => s.messages.filter((m) => m.role === 'user').map((m) => String(m.text || '')))
+    .filter(Boolean)
+    .slice(-40);
+}
+
+// Icon + tint for a suggestion chip, inferred from its text so each category
+// reads at a glance.
+function chipMeta(q: string): { Icon: typeof Sparkles; tint: string } {
+  const t = q.toLowerCase();
+  if (/brief|summary|status/.test(t)) return { Icon: Sparkles, tint: 'var(--accent)' };
+  if (/rest|recover|sleep|hrv|readi|overtrain/.test(t)) return { Icon: Heart, tint: '#ff8080' };
+  if (/week|mileage|pace|run/.test(t)) return { Icon: Activity, tint: '#4fc3f7' };
+  if (/improv|plateau|progress|neglect/.test(t)) return { Icon: TrendingUp, tint: '#4dff91' };
+  if (/train|workout|plan|focus|beginner/.test(t)) return { Icon: Dumbbell, tint: 'var(--accent)' };
+  if (/macro|protein|food|weight|kg|calorie/.test(t)) return { Icon: Flame, tint: '#ffd54f' };
+  return { Icon: Moon, tint: 'var(--text-secondary)' };
 }
 
 function mostFrequentExerciseName(workouts: WorkoutWithExercises[]): string | null {
@@ -2610,7 +2655,7 @@ export const AiChat: React.FC = () => {
                 hasKey={!!hasKey}
                 dataReady={dataReady}
                 messages={messages}
-                suggestions={getSuggestions(workouts, foodScans, recentRuns, whoopData, insights)}
+                suggestions={getSuggestions(workouts, foodScans, recentRuns, whoopData, insights, pastUserTexts(sessions))}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
                 memory={memory}
                 streak={coachStreak(memory, workouts)}
@@ -2679,7 +2724,7 @@ export const AiChat: React.FC = () => {
                 hasKey={!!hasKey}
                 dataReady={dataReady}
                 messages={messages}
-                suggestions={getSuggestions(workouts, foodScans, recentRuns, whoopData, insights)}
+                suggestions={getSuggestions(workouts, foodScans, recentRuns, whoopData, insights, pastUserTexts(sessions))}
                 followUps={buildFollowUps(messages, workouts, foodScans, recentRuns, whoopData)}
                 memory={memory}
                 streak={coachStreak(memory, workouts)}
@@ -3601,28 +3646,37 @@ const ChatContent: React.FC<ChatContentProps> = ({
                 </div>
               )}
 
-              {/* Starter prompts — one scannable column */}
-              <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>Try asking</p>
-              <div className="space-y-1.5">
-                {suggestions.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => onSuggest(q)}
-                    className="w-full flex items-center gap-2.5 text-left transition-colors active:scale-[0.99]"
-                    style={{
-                      padding: '11px 13px',
-                      borderRadius: 12,
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.07)',
-                      color: 'var(--text-primary)',
-                      fontSize: 13,
-                      fontWeight: 500,
-                    }}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent)', opacity: 0.7 }} />
-                    <span className="flex-1">{q}</span>
-                  </button>
-                ))}
+              {/* Suggested for you — a featured briefing + category chips,
+                  tailored to current state and past-chat patterns */}
+              <p className="mb-2.5 text-[10.5px] font-bold uppercase" style={{ color: 'var(--text-muted)', letterSpacing: '0.1em' }}>Suggested for you</p>
+              <div className="space-y-2">
+                {suggestions.map((q, i) => {
+                  const { Icon, tint } = chipMeta(q);
+                  const featured = i === 0;
+                  return (
+                    <button
+                      key={q}
+                      onClick={() => onSuggest(q)}
+                      className="w-full flex items-center gap-3 text-left transition-all active:scale-[0.98] hover:brightness-125"
+                      style={{
+                        padding: featured ? '13px 14px' : '10px 12px',
+                        borderRadius: 14,
+                        background: featured ? 'var(--accent-dim)' : 'rgba(255,255,255,0.035)',
+                        border: `1px solid ${featured ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'rgba(255,255,255,0.08)'}`,
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      <span
+                        className="flex items-center justify-center shrink-0"
+                        style={{ width: 30, height: 30, borderRadius: 10, background: featured ? 'var(--accent)' : `color-mix(in srgb, ${tint} 15%, transparent)` }}
+                      >
+                        <Icon className="w-4 h-4" style={{ color: featured ? '#000' : tint }} />
+                      </span>
+                      <span className="flex-1 text-[13.5px]" style={{ fontWeight: featured ? 700 : 500 }}>{q}</span>
+                      <ChevronRight className="w-4 h-4 shrink-0" style={{ color: featured ? 'var(--accent)' : 'var(--text-muted)', opacity: 0.55 }} />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
