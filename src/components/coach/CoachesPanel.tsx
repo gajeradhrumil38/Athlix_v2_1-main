@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppIcon } from '../../config/icons';
 import {
   getIncomingInvites, getMyCoaches, respondToInvite, updateShareScopes, disconnect,
@@ -14,6 +15,7 @@ export const CoachesPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sheet, setSheet] = useState<{ link: CoachLink; mode: 'accept' | 'edit' } | null>(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     const [inv, cch] = await Promise.all([getIncomingInvites(), getMyCoaches()]);
@@ -101,6 +103,21 @@ export const CoachesPanel: React.FC = () => {
           </div>
         </div>
       ))}
+
+      {/* Quick jump to assigned plans once connected */}
+      {coaches.length > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/my-coach')}
+          className="w-full flex items-center gap-3 px-5 py-3.5 border-t border-[var(--border)] text-left active:bg-[var(--bg-elevated)]"
+        >
+          <span className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'var(--accent)', color: '#000' }}>
+            <AppIcon name="Clipboard" size="sm" />
+          </span>
+          <span className="flex-1 text-[15px] font-semibold text-[var(--text-primary)]">View assigned plans</span>
+          <AppIcon name="Forward" size="md" />
+        </button>
+      )}
 
       {/* Connected coaches */}
       {coaches.map((link) => {

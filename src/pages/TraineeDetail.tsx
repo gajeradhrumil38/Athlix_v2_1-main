@@ -6,7 +6,9 @@ import {
 } from 'recharts';
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
+import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
+import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
 
 const ACCENT = '#c8ff00';
 const MUSCLE_COLORS = ['#c8ff00', '#4FC3F7', '#ff8080', '#ffd54f', '#b388ff', '#4dff91', '#ff9e6d', '#7fd7ff'];
@@ -20,15 +22,22 @@ export const TraineeDetail: React.FC = () => {
   const [dash, setDash] = useState<TraineeDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [plans, setPlans] = useState<AssignedPlan[]>([]);
+  const [assign, setAssign] = useState(false);
+
+  const loadPlans = React.useCallback(async () => {
+    if (id) setPlans(await getAssignedPlansFor(id));
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
     (async () => {
       const d = await getTraineeDashboard(id);
       if (!d) setMissing(true); else setDash(d);
+      await loadPlans();
       setLoading(false);
     })();
-  }, [id]);
+  }, [id, loadPlans]);
 
   if (loading) {
     return <div className="max-w-2xl mx-auto px-4 py-16 flex items-center justify-center gap-2 text-[var(--text-muted)]">
@@ -50,13 +59,40 @@ export const TraineeDetail: React.FC = () => {
           className="h-10 w-10 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)' }}>
           <AppIcon name="Back" size="md" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-[26px] font-bold text-[var(--text-primary)] leading-none truncate">{dash.name}</h1>
           <p className="text-[14px] text-[var(--text-muted)] mt-1">Trainee overview</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setAssign(true)}
+          className="shrink-0 flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
+          style={{ background: 'var(--accent)', color: '#000' }}
+        >
+          <AppIcon name="Clipboard" size="sm" /> Assign
+        </button>
       </div>
 
       <div className="space-y-6">
+        {plans.length > 0 && (
+          <Section title="Assigned plans">
+            <div className="space-y-3">
+              {plans.map((p) => (
+                <Card key={p.id} className="!p-0 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3.5">
+                    <div className="min-w-0">
+                      <p className="text-[17px] font-semibold text-[var(--text-primary)] truncate">{p.title}</p>
+                      <p className="text-[13px] text-[var(--text-muted)] mt-0.5">{p.exercises.length} exercises</p>
+                    </div>
+                    <button type="button" onClick={async () => { await archivePlan(p.id); loadPlans(); }}
+                      className="text-[13px] font-semibold px-3 py-1.5 rounded-lg shrink-0"
+                      style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Remove</button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </Section>
+        )}
         <ReadinessRow dash={dash} />
         <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
         <Section title="Training volume">
@@ -75,6 +111,14 @@ export const TraineeDetail: React.FC = () => {
           {dash.runs.shared ? <RunsView runs={dash.runs.data} /> : <NotShared label="Runs" />}
         </Section>
       </div>
+
+      <AssignPlanSheet
+        open={assign}
+        traineeId={id!}
+        traineeName={dash.name}
+        onClose={() => setAssign(false)}
+        onAssigned={loadPlans}
+      />
     </div>
   );
 };
