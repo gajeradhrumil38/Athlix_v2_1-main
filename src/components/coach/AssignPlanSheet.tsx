@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
+import { ExercisePicker } from '../log/ExercisePicker';
 import { assignPlan, type NewPlanExercise } from '../../lib/assignedPlans';
 
-// Trainer builds a plan: a name + a list of exercises (name, sets, reps, weight).
-// Deliberately simple — big fields, add/remove rows, one Assign button.
+// Trainer builds a plan: a name + exercises picked from the SAME searchable
+// catalog the athlete uses, each with sets/reps/weight. Big fields, one Assign.
 interface Props { open: boolean; traineeId: string; traineeName: string; onClose: () => void; onAssigned: () => void; }
 
 type Row = { name: string; sets: string; reps: string; weight: string };
-const blankRow = (): Row => ({ name: '', sets: '3', reps: '10', weight: '' });
 
 export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, onClose, onAssigned }) => {
   const [title, setTitle] = useState('');
-  const [rows, setRows] = useState<Row[]>([blankRow()]);
+  const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [picking, setPicking] = useState(false);
 
-  const reset = () => { setTitle(''); setRows([blankRow()]); setError(''); setBusy(false); };
+  const reset = () => { setTitle(''); setRows([]); setError(''); setBusy(false); setPicking(false); };
   const close = () => { onClose(); reset(); };
 
   const update = (i: number, k: keyof Row, v: string) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
-  const addRow = () => setRows((p) => [...p, blankRow()]);
-  const removeRow = (i: number) => setRows((p) => p.length === 1 ? p : p.filter((_, idx) => idx !== i));
+  const removeRow = (i: number) => setRows((p) => p.filter((_, idx) => idx !== i));
+  const addExercise = (name: string, sets?: number, reps?: number) =>
+    setRows((p) => [...p, { name, sets: String(sets || 3), reps: String(reps || 10), weight: '' }]);
 
   const submit = async () => {
     setBusy(true); setError('');
@@ -65,40 +67,38 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
               />
 
-              <div className="space-y-3">
-                {rows.map((r, i) => (
-                  <div key={i} className="rounded-2xl p-3" style={{ background: 'var(--bg-elevated)' }}>
-                    <div className="flex items-center gap-2">
-                      <input
-                        placeholder="Exercise"
-                        value={r.name}
-                        onChange={(e) => update(i, 'name', e.target.value)}
-                        className="flex-1 h-11 rounded-xl px-3 text-[16px] outline-none"
-                        style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-                      />
-                      {rows.length > 1 && (
+              {rows.length === 0 ? (
+                <p className="text-[14px] text-[var(--text-muted)] text-center py-6 leading-snug">
+                  No exercises yet.<br />Tap <span className="text-[var(--text-secondary)] font-medium">Add exercise</span> to search the library.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {rows.map((r, i) => (
+                    <div key={i} className="rounded-2xl p-3" style={{ background: 'var(--bg-elevated)' }}>
+                      <div className="flex items-center gap-2">
+                        <p className="flex-1 text-[16px] font-semibold text-[var(--text-primary)] truncate">{r.name}</p>
                         <button type="button" onClick={() => removeRow(i)} aria-label="Remove"
-                          className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
+                          className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
                           <AppIcon name="Trash" size="sm" />
                         </button>
-                      )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                        <NumField label="Sets" value={r.sets} onChange={(v) => update(i, 'sets', v)} />
+                        <NumField label="Reps" value={r.reps} onChange={(v) => update(i, 'reps', v)} />
+                        <NumField label="Weight" value={r.weight} onChange={(v) => update(i, 'weight', v)} />
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      <NumField label="Sets" value={r.sets} onChange={(v) => update(i, 'sets', v)} />
-                      <NumField label="Reps" value={r.reps} onChange={(v) => update(i, 'reps', v)} />
-                      <NumField label="Weight" value={r.weight} onChange={(v) => update(i, 'weight', v)} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <button
                 type="button"
-                onClick={addRow}
+                onClick={() => setPicking(true)}
                 className="w-full h-12 mt-3 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-1.5 text-[var(--text-secondary)]"
                 style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border)' }}
               >
-                <AppIcon name="Plus" size="sm" /> Add exercise
+                <AppIcon name="Search" size="sm" /> Add exercise
               </button>
 
               {error && <p className="text-[14px] mt-3" style={{ color: '#ff8080' }}>{error}</p>}
@@ -116,6 +116,18 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
               </button>
             </div>
           </motion.div>
+
+          {/* Searchable catalog — the exact picker the athlete uses */}
+          {picking && (
+            <div className="fixed inset-0 z-[80]" onClick={(e) => e.stopPropagation()}>
+              <ExercisePicker
+                recentExercises={[]}
+                defaultTab="muscle"
+                onSelect={(ex) => addExercise(ex.name, ex.defaultSets, ex.defaultReps)}
+                onClose={() => setPicking(false)}
+              />
+            </div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

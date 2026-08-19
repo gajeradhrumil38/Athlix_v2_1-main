@@ -7,6 +7,9 @@ import {
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
 import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
+import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
+import { MuscleRadar } from '../components/home/MuscleRadar';
+import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
 
@@ -16,6 +19,28 @@ const MUSCLE_COLORS = ['#c8ff00', '#4FC3F7', '#ff8080', '#ffd54f', '#b388ff', '#
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
+// Build both muscle visualisations from the trainee's workouts — slug-keyed for
+// the anatomical MuscleMap (via profile.targets), region-keyed for the radar
+// (via primary/secondary). Mirrors how Home feeds the same components.
+function buildMuscleViz(workouts: TraineeWorkout[]): { map: MuscleData; radar: MuscleData } {
+  const map: MuscleData = {};
+  const radar: MuscleData = {};
+  const bump = (d: MuscleData, k: string) => (d[k] ??= { sessions: 0, sets: 0, load: 0, relativeLoad: 0 });
+  for (const w of workouts) {
+    const regions = new Set<string>();
+    for (const ex of w.exercises || []) {
+      const profile = getExerciseMuscleProfile(ex.name, ex.muscle_group ?? undefined, undefined);
+      const sets = Number(ex.sets || 0);
+      const load = (Number(ex.weight || 0)) * (Number(ex.reps || 0)) * sets;
+      profile.targets.forEach(({ slug, weight }) => { const e = bump(map, slug); e.sets += sets * weight; e.load += load * weight; });
+      profile.primary.forEach((r) => { bump(radar, r).sets += sets * PRIMARY_LOAD_WEIGHT; regions.add(r); });
+      profile.secondary.forEach((r) => { bump(radar, r).sets += sets * SECONDARY_LOAD_WEIGHT; regions.add(r); });
+    }
+    regions.forEach((r) => { bump(radar, r).sessions += 1; });
+  }
+  return { map, radar };
+}
+
 export const TraineeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -24,6 +49,8 @@ export const TraineeDetail: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
   const [assign, setAssign] = useState(false);
+  const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
+  const muscle = useMemo(() => buildMuscleViz(dash?.workouts.shared ? dash.workouts.data : []), [dash]);
 
   const loadPlans = React.useCallback(async () => {
     if (id) setPlans(await getAssignedPlansFor(id));
@@ -95,6 +122,16 @@ export const TraineeDetail: React.FC = () => {
         )}
         <ReadinessRow dash={dash} />
         <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
+        <Section title="Muscle map">
+          {dash.workouts.shared
+            ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles · last sessions" unit="lbs" /></Card>
+            : <NotShared label="Workouts" />}
+        </Section>
+        <Section title="Muscle balance">
+          {dash.workouts.shared
+            ? <Card><MuscleRadar muscleData={muscle.radar} /></Card>
+            : <NotShared label="Workouts" />}
+        </Section>
         <Section title="Training volume">
           {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
         </Section>
