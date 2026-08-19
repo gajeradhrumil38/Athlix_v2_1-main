@@ -72,8 +72,17 @@ export async function POST(req: NextRequest) {
 
         const eb = await gres.json().catch(() => ({}));
         groqErr = { status: gres.status, message: eb?.error?.message || `Groq error ${gres.status}` };
-        if (gres.status === 429 || gres.status >= 500) continue; // try the next model
-        break; // 4xx bad request → don't try other models
+        // A missing/inaccessible/retired model must NOT kill the request — Groq
+        // rotates models, so fall through to the next one in the ladder (and
+        // ultimately Gemini). Only a genuine bad-request (malformed prompt, etc.)
+        // stops the ladder.
+        const modelUnavailable =
+          gres.status === 404 ||
+          eb?.error?.code === 'model_not_found' ||
+          eb?.error?.code === 'model_decommissioned' ||
+          /does not exist|do not have access|model_not_found|decommission|deprecat|no longer|unavailable/i.test(groqErr.message);
+        if (gres.status === 429 || gres.status >= 500 || modelUnavailable) continue; // try the next model
+        break; // genuine 4xx bad request → don't try other models
       } catch (e) {
         groqErr = { status: 502, message: e instanceof Error ? e.message : 'Groq request failed' };
         continue; // network blip → try the next model
