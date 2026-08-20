@@ -110,4 +110,34 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
   };
 }
 
+export interface RosterStatus { lastDate: string | null; daysAgo: number | null; weekSessions: number; }
+
+// One batched read of every trainee's recent workout dates (RLS returns only the
+// ones who share 'workouts'), folded into a last-active + this-week count per
+// trainee — so the roster can flag who's gone quiet without N round-trips.
+export async function getRosterStatus(traineeIds: string[]): Promise<Record<string, RosterStatus>> {
+  const out: Record<string, RosterStatus> = {};
+  for (const id of traineeIds) out[id] = { lastDate: null, daysAgo: null, weekSessions: 0 };
+  if (!traineeIds.length) return out;
+
+  const { data } = await supabase
+    .from('workouts')
+    .select('user_id, date')
+    .in('user_id', traineeIds)
+    .order('date', { ascending: false })
+    .limit(600);
+
+  const now = Date.now();
+  const week: Record<string, Set<string>> = {};
+  for (const row of (data ?? []) as { user_id: string; date: string }[]) {
+    const s = out[row.user_id];
+    if (!s) continue;
+    const t = new Date(`${row.date}T00:00:00`).getTime();
+    if (!s.lastDate) { s.lastDate = row.date; s.daysAgo = Math.floor((now - t) / 86_400_000); }
+    if (now - t <= 7 * 86_400_000) (week[row.user_id] ??= new Set()).add(row.date);
+  }
+  for (const id of traineeIds) out[id].weekSessions = week[id]?.size ?? 0;
+  return out;
+}
+
 export { SHARE_SCOPES };

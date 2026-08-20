@@ -3,6 +3,7 @@ import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AppIcon } from '../config/icons';
 import { getSentLinks, SHARE_SCOPES, type CoachLink } from '../lib/coachLinks';
+import { getRosterStatus, type RosterStatus } from '../lib/coachData';
 import { InviteTraineeSheet } from '../components/coach/InviteTraineeSheet';
 
 // Trainer's home: the roster of accepted trainees + pending invites, and the
@@ -11,12 +12,16 @@ export const CoachDashboard: React.FC = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [links, setLinks] = useState<CoachLink[]>([]);
+  const [status, setStatus] = useState<Record<string, RosterStatus>>({});
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState(false);
 
   const load = useCallback(async () => {
-    setLinks(await getSentLinks());
+    const l = await getSentLinks();
+    setLinks(l);
     setLoading(false);
+    const traineeIds = l.filter((x) => x.status === 'accepted' && x.trainee_id).map((x) => x.trainee_id as string);
+    setStatus(await getRosterStatus(traineeIds));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -55,7 +60,7 @@ export const CoachDashboard: React.FC = () => {
       ) : (
         <div className="space-y-3">
           {trainees.map((l) => (
-            <TraineeCard key={l.id} link={l} onOpen={() => navigate(`/coach/trainee/${l.trainee_id}`)} />
+            <TraineeCard key={l.id} link={l} status={l.trainee_id ? status[l.trainee_id] : undefined} onOpen={() => navigate(`/coach/trainee/${l.trainee_id}`)} />
           ))}
           {pending.map((l) => <PendingCard key={l.id} link={l} />)}
         </div>
@@ -66,24 +71,31 @@ export const CoachDashboard: React.FC = () => {
   );
 };
 
-const TraineeCard: React.FC<{ link: CoachLink; onOpen: () => void }> = ({ link, onOpen }) => {
+const TraineeCard: React.FC<{ link: CoachLink; status?: RosterStatus; onOpen: () => void }> = ({ link, status, onOpen }) => {
   const shared = SHARE_SCOPES.filter((s) => link.shared_scopes?.[s.key]).length;
+  const d = status?.daysAgo;
+  const stale = d != null && d >= 7; // gone quiet — the red flag a coach triages on
+  const lastLabel = d == null ? null : d === 0 ? 'Trained today' : d === 1 ? 'Trained 1d ago' : `Trained ${d}d ago`;
+
   return (
     <button
       type="button"
       onClick={onOpen}
       className="w-full glass-card px-5 py-4 flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
     >
-      <span className="shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl text-[19px] font-bold"
+      <span className="relative shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl text-[19px] font-bold"
         style={{ background: 'var(--bg-elevated)', color: 'var(--accent)' }}>
         {(link.trainee_name || link.invited_email || '?').charAt(0).toUpperCase()}
+        {stale && <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full border-2" style={{ background: '#ff8080', borderColor: 'var(--bg-surface)' }} />}
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[18px] font-semibold text-[var(--text-primary)] truncate">
           {link.trainee_name || link.invited_email}
         </p>
-        <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
-          {shared ? `Sharing ${shared} categor${shared === 1 ? 'y' : 'ies'}` : 'Not sharing yet'}
+        <p className="text-[13px] mt-0.5 truncate" style={{ color: stale ? '#ff8080' : 'var(--text-muted)' }}>
+          {lastLabel
+            ? `${lastLabel}${status?.weekSessions ? ` · ${status.weekSessions} this week` : ''}`
+            : shared ? `Sharing ${shared} categor${shared === 1 ? 'y' : 'ies'}` : 'Not sharing yet'}
         </p>
       </div>
       <AppIcon name="Forward" size="md" />
