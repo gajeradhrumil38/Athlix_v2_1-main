@@ -104,17 +104,12 @@ export const TraineeDetail: React.FC = () => {
           <Section title="Assigned plans">
             <div className="space-y-3">
               {plans.map((p) => (
-                <Card key={p.id} className="!p-0 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3.5">
-                    <div className="min-w-0">
-                      <p className="text-[17px] font-semibold text-[var(--text-primary)] truncate">{p.title}</p>
-                      <p className="text-[13px] text-[var(--text-muted)] mt-0.5">{p.exercises.length} exercises</p>
-                    </div>
-                    <button type="button" onClick={async () => { await archivePlan(p.id); loadPlans(); }}
-                      className="text-[13px] font-semibold px-3 py-1.5 rounded-lg shrink-0"
-                      style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Remove</button>
-                  </div>
-                </Card>
+                <PlanCard
+                  key={p.id}
+                  plan={p}
+                  workouts={dash.workouts.shared ? dash.workouts.data : []}
+                  onRemove={async () => { await archivePlan(p.id); loadPlans(); }}
+                />
               ))}
             </div>
           </Section>
@@ -321,6 +316,69 @@ const RunsView: React.FC<{ runs: { id: number; run_ts: number; distance: number;
           <p className="text-[15px] font-medium text-[var(--text-secondary)]">{fmtPace(r.pace)} /km</p>
         </div>
       ))}
+    </Card>
+  );
+};
+
+/* ── Assigned plan: adherence + prescribed vs actual ─────── */
+const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRemove: () => void }> = ({ plan, workouts, onRemove }) => {
+  const [open, setOpen] = useState(false);
+  // Every logged session performed from THIS plan (linked via source_plan_id).
+  const performed = useMemo(() => workouts.filter((w) => w.source_plan_id === plan.id), [workouts, plan.id]);
+  const latest = performed[0]; // workouts arrive date-desc
+  const daysAgo = latest ? Math.floor((Date.now() - parseDay(latest.date)) / DAY) : null;
+  const lastLabel = daysAgo == null ? '' : daysAgo === 0 ? 'today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
+
+  // For the latest session, fold the flat set-rows (one row per set) into a
+  // per-exercise "actual": how many sets + the top set. Matched by name.
+  const actualFor = (name: string) => {
+    if (!latest) return null;
+    const rows = latest.exercises.filter((e) => e.name.toLowerCase() === name.toLowerCase());
+    if (!rows.length) return null;
+    const top = rows.reduce((a, b) => (b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a));
+    return { sets: rows.length, reps: top.reps, weight: top.weight };
+  };
+
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-3.5 text-left">
+        <div className="min-w-0">
+          <p className="text-[17px] font-semibold text-[var(--text-primary)] truncate">{plan.title}</p>
+          <p className="text-[13px] mt-0.5" style={{ color: performed.length ? 'var(--accent)' : 'var(--text-muted)' }}>
+            {performed.length ? `Done ${performed.length}× · last ${lastLabel}` : `Not started · ${plan.exercises.length} exercises`}
+          </p>
+        </div>
+        <span className={`shrink-0 text-[var(--text-muted)] transition-transform ${open ? 'rotate-180' : ''}`}><AppIcon name="ExpandDown" size="md" /></span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-3 border-t border-[var(--border)]">
+          <div className="flex items-center justify-between pt-3 pb-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+              {latest ? `Prescribed → actual (${lastLabel})` : 'Prescribed'}
+            </p>
+            <button type="button" onClick={onRemove} className="text-[12px] font-semibold" style={{ color: '#ff8080' }}>Remove</button>
+          </div>
+          <div className="divide-y divide-[var(--border)]">
+            {plan.exercises.map((ex, i) => {
+              const act = actualFor(ex.name);
+              const rx = `${ex.default_sets}×${ex.default_reps}${ex.default_weight ? ` @${ex.default_weight}` : ''}`;
+              return (
+                <div key={i} className="flex items-center justify-between gap-3 py-2">
+                  <p className="text-[14px] text-[var(--text-primary)] truncate flex-1">{ex.name}</p>
+                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{rx}</p>
+                  {latest && (
+                    <p className="text-[13px] font-semibold shrink-0 tabular-nums w-[74px] text-right"
+                      style={{ color: act ? 'var(--accent)' : '#ff8080' }}>
+                      {act ? `${act.sets}×${act.reps}${act.weight ? ` @${act.weight}` : ''}` : 'missed'}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </Card>
   );
 };

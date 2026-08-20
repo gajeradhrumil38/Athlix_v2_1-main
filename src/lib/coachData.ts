@@ -11,6 +11,7 @@ export interface Section<T> { shared: boolean; data: T; }
 
 export interface TraineeWorkout {
   id: string; date: string; title: string; duration_minutes: number | null; muscle_groups: string[] | null;
+  source_plan_id: string | null;
   exercises: { name: string; muscle_group: string | null; sets: number; reps: number; weight: number; unit: string }[];
 }
 export interface TraineePR { exercise_name: string; best_weight: number; best_reps: number; achieved_date: string; unit: string; }
@@ -65,7 +66,7 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
     supabase.from('profiles').select('full_name, trainer_display_name').eq('id', traineeId).maybeSingle(),
     wantWorkouts
       ? supabase.from('workouts')
-          .select('id, date, title, duration_minutes, muscle_groups, exercises(name, muscle_group, sets, reps, weight, unit)')
+          .select('id, date, title, duration_minutes, muscle_groups, source_plan_id, exercises(name, muscle_group, sets, reps, weight, unit)')
           .eq('user_id', traineeId).order('date', { ascending: false }).limit(60)
       : Promise.resolve({ data: null }),
     wantPRs
