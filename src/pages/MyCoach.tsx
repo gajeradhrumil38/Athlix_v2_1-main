@@ -21,7 +21,7 @@ export const MyCoach: React.FC = () => {
       sets: e.default_sets,
       reps: String(e.default_reps),
     }));
-    navigate('/log', { state: { recommendedExercises, suggestedTitle: plan.title } });
+    navigate('/log', { state: { recommendedExercises, suggestedTitle: plan.title, sourcePlanId: plan.id } });
   };
 
   return (

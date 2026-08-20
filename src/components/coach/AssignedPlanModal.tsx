@@ -46,7 +46,7 @@ export const AssignedPlanModal: React.FC = () => {
     }));
     markSeen(current.id);
     setPlans((p) => p.slice(1));
-    navigate('/log', { state: { recommendedExercises, suggestedTitle: current.title } });
+    navigate('/log', { state: { recommendedExercises, suggestedTitle: current.title, sourcePlanId: current.id } });
   };
 
   return (

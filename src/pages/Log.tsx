@@ -207,6 +207,9 @@ export const Log: React.FC = () => {
   const [finishPriorWorkouts, setFinishPriorWorkouts] = useState<Awaited<ReturnType<typeof getWorkouts>>>([]);
   const [saving, setSaving] = useState(false);
   const saveInFlightRef = useRef(false);
+  // Set when this session was started from a coach-assigned plan — persisted to
+  // the saved workout so the trainer can see prescribed-vs-actual / adherence.
+  const sourcePlanIdRef = useRef<string | null>(null);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>(() => {
     if (typeof window === 'undefined') return 'mi';
@@ -278,6 +281,7 @@ export const Log: React.FC = () => {
     // plan take priority over a lingering empty draft.
     const recExercises = (location.state as { recommendedExercises?: PlanExercise[] } | null)?.recommendedExercises;
     if (recExercises?.length) {
+      sourcePlanIdRef.current = (location.state as { sourcePlanId?: string } | null)?.sourcePlanId ?? null;
       const draftHasWork = draft?.exercises?.some((e) => e.sets.length > 0);
       if (draft && draftHasWork) {
         setWorkout(draft);
@@ -520,6 +524,7 @@ export const Log: React.FC = () => {
         date: formatLocalDate(startDate),
         duration_minutes: Math.max(1, Math.round(finalElapsedSeconds / 60)),
         notes: notes || null,
+        source_plan_id: sourcePlanIdRef.current,
           exercises: completedExercises.map(({ exercise, completedSets, exerciseIndex }) => ({
             name: exercise.name,
             muscle_group: exercise.muscleGroup,
