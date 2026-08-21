@@ -516,7 +516,12 @@ export const WhoopDashboard: React.FC = () => {
       setWorkouts(result.workouts);
       setStale(result.fromCache);
     } catch (err) {
-      setError(friendlyError(err));
+      // A dead/expired token (401) means the WHOOP link is broken — flip to the
+      // reconnect prompt (with its Connect button) instead of a dead-end error,
+      // so the user always has a one-tap path back to a working connection.
+      const status = (err as { status?: number })?.status;
+      if (status === 401) setConnected(false);
+      else setError(friendlyError(err));
     } finally {
       doneProgress();
       setLoading(false);

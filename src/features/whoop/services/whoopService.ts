@@ -16,14 +16,16 @@ function lsGet<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(LS_PREFIX + key);
     if (!raw) return null;
-    const { data, ts } = JSON.parse(raw) as { data: T; ts: number };
-    if (Date.now() - ts > LS_TTL_MS) { localStorage.removeItem(LS_PREFIX + key); return null; }
+    const { data, ts, ttl } = JSON.parse(raw) as { data: T; ts: number; ttl?: number };
+    if (Date.now() - ts > (ttl ?? LS_TTL_MS)) { localStorage.removeItem(LS_PREFIX + key); return null; }
     return data;
   } catch { return null; }
 }
 
-function lsSet(key: string, data: unknown) {
-  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify({ data, ts: Date.now() })); } catch { /* quota */ }
+// ttl (ms) overrides the default window — used to cache a *partial* WHOOP result
+// only briefly so a transient empty sleep/strain never sticks for the full TTL.
+function lsSet(key: string, data: unknown, ttl?: number) {
+  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify({ data, ts: Date.now(), ttl })); } catch { /* quota */ }
 }
 
 function lsClear() {
@@ -262,14 +264,19 @@ export const whoopService = {
   // ── Primary data method: one edge-function call, server + localStorage caching ──
 
   async fetchAll(tab: 'day' | 'week' | 'month', startDate?: string, endDate?: string): Promise<WhoopAllData> {
-    const lsKey = `all:${tab}:${startDate ?? 'latest'}:${endDate ?? 'latest'}`;
+    // Key the cache by USER so two accounts in the same browser never see each
+    // other's WHOOP data. (Server data is already RLS-isolated per user_id;
+    // this closes the client-side leak — no per-user tables needed.)
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? 'anon';
+    const jwt = session?.access_token;
+    const lsKey = `all:${uid}:${tab}:${startDate ?? 'latest'}:${endDate ?? 'latest'}`;
 
     // 1. Instant return from localStorage if fresh
     const cached = lsGet<WhoopAllData>(lsKey);
     if (cached) return { ...cached, fromCache: true };
 
     // 2. Single batch call to edge function (which has its own 15-min DB cache)
-    const jwt = await getJwt();
     const res = await fetch(`${EDGE_FN}/whoop-oauth`, {
       method: 'POST',
       headers: {
@@ -302,8 +309,12 @@ export const whoopService = {
       fromCache: raw.from_cache,
     };
 
-    // 3. Save parsed result to localStorage for next visit
-    lsSet(lsKey, result);
+    // 3. Save to localStorage — but only briefly if the result is PARTIAL
+    // (e.g. recovery present but sleep/strain empty right after a reconnect).
+    // Caching a partial for the full window is what made sleep/strain stay
+    // blank; a short TTL lets the very next load refetch the missing pieces.
+    const complete = result.recovery.length > 0 && result.sleep.length > 0 && result.cycles.length > 0;
+    lsSet(lsKey, result, complete ? undefined : 45_000);
     return result;
   },
 };
