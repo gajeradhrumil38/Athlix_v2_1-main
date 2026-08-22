@@ -127,30 +127,51 @@ export const TraineeDetail: React.FC = () => {
         })}
       </div>
 
-      {tab === 'overview' && (
-        <div className="space-y-4">
-          <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
-          {plans.length > 0 && (
-            <Section title="Assigned plans">
-              <div className="space-y-3">
-                {plans.map((p) => (
-                  <PlanCard key={p.id} plan={p} workouts={dash.workouts.shared ? dash.workouts.data : []} onRemove={async () => { await archivePlan(p.id); loadPlans(); }} />
-                ))}
+      {tab === 'overview' && (() => {
+        const ws = dash.workouts.shared ? dash.workouts.data : [];
+        const now = Date.now();
+        const weekSessions = new Set(ws.filter((w) => now - parseDay(w.date) <= 7 * DAY).map((w) => w.date)).size;
+        const GOAL = 5;
+        return (
+          // BI-style bento — everything on one laptop screen: stats + gauge,
+          // volume + PRs, muscle radar + map, plans across the bottom.
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="space-y-4">
+              <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
+              <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />
+            </div>
+            <div className="space-y-4">
+              <Section title="Training volume">
+                {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
+              </Section>
+              <Section title="Personal records">
+                {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />}
+              </Section>
+            </div>
+            <div className="space-y-4">
+              <Section title="Muscle balance">
+                {dash.workouts.shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Workouts" />}
+              </Section>
+              <Section title="Muscle map">
+                {dash.workouts.shared
+                  ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card>
+                  : <NotShared label="Workouts" />}
+              </Section>
+            </div>
+            {plans.length > 0 && (
+              <div className="lg:col-span-3">
+                <Section title="Assigned plans">
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {plans.map((p) => (
+                      <PlanCard key={p.id} plan={p} workouts={dash.workouts.shared ? dash.workouts.data : []} onRemove={async () => { await archivePlan(p.id); loadPlans(); }} />
+                    ))}
+                  </div>
+                </Section>
               </div>
-            </Section>
-          )}
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Section title="Muscle map">
-              {dash.workouts.shared
-                ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card>
-                : <NotShared label="Workouts" />}
-            </Section>
-            <Section title="Muscle balance">
-              {dash.workouts.shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Workouts" />}
-            </Section>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* The exact same WHOOP board the athlete sees, fed the trainee's cached data. */}
       {tab === 'whoop' && (id ? <WhoopDashboard userId={id} coachView /> : null)}
@@ -199,6 +220,27 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`glass-card p-4 ${className}`}>{children}</div>
 );
+
+/* ── Circular gauge (BI-style, like the 82.6% ring) ──────── */
+const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string; caption: string }> = ({ pct, centerTop, centerBottom, caption }) => {
+  const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct));
+  return (
+    <Card className="flex flex-col items-center justify-center py-5">
+      <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] self-start mb-1">{caption}</p>
+      <div className="relative flex items-center justify-center" style={{ width: 132, height: 132 }}>
+        <svg width={132} height={132} className="-rotate-90">
+          <circle cx={66} cy={66} r={r} fill="none" stroke="var(--bg-elevated)" strokeWidth={10} />
+          <circle cx={66} cy={66} r={r} fill="none" stroke={ACCENT} strokeWidth={10} strokeLinecap="round"
+            strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[26px] font-bold leading-none text-[var(--text-primary)]">{centerTop}</span>
+          <span className="text-[11px] text-[var(--text-muted)] mt-1">{centerBottom}</span>
+        </div>
+      </div>
+    </Card>
+  );
+};
 
 /* ── Weekly headline stats ───────────────────────────────── */
 // "At a glance" — the three things a coach checks first: is this person still
