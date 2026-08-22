@@ -190,6 +190,12 @@ export const TraineeDetail: React.FC = () => {
 
       {tab === 'training' && (
         <div className="grid lg:grid-cols-2 gap-4">
+          {/* Every exercise the trainee has done, with its progression history */}
+          <div className="lg:col-span-2">
+            <Section title="Exercise history">
+              {dash.workouts.shared ? <ExerciseHistory workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
+            </Section>
+          </div>
           <Section title="Training volume">
             {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
           </Section>
@@ -297,6 +303,87 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
                     </div>
                   ))}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+};
+
+/* ── Exercise history — every lift the trainee has done + its progression ── */
+interface ExHist { name: string; sessions: number; best: { w: number; r: number }; last: string; byDate: { date: string; sets: number; w: number; r: number }[]; }
+function buildExerciseHistory(workouts: TraineeWorkout[]): ExHist[] {
+  const map = new Map<string, { sessions: Set<string>; best: { w: number; r: number }; last: string; byDate: Map<string, { sets: number; w: number; r: number }> }>();
+  for (const w of workouts) {
+    for (const e of w.exercises || []) {
+      let m = map.get(e.name);
+      if (!m) { m = { sessions: new Set(), best: { w: 0, r: 0 }, last: '', byDate: new Map() }; map.set(e.name, m); }
+      m.sessions.add(w.date);
+      if (w.date > m.last) m.last = w.date;
+      if (e.weight > m.best.w || (e.weight === m.best.w && e.reps > m.best.r)) m.best = { w: e.weight, r: e.reps };
+      const d = m.byDate.get(w.date) || { sets: 0, w: 0, r: 0 };
+      d.sets += 1;
+      if (e.weight > d.w || (e.weight === d.w && e.reps > d.r)) { d.w = e.weight; d.r = e.reps; }
+      m.byDate.set(w.date, d);
+    }
+  }
+  return [...map.entries()]
+    .map(([name, m]) => ({ name, sessions: m.sessions.size, best: m.best, last: m.last, byDate: [...m.byDate.entries()].map(([date, d]) => ({ date, ...d })).sort((a, b) => b.date.localeCompare(a.date)) }))
+    .sort((a, b) => b.last.localeCompare(a.last));
+}
+
+const fmtDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+  const list = useMemo(() => buildExerciseHistory(workouts ?? []), [workouts]);
+  const filtered = list.filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase()));
+
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <div className="px-4 py-3 border-b border-[var(--border)]">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-2">Exercise history</p>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search exercises…"
+          className="w-full h-10 rounded-xl px-3 text-[14px] outline-none"
+          style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <p className="text-[13px] text-[var(--text-muted)] text-center py-6">{list.length ? 'No match.' : 'No exercises logged.'}</p>
+      ) : (
+        <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--border)]">
+          {filtered.map((ex) => {
+            const expanded = open === ex.name;
+            return (
+              <div key={ex.name}>
+                <button type="button" onClick={() => setOpen(expanded ? null : ex.name)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{ex.name}</p>
+                    <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{ex.sessions}× · last {fmtDay(ex.last)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[13px] font-bold tabular-nums" style={{ color: ACCENT }}>{ex.best.w ? `${ex.best.w}×${ex.best.r}` : `${ex.best.r} reps`}</span>
+                    <span className={`text-[var(--text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}><AppIcon name="ExpandDown" size="sm" /></span>
+                  </div>
+                </button>
+                {expanded && (
+                  <div className="px-4 pb-3 -mt-1">
+                    <div className="rounded-xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
+                      {ex.byDate.slice(0, 12).map((h) => (
+                        <div key={h.date} className="flex items-center justify-between px-3 py-2">
+                          <p className="text-[12px] text-[var(--text-muted)]">{fmtDay(h.date)}</p>
+                          <p className="text-[13px] text-[var(--text-secondary)] tabular-nums">{h.sets}×{h.r}{h.w ? ` @${h.w}` : ''}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
