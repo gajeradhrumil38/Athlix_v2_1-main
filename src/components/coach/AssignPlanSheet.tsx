@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
-import { Stepper } from '../shared/Stepper';
+import { haptics } from '../../lib/haptics';
 import { ExercisePicker } from '../log/ExercisePicker';
 import { assignPlan, type NewPlanExercise } from '../../lib/assignedPlans';
 
@@ -98,11 +98,11 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                           <AppIcon name="Trash" size="sm" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mt-2.5">
-                        <Stepper label="Sets" value={r.sets} min={1} max={20} onChange={(v) => set(i, 'sets', v)} />
-                        <Stepper label="Reps" value={r.reps} min={1} max={100} onChange={(v) => set(i, 'reps', v)} />
-                        <Stepper label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
-                        <Stepper label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <PrescribeTile label="Sets" value={r.sets} min={1} max={20} step={1} onChange={(v) => set(i, 'sets', v)} />
+                        <PrescribeTile label="Reps" value={r.reps} min={1} max={100} step={1} onChange={(v) => set(i, 'reps', v)} />
+                        <PrescribeTile label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
+                        <PrescribeTile label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
                       </div>
                     </div>
                   ))}
@@ -148,5 +148,33 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
         </motion.div>
       )}
     </AnimatePresence>
+  );
+};
+
+// Prescribe tile — same tactile −/value/+ language as the workout logger's
+// SetRow, so building a program feels like logging a set.
+const PrescribeTile: React.FC<{ label: string; value: number; min: number; max: number; step: number; unit?: string; onChange: (v: number) => void }> = ({ label, value, min, max, step, unit, onChange }) => {
+  const clamp = (v: number) => Math.max(min, Math.min(max, v));
+  const bump = (d: number) => { haptics.tick(); onChange(clamp(value + d * step)); };
+  return (
+    <div className="relative flex h-[66px] w-full overflow-hidden rounded-xl border" style={{ background: 'var(--bg-base)', borderColor: 'var(--border)' }}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+      <button type="button" onClick={() => bump(-1)} disabled={value <= min} aria-label={`Decrease ${label}`}
+        className="flex h-full w-[42px] shrink-0 items-center justify-center active:bg-white/[0.04] transition-colors disabled:opacity-30"
+        style={{ color: 'var(--text-muted)', borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+        <span className="text-[22px] font-light leading-none select-none">−</span>
+      </button>
+      <div className="flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px]">
+        <div className="font-victory tabular-nums text-[26px] leading-none font-black text-[var(--text-primary)]">
+          {value}{unit && <span className="text-[12px] font-semibold text-[var(--text-muted)]"> {unit}</span>}
+        </div>
+        <div className="text-[9px] font-bold tracking-[0.16em] uppercase text-[var(--text-secondary)]">{label}</div>
+      </div>
+      <button type="button" onClick={() => bump(1)} disabled={value >= max} aria-label={`Increase ${label}`}
+        className="flex h-full w-[42px] shrink-0 items-center justify-center active:bg-white/[0.04] transition-colors disabled:opacity-30"
+        style={{ color: 'var(--accent)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
+        <span className="text-[22px] font-light leading-none select-none">+</span>
+      </button>
+    </div>
   );
 };
