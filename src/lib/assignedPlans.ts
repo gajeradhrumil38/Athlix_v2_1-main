@@ -14,6 +14,7 @@ export interface AssignedPlanExercise {
   order_index: number;
   day_label?: string | null;
   rest_seconds?: number | null;
+  note?: string | null;
 }
 
 export interface AssignedPlan {
@@ -27,7 +28,7 @@ export interface AssignedPlan {
   exercises: AssignedPlanExercise[];
 }
 
-export interface NewPlanExercise { name: string; sets: number; reps: number; weight: number; rest?: number; }
+export interface NewPlanExercise { name: string; sets: number; reps: number; weight: number; rest?: number; note?: string; }
 
 async function meId(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
@@ -60,6 +61,7 @@ export async function assignPlan(
     unit: 'lbs',
     order_index: i,
     rest_seconds: e.rest != null ? Math.max(0, Math.round(e.rest)) : null,
+    note: e.note?.trim() || null,
   }));
   const { error: exErr } = await supabase.from('assigned_plan_exercises').insert(rows);
   if (exErr) {
@@ -76,7 +78,7 @@ function shape(rows: any[]): AssignedPlan[] {
   }));
 }
 
-const SELECT = '*, assigned_plan_exercises(name, muscle_group, default_sets, default_reps, default_weight, unit, order_index, day_label, rest_seconds)';
+const SELECT = '*, assigned_plan_exercises(name, muscle_group, default_sets, default_reps, default_weight, unit, order_index, day_label, rest_seconds, note)';
 
 // Trainer: plans they assigned to a given trainee.
 export async function getAssignedPlansFor(traineeId: string): Promise<AssignedPlan[]> {

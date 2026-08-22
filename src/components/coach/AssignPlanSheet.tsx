@@ -12,7 +12,7 @@ import type { TraineeWorkout } from '../../lib/coachData';
 // the coach starts from real numbers — reorderable, then assigned in one tap.
 interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; onClose: () => void; onAssigned: () => void; }
 
-type Row = { name: string; sets: number; reps: number; weight: number; rest: number };
+type Row = { name: string; sets: number; reps: number; weight: number; rest: number; note: string };
 
 export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], onClose, onAssigned }) => {
   const [title, setTitle] = useState('');
@@ -24,7 +24,8 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   const reset = () => { setTitle(''); setRows([]); setError(''); setBusy(false); setPicking(false); };
   const close = () => { onClose(); reset(); };
 
-  const set = (i: number, k: keyof Row, v: number) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+  const set = (i: number, k: 'sets' | 'reps' | 'weight' | 'rest', v: number) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+  const setNote = (i: number, v: string) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, note: v } : r));
   const removeRow = (i: number) => setRows((p) => p.filter((_, idx) => idx !== i));
   const move = (i: number, dir: -1 | 1) => setRows((p) => {
     const j = i + dir;
@@ -49,14 +50,14 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     setRows((p) => {
       if (p.some((r) => r.name.toLowerCase() === name.toLowerCase())) return p; // no dupes
       const last = lastSetFor(name);
-      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90 }];
+      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90, note: '' }];
     });
 
   const submit = async () => {
     setBusy(true); setError('');
     const exercises: NewPlanExercise[] = rows
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name, sets: r.sets, reps: r.reps, weight: r.weight, rest: r.rest }));
+      .map((r) => ({ name: r.name, sets: r.sets, reps: r.reps, weight: r.weight, rest: r.rest, note: r.note }));
     const res = await assignPlan(traineeId, { title, exercises });
     setBusy(false);
     if (!res.ok) { setError(res.error || 'Could not assign.'); return; }
@@ -124,6 +125,13 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                         <PrescribeTile label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
                         <PrescribeTile label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
                       </div>
+                      <input
+                        value={r.note}
+                        onChange={(e) => setNote(i, e.target.value)}
+                        placeholder="Coaching note — tempo, RPE, cue… (optional)"
+                        className="w-full h-10 mt-2 rounded-xl px-3 text-[13px] outline-none"
+                        style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+                      />
                     </div>
                   ))}
                 </div>

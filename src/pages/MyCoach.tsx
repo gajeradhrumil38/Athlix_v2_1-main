@@ -56,11 +56,14 @@ export const MyCoach: React.FC = () => {
               </div>
               <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
                 {p.exercises.map((e, i) => (
-                  <div key={i} className="flex items-center justify-between px-5 py-3">
-                    <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
-                    <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
-                      {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${e.rest_seconds}s` : ''}
-                    </p>
+                  <div key={i} className="px-5 py-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
+                      <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
+                        {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${e.rest_seconds}s` : ''}
+                      </p>
+                    </div>
+                    {e.note && <p className="text-[13px] mt-1 leading-snug" style={{ color: 'var(--accent)' }}>{e.note}</p>}
                   </div>
                 ))}
               </div>
