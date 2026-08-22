@@ -13,8 +13,7 @@ import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } 
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
 import { Calendar } from './Calendar';
-import { CardiacHealth } from '../features/whoop/components/CardiacHealth';
-import { LoadInsights } from '../features/whoop/components/LoadInsights';
+import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 
 const ACCENT = '#c8ff00';
 
@@ -117,11 +116,10 @@ export const TraineeDetail: React.FC = () => {
             </div>
           </Section>
         )}
-        <ReadinessRow dash={dash} />
-        {/* Same WHOOP boards the athlete sees — fed the trainee's cached data
-            (RLS-gated). Each self-hides if the trainee hasn't shared enough. */}
-        {id && <LoadInsights userId={id} coachView />}
-        {id && <CardiacHealth userId={id} coachView />}
+        {/* The exact same WHOOP board the athlete sees (recovery/sleep/strain
+            rings + tiles + Cardiac Health + Training Load), fed the trainee's
+            cached data via RLS. Self-hides pieces the trainee hasn't shared. */}
+        {id && <WhoopDashboard userId={id} coachView />}
         <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
         <Section title="Muscle map">
           {dash.workouts.shared
@@ -173,32 +171,6 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`glass-card p-4 ${className}`}>{children}</div>
 );
-
-/* ── Readiness (WHOOP) ───────────────────────────────────── */
-const ReadinessRow: React.FC<{ dash: TraineeDashboard }> = ({ dash }) => {
-  const tiles = [
-    { key: 'recovery', label: 'Recovery', shared: dash.recovery.shared, value: dash.recovery.data, unit: '%', color: '#4dff91' },
-    { key: 'sleep', label: 'Sleep', shared: dash.sleep.shared, value: dash.sleep.data, unit: 'h', color: '#4FC3F7' },
-    { key: 'strain', label: 'Strain', shared: dash.strain.shared, value: dash.strain.data, unit: '', color: '#ffd54f' },
-  ];
-  if (tiles.every((t) => !t.shared)) return null;
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      {tiles.map((t) => (
-        <div key={t.key} className="glass-card px-3 py-4 text-center">
-          <p className="text-[12px] font-medium text-[var(--text-muted)]">{t.label}</p>
-          {!t.shared ? (
-            <p className="text-[15px] text-[var(--text-muted)] mt-2">—</p>
-          ) : (
-            <p className="text-[28px] font-bold mt-1 leading-none" style={{ color: t.color }}>
-              {t.value != null ? t.value : '—'}<span className="text-[15px] font-semibold text-[var(--text-muted)]">{t.value != null ? t.unit : ''}</span>
-            </p>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-};
 
 /* ── Weekly headline stats ───────────────────────────────── */
 // "At a glance" — the three things a coach checks first: is this person still

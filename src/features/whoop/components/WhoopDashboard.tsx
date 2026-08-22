@@ -472,8 +472,11 @@ const WorkoutCard: React.FC<{ w: WhoopWorkout; isHardest?: boolean }> = ({ w, is
 };
 
 /* ── Main dashboard ────────────────────────────────────────── */
-export const WhoopDashboard: React.FC = () => {
+export const WhoopDashboard: React.FC<{ userId?: string; coachView?: boolean }> = ({ userId, coachView = false }) => {
   const { user } = useAuth();
+  // Coach viewing a trainee: read the trainee's cached WHOOP (RLS-gated),
+  // no connect/refresh flow. Defaults to the signed-in user's live board.
+  const targetUserId = userId ?? user?.id;
   const navigate = useNavigate();
   const { startProgress, doneProgress } = useProgress();
   const [connected, setConnected] = useState(false);
@@ -495,21 +498,26 @@ export const WhoopDashboard: React.FC = () => {
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
   useEffect(() => {
+    // Coach view has no connect flow — the trainee's cache is the source; treat
+    // as connected and let the fetch decide whether any data was shared.
+    if (coachView) { setConnected(true); setConnectionLoading(false); return; }
     if (!user?.id) { setConnectionLoading(false); return; }
     whoopService.getConnectionInfo(user.id)
       .then((info) => setConnected(info?.connected ?? false))
       .catch(() => setConnected(false))
       .finally(() => setConnectionLoading(false));
-  }, [user?.id]);
+  }, [user?.id, coachView]);
 
   const fetchAll = useCallback(async () => {
-    if (!connected || !user?.id) return;
+    if (!connected || !targetUserId) return;
     startProgress();
     setLoading(true);
     setError(null);
     try {
       const { start, end } = tab === 'day' ? { start: undefined, end: undefined } : buildDateRange(TAB_DAYS[tab]);
-      const result = await whoopService.fetchAll(tab, start, end);
+      const result = coachView
+        ? await whoopService.fetchAllFromCache(targetUserId)
+        : await whoopService.fetchAll(tab, start, end);
       setRecovery(result.recovery);
       setSleep(result.sleep);
       setSteps(result.cycles);
@@ -520,13 +528,13 @@ export const WhoopDashboard: React.FC = () => {
       // reconnect prompt (with its Connect button) instead of a dead-end error,
       // so the user always has a one-tap path back to a working connection.
       const status = (err as { status?: number })?.status;
-      if (status === 401) setConnected(false);
+      if (status === 401 && !coachView) setConnected(false);
       else setError(friendlyError(err));
     } finally {
       doneProgress();
       setLoading(false);
     }
-  }, [connected, tab, user?.id, startProgress, doneProgress]);
+  }, [connected, tab, targetUserId, coachView, startProgress, doneProgress]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
 
@@ -706,10 +714,10 @@ export const WhoopDashboard: React.FC = () => {
       />
 
       {/* Training load & injury risk (self-fetches its own 4-week window) */}
-      {user?.id && <LoadInsights userId={user.id} />}
+      {targetUserId && <LoadInsights userId={targetUserId} coachView={coachView} />}
 
       {/* Cardiometric health — VO2max, resting HR, HRV, HR reserve */}
-      {user?.id && <CardiacHealth userId={user.id} />}
+      {targetUserId && <CardiacHealth userId={targetUserId} coachView={coachView} />}
 
       {/* Workouts */}
       {!loading && !error && workouts.length > 0 && (
