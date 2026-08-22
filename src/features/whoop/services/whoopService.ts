@@ -330,24 +330,42 @@ export const whoopService = {
   // coach's data. Merge every cached window, dedupe, and parse with the same
   // parsers the live path uses, so the cards render identically.
   async fetchAllFromCache(userId: string): Promise<WhoopAllData> {
-    const { data } = await supabase
-      .from('whoop_cache')
-      .select('cache_key, data')
-      .eq('user_id', userId);
-    const rows = (data ?? []) as { cache_key: string; data: { records?: unknown[] } }[];
-    const collect = (prefix: string, key: (r: any) => string) => {
+    // Fetch only the few MOST-RECENT cached windows per kind — not every row.
+    // Selecting all ~hundreds of rows (each a large jsonb) produced a response
+    // big enough to fail with "Failed to fetch". The latest range windows
+    // already cover ~4 weeks, enough for the rings + Cardiac/Load cards.
+    const kinds = ['recovery', 'sleep', 'cycles', 'workouts'] as const;
+    const results = await Promise.all(
+      kinds.map((k) =>
+        supabase
+          .from('whoop_cache')
+          .select('data')
+          .eq('user_id', userId)
+          .like('cache_key', `${k}:%`)
+          .order('fetched_at', { ascending: false })
+          .limit(4),
+      ),
+    );
+
+    const merge = (rows: any[] | null | undefined, key: (r: any) => string) => {
       const map = new Map<string, unknown>();
-      for (const row of rows) {
-        if (!row.cache_key?.startsWith(prefix)) continue;
-        for (const rec of (row.data?.records ?? []) as any[]) map.set(key(rec), rec);
+      for (const row of rows ?? []) {
+        for (const rec of ((row?.data?.records ?? []) as any[])) {
+          const d = rec?.created_at ?? rec?.start ?? rec?.end;
+          if (!d || Number.isNaN(new Date(d).getTime())) continue; // skip undated → never throws in parsers
+          map.set(key(rec), rec);
+        }
       }
       return { records: [...map.values()] };
     };
+
+    const safe = <T>(fn: () => T[]): T[] => { try { return fn(); } catch { return []; } };
+    const [rec, slp, cyc, wko] = results.map((r) => r.data as any[] | null);
     return {
-      recovery: parseRecovery(collect('recovery:', (r) => String(r.created_at ?? r.cycle_id))),
-      sleep: parseSleep(collect('sleep:', (r) => String(r.id ?? r.start))),
-      cycles: parseCycles(collect('cycles:', (r) => String(r.id ?? r.start))),
-      workouts: parseWorkouts(collect('workouts:', (r) => String(r.id ?? r.start))),
+      recovery: safe(() => parseRecovery(merge(rec, (r) => String(r.created_at ?? r.cycle_id)))),
+      sleep: safe(() => parseSleep(merge(slp, (r) => String(r.id ?? r.start)))),
+      cycles: safe(() => parseCycles(merge(cyc, (r) => String(r.id ?? r.start)))),
+      workouts: safe(() => parseWorkouts(merge(wko, (r) => String(r.id ?? r.start)))),
       fromCache: true,
     };
   },
