@@ -291,6 +291,7 @@ export const TraineeDetail: React.FC = () => {
         open={assign}
         traineeId={id!}
         traineeName={dash.name}
+        traineeWorkouts={dash.workouts.shared ? dash.workouts.data : []}
         onClose={() => setAssign(false)}
         onAssigned={loadPlans}
       />

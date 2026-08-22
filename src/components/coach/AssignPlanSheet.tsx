@@ -4,15 +4,17 @@ import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
 import { ExercisePicker } from '../log/ExercisePicker';
 import { assignPlan, type NewPlanExercise } from '../../lib/assignedPlans';
+import type { TraineeWorkout } from '../../lib/coachData';
 
-// Trainer builds a program: exercises picked from the SAME searchable catalog the
-// athlete uses, each prescribed with sets / reps / weight / rest via the shared
-// Stepper, reorderable, then assigned in one tap.
-interface Props { open: boolean; traineeId: string; traineeName: string; onClose: () => void; onAssigned: () => void; }
+// Trainer builds a program: exercises picked (multi-select) from the SAME
+// searchable catalog the athlete uses, each prescribed with sets/reps/weight/
+// rest via logger-style tiles — pre-filled from the trainee's last session so
+// the coach starts from real numbers — reorderable, then assigned in one tap.
+interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; onClose: () => void; onAssigned: () => void; }
 
 type Row = { name: string; sets: number; reps: number; weight: number; rest: number };
 
-export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, onClose, onAssigned }) => {
+export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], onClose, onAssigned }) => {
   const [title, setTitle] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
@@ -29,8 +31,26 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     if (j < 0 || j >= p.length) return p;
     const next = [...p]; [next[i], next[j]] = [next[j], next[i]]; return next;
   });
+  // The trainee's last logged top set for an exercise — so a prescription
+  // starts from what they actually did, not a blank guess.
+  const lastSetFor = (name: string): { weight: number; reps: number } | null => {
+    const lower = name.toLowerCase();
+    const ordered = [...traineeWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+    for (const w of ordered) {
+      const rows = (w.exercises || []).filter((e) => e.name.toLowerCase() === lower);
+      if (rows.length) {
+        const top = rows.reduce((a, b) => (b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a));
+        return { weight: Math.round(top.weight), reps: top.reps };
+      }
+    }
+    return null;
+  };
   const addExercise = (name: string, sets?: number, reps?: number) =>
-    setRows((p) => [...p, { name, sets: sets || 3, reps: reps || 10, weight: 0, rest: 90 }]);
+    setRows((p) => {
+      if (p.some((r) => r.name.toLowerCase() === name.toLowerCase())) return p; // no dupes
+      const last = lastSetFor(name);
+      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90 }];
+    });
 
   const submit = async () => {
     setBusy(true); setError('');
@@ -140,6 +160,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
               <ExercisePicker
                 recentExercises={[]}
                 defaultTab="muscle"
+                multiSelect
                 onSelect={(ex) => addExercise(ex.name, ex.defaultSets, ex.defaultReps)}
                 onClose={() => setPicking(false)}
               />
