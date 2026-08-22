@@ -58,7 +58,9 @@ export const MyCoach: React.FC = () => {
                 {p.exercises.map((e, i) => (
                   <div key={i} className="flex items-center justify-between px-5 py-3">
                     <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
-                    <p className="text-[14px] text-[var(--text-muted)] shrink-0">{e.default_sets} × {e.default_reps}</p>
+                    <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
+                      {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${e.rest_seconds}s` : ''}
+                    </p>
                   </div>
                 ))}
               </div>

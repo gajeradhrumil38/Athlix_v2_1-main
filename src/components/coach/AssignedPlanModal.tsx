@@ -89,7 +89,7 @@ export const AssignedPlanModal: React.FC = () => {
             {current.exercises.slice(0, 5).map((e, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-2.5">
                 <p className="text-[15px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
-                <p className="text-[13px] text-[var(--text-muted)] shrink-0">{e.default_sets} × {e.default_reps}</p>
+                <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}</p>
               </div>
             ))}
             {current.exercises.length > 5 && (
