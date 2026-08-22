@@ -152,15 +152,17 @@ const Vo2Spark: React.FC<{ values: number[] }> = ({ values }) => {
   );
 };
 
-export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
+export const CardiacHealth: React.FC<{ userId: string; coachView?: boolean }> = ({ userId, coachView = false }) => {
   const [data, setData] = useState<CardiacData | null>(null);
   const [loading, setLoading] = useState(true);
   const [info, setInfo] = useState<{ title: string; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Coach view reads the trainee's cached WHOOP (RLS-gated); own view fetches live.
     const { start, end } = whoopWindowRange(WINDOW_DAYS);
-    whoopService.fetchAll('month', start, end)
+    const p = coachView ? whoopService.fetchAllFromCache(userId) : whoopService.fetchAll('month', start, end);
+    p
       .then((res) => {
         if (cancelled) return;
         setData(computeCardiacHealth(res.recovery, res.cycles, res.workouts));
@@ -168,7 +170,7 @@ export const CardiacHealth: React.FC<{ userId: string }> = ({ userId }) => {
       .catch(() => { if (!cancelled) setData(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, coachView]);
 
   if (loading) {
     return <div className="rounded-2xl animate-pulse" style={{ height: 150, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />;

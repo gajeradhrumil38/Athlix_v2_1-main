@@ -13,6 +13,8 @@ import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } 
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
 import { Calendar } from './Calendar';
+import { CardiacHealth } from '../features/whoop/components/CardiacHealth';
+import { LoadInsights } from '../features/whoop/components/LoadInsights';
 
 const ACCENT = '#c8ff00';
 
@@ -116,6 +118,10 @@ export const TraineeDetail: React.FC = () => {
           </Section>
         )}
         <ReadinessRow dash={dash} />
+        {/* Same WHOOP boards the athlete sees — fed the trainee's cached data
+            (RLS-gated). Each self-hides if the trainee hasn't shared enough. */}
+        {id && <LoadInsights userId={id} coachView />}
+        {id && <CardiacHealth userId={id} coachView />}
         <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
         <Section title="Muscle map">
           {dash.workouts.shared

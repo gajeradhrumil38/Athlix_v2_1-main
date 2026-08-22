@@ -116,7 +116,7 @@ const LegendDot: React.FC<{ color: string; label: string; active?: boolean }> = 
 
 const parseDow = (d: string) => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(`${d}T00:00:00`).getDay()];
 
-export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
+export const LoadInsights: React.FC<{ userId: string; coachView?: boolean }> = ({ userId, coachView = false }) => {
   const [metrics, setMetrics] = useState<LoadMetrics | null>(null);
   const [recovery, setRecovery] = useState<WhoopRecovery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,8 +124,10 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
 
   useEffect(() => {
     let cancelled = false;
+    // Coach view reads the trainee's cached WHOOP (RLS-gated); own view fetches live.
     const { start, end } = whoopWindowRange(WINDOW_DAYS);
-    whoopService.fetchAll('month', start, end)
+    const p = coachView ? whoopService.fetchAllFromCache(userId) : whoopService.fetchAll('month', start, end);
+    p
       .then((res) => {
         if (cancelled) return;
         const loads = buildDailyLoads(res.cycles, WINDOW_DAYS);
@@ -135,7 +137,7 @@ export const LoadInsights: React.FC<{ userId: string }> = ({ userId }) => {
       .catch(() => { if (!cancelled) setMetrics(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, coachView]);
 
   const acwr = metrics ? acwrZone(metrics.acwr, metrics.hasAcwrBaseline) : null;
   const form = metrics ? formZone(metrics.form) : null;

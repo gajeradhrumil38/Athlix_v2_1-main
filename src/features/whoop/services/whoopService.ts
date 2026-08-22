@@ -323,4 +323,32 @@ export const whoopService = {
     lsSet(lsKey, result, complete ? undefined : 45_000);
     return result;
   },
+
+  // Coach view: read a TRAINEE's WHOOP straight from whoop_cache (RLS only
+  // returns rows for scopes the trainee shared). We can't use fetchAll here —
+  // that hits the edge function with the coach's own token and would return the
+  // coach's data. Merge every cached window, dedupe, and parse with the same
+  // parsers the live path uses, so the cards render identically.
+  async fetchAllFromCache(userId: string): Promise<WhoopAllData> {
+    const { data } = await supabase
+      .from('whoop_cache')
+      .select('cache_key, data')
+      .eq('user_id', userId);
+    const rows = (data ?? []) as { cache_key: string; data: { records?: unknown[] } }[];
+    const collect = (prefix: string, key: (r: any) => string) => {
+      const map = new Map<string, unknown>();
+      for (const row of rows) {
+        if (!row.cache_key?.startsWith(prefix)) continue;
+        for (const rec of (row.data?.records ?? []) as any[]) map.set(key(rec), rec);
+      }
+      return { records: [...map.values()] };
+    };
+    return {
+      recovery: parseRecovery(collect('recovery:', (r) => String(r.created_at ?? r.cycle_id))),
+      sleep: parseSleep(collect('sleep:', (r) => String(r.id ?? r.start))),
+      cycles: parseCycles(collect('cycles:', (r) => String(r.id ?? r.start))),
+      workouts: parseWorkouts(collect('workouts:', (r) => String(r.id ?? r.start))),
+      fromCache: true,
+    };
+  },
 };
