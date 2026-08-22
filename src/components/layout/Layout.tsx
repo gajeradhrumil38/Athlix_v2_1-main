@@ -48,7 +48,8 @@ export const Layout: React.FC = () => {
     location.pathname.startsWith('/calendar') ||
     location.pathname.startsWith('/progress') ||
     location.pathname.startsWith('/timeline') ||
-    location.pathname.startsWith('/skincare');
+    location.pathname.startsWith('/skincare') ||
+    location.pathname.startsWith('/me');
   const swipeStartRef = useRef<{ x: number; y: number; ts: number } | null>(null);
   const tapTimerRef = useRef<number | null>(null);
 

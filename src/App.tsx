@@ -109,6 +109,8 @@ const AppRoutes = () => {
         <Route path="skincare" element={<SkincareRoutinePage />} />
         <Route path="coach" element={<CoachDashboard />} />
         <Route path="coach/trainee/:id" element={<TraineeDetail />} />
+        {/* A trainer's own athlete dashboard (their Home redirects to /coach). */}
+        <Route path="me" element={<Home />} />
         <Route path="my-coach" element={<MyCoach />} />
       </Route>
     </Routes>

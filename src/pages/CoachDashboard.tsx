@@ -51,6 +51,22 @@ export const CoachDashboard: React.FC = () => {
         </button>
       </div>
 
+      {/* The coach's own athlete dashboard (their Home lands here on the roster) */}
+      <button
+        type="button"
+        onClick={() => navigate('/me')}
+        className="w-full glass-card px-5 py-4 mb-4 flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
+      >
+        <span className="shrink-0 flex h-11 w-11 items-center justify-center rounded-2xl" style={{ background: 'var(--accent)', color: '#000' }}>
+          <AppIcon name="Home" size="md" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-[17px] font-semibold text-[var(--text-primary)]">My training</p>
+          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Your own dashboard, calendar &amp; stats</p>
+        </div>
+        <AppIcon name="Forward" size="md" />
+      </button>
+
       {loading ? (
         <div className="flex items-center gap-2 text-[var(--text-muted)] py-10 justify-center">
           <AppIcon name="Spinner" size="sm" /> <span>Loading…</span>
