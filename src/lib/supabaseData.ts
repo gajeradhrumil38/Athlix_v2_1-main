@@ -1536,6 +1536,7 @@ export const updateProfile = async (userId: string, updates: Partial<LocalProfil
         body_weight_unit: nextProfile.body_weight_unit,
         height_feet: nextProfile.height_feet,
         height_inches: nextProfile.height_inches,
+        sex: nextProfile.sex ?? null,
       },
     ],
     'id',
