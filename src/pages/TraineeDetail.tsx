@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   ResponsiveContainer, AreaChart, Area, LineChart, Line,
   XAxis, YAxis, Tooltip, CartesianGrid,
@@ -17,6 +20,8 @@ import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 
 const ACCENT = '#c8ff00';
+const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
+const DEFAULT_OVERVIEW_ORDER = ['stats', 'gauge', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
 
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
@@ -55,6 +60,25 @@ export const TraineeDetail: React.FC = () => {
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
+
+  // Draggable Overview — order persisted locally so a coach's arrangement sticks.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [order, setOrder] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(OVERVIEW_ORDER_KEY) || 'null');
+      if (Array.isArray(saved)) return [...saved.filter((x: string) => DEFAULT_OVERVIEW_ORDER.includes(x)), ...DEFAULT_OVERVIEW_ORDER.filter((x) => !saved.includes(x))];
+    } catch { /* ignore */ }
+    return DEFAULT_OVERVIEW_ORDER;
+  });
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setOrder((prev) => {
+      const next = arrayMove(prev, prev.indexOf(String(active.id)), prev.indexOf(String(over.id)));
+      try { localStorage.setItem(OVERVIEW_ORDER_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
   // Radar is "this week" (matches its label + the sets normalization, so it
   // isn't pinned to the edge by months of cumulative sets); the anatomical map
   // uses a 4-week window like the athlete's own Home.
@@ -126,7 +150,7 @@ export const TraineeDetail: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 pb-10">
+    <div className="max-w-6xl mx-auto px-4 pb-10">
       {/* Header */}
       <div className="flex items-center gap-3 pt-2 pb-4">
         <button onClick={() => navigate('/coach')} aria-label="Back"
@@ -189,61 +213,45 @@ export const TraineeDetail: React.FC = () => {
         const now = Date.now();
         const weekSessions = new Set(ws.filter((w) => now - parseDay(w.date) <= 7 * DAY).map((w) => w.date)).size;
         const GOAL = 5;
-        return (
-          // BI-style bento — everything on one laptop screen: stats + gauge,
-          // volume + PRs, muscle radar + map, plans across the bottom.
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="space-y-4">
-              <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
-              <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />
-              {dash.workouts.shared
-                ? <RecentSessions workouts={dash.workouts.data} />
-                : <NotShared label="Workouts" />}
-              <Card className="!p-0 overflow-hidden">
-                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Coach notes</p>
-                  {notesSaved && <span className="text-[11px] font-semibold" style={{ color: '#4dff91' }}>Saved</span>}
-                </div>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  onBlur={saveNotes}
-                  placeholder="Private notes — injuries, goals, cues…"
-                  rows={4}
-                  className="w-full bg-transparent px-4 py-3 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-muted)]"
-                />
-              </Card>
-            </div>
-            <div className="space-y-4">
-              <Section title="Training volume">
-                {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
-              </Section>
-              <Section title="Personal records">
-                {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />}
-              </Section>
-            </div>
-            <div className="space-y-4">
-              <Section title="Muscle balance">
-                {dash.workouts.shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Workouts" />}
-              </Section>
-              <Section title="Muscle map">
-                {dash.workouts.shared
-                  ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card>
-                  : <NotShared label="Workouts" />}
-              </Section>
-            </div>
-            {plans.length > 0 && (
-              <div className="lg:col-span-3">
-                <Section title="Assigned plans">
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    {plans.map((p) => (
-                      <PlanCard key={p.id} plan={p} workouts={dash.workouts.shared ? dash.workouts.data : []} onRemove={async () => { await archivePlan(p.id); loadPlans(); }} />
-                    ))}
-                  </div>
-                </Section>
+        const shared = dash.workouts.shared;
+
+        // Each card is a draggable widget. Drag the ⠿ handle to rearrange;
+        // order persists per coach. Tighter grid + no wrapper padding = bigger cards.
+        const WIDGETS: Record<string, React.ReactNode> = {
+          stats: <WeeklyStats workouts={shared ? dash.workouts.data : null} />,
+          gauge: <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />,
+          radar: shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Muscle balance" />,
+          map: shared ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card> : <NotShared label="Muscle map" />,
+          volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
+          prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
+          recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
+          notes: (
+            <Card className="!p-0 overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Coach notes</p>
+                {notesSaved && <span className="text-[11px] font-semibold" style={{ color: '#4dff91' }}>Saved</span>}
               </div>
-            )}
-          </div>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Private notes — injuries, goals, cues…" rows={4}
+                className="w-full bg-transparent px-4 py-3 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-muted)]" />
+            </Card>
+          ),
+          plans: plans.length > 0 ? (
+            <div className="grid gap-3">
+              {plans.map((p) => (
+                <PlanCard key={p.id} plan={p} workouts={shared ? dash.workouts.data : []} onRemove={async () => { await archivePlan(p.id); loadPlans(); }} />
+              ))}
+            </div>
+          ) : null,
+        };
+        const ids = order.filter((k) => WIDGETS[k] != null);
+        return (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext items={ids} strategy={rectSortingStrategy}>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+                {ids.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
+              </div>
+            </SortableContext>
+          </DndContext>
         );
       })()}
 
@@ -300,6 +308,29 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`glass-card p-4 ${className}`}>{children}</div>
 );
+
+/* ── Drag-to-rearrange wrapper (Overview cards) ──────────── */
+const SortableCard: React.FC<{ id: string; children: React.ReactNode }> = ({ id, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 20 : undefined }}
+      className="relative"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to rearrange"
+        className="absolute -top-2 -right-2 z-10 touch-none cursor-grab active:cursor-grabbing h-7 w-7 flex items-center justify-center rounded-lg text-[13px] opacity-60 hover:opacity-100"
+        style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+      >
+        ⠿
+      </button>
+      {children}
+    </div>
+  );
+};
 
 /* ── Circular gauge (BI-style, like the 82.6% ring) ──────── */
 const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string; caption: string }> = ({ pct, centerTop, centerBottom, caption }) => {
