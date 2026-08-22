@@ -290,7 +290,10 @@ const WorkoutCard: React.FC<{
   onOpenProgress?: (exerciseName: string, muscle?: string | null) => void;
   onRepeat?: () => void;
   onOpenRun?: () => void;
-}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress, onRepeat, onOpenRun }) => {
+  // Coach viewing a trainee — view only. Hides edit/rename/delete/add-exercise;
+  // the trainer has no write access to trainee workouts anyway (RLS backstop).
+  readOnly?: boolean;
+}> = ({ workout, unit, onDelete, onSaved, onRenamed, onExtracted, sameDayWorkouts, onMerged, splitParentId, splitName, onDeleteExercise, onOpenProgress, onRepeat, onOpenRun, readOnly = false }) => {
   const isSplit = !!splitParentId;
   const { user } = useAuth();
   const [expanded, setExpanded]         = useState(false);
@@ -534,6 +537,7 @@ const WorkoutCard: React.FC<{
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0 mt-0.5" onClick={(e) => e.stopPropagation()}>
+            {!readOnly && (
             <button
               onClick={() => setShowMenu((v) => !v)}
               className="h-7 w-7 flex items-center justify-center rounded-lg active:scale-95 transition-all"
@@ -546,6 +550,7 @@ const WorkoutCard: React.FC<{
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
+            )}
             {hasDetail && (
               <button
                 onClick={() => { if (!editing) setExpanded((e) => !e); }}
@@ -756,7 +761,7 @@ const WorkoutCard: React.FC<{
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
                   {viewGroups.length} exercise{viewGroups.length !== 1 ? 's' : ''}
                 </p>
-                {!editing && !isSplit && (
+                {!editing && !isSplit && !readOnly && (
                   <button onClick={beginEdit}
                     className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold active:scale-95 transition-all"
                     style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
@@ -1009,8 +1014,11 @@ const WorkoutCard: React.FC<{
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export const Calendar: React.FC = () => {
+export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ userId, readOnly = false }) => {
   const { user, profile } = useAuth();
+  // When a coach views a trainee, read that trainee's workouts (RLS-gated) in a
+  // read-only calendar. Defaults to the signed-in user for the normal /calendar.
+  const effectiveUserId = userId ?? user?.id;
   const { startProgress, doneProgress } = useProgress();
   const unit = (profile?.unit_preference || 'lbs') as WeightUnit;
   const navigate = useNavigate();
@@ -1042,7 +1050,7 @@ export const Calendar: React.FC = () => {
   // When viewMode is 'week', also extend to cover the full week even if it crosses months.
 
   useEffect(() => {
-    if (!user) { setLoading(false); return; }
+    if (!effectiveUserId) { setLoading(false); return; }
     setLoading(true);
     startProgress();
 
@@ -1056,7 +1064,7 @@ export const Calendar: React.FC = () => {
       end   = weekEnd(endOfMonth(anchor));
     }
 
-    getWorkouts(user.id, {
+    getWorkouts(effectiveUserId, {
       startDate: format(start, 'yyyy-MM-dd'),
       endDate:   format(end,   'yyyy-MM-dd'),
       includeExercises: true,
@@ -1073,7 +1081,7 @@ export const Calendar: React.FC = () => {
       })
       .catch(() => setWorkouts([]))
       .finally(() => { setLoading(false); doneProgress(); });
-  }, [user, anchor, viewMode, refreshKey, startProgress, doneProgress]);
+  }, [effectiveUserId, anchor, viewMode, refreshKey, startProgress, doneProgress]);
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
@@ -1305,6 +1313,7 @@ export const Calendar: React.FC = () => {
           onOpenProgress={(name, muscle) => setProgressExercise({ name, muscle })}
           onRepeat={() => repeatWorkout(workout)}
           onOpenRun={isRunWorkout(workout) ? () => navigate(`/run/history?workout=${workout.id}`) : undefined}
+          readOnly={readOnly}
         />
       );
     }
@@ -1347,6 +1356,7 @@ export const Calendar: React.FC = () => {
           onDeleteExercise={handleDeleteExercise}
           onOpenProgress={(exName, muscle) => setProgressExercise({ name: exName, muscle })}
           onRepeat={() => repeatWorkout(synthetic)}
+          readOnly={readOnly}
         />
       );
     });

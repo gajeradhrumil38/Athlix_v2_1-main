@@ -12,6 +12,7 @@ import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
+import { Calendar } from './Calendar';
 
 const ACCENT = '#c8ff00';
 
@@ -137,6 +138,11 @@ export const TraineeDetail: React.FC = () => {
         </Section>
         <Section title="Runs">
           {dash.runs.shared ? <RunsView runs={dash.runs.data} /> : <NotShared label="Runs" />}
+        </Section>
+        <Section title="Calendar">
+          {dash.workouts.shared
+            ? <div className="glass-card overflow-hidden"><Calendar userId={id!} readOnly /></div>
+            : <NotShared label="Workouts" />}
         </Section>
       </div>
 
