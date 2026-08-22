@@ -51,6 +51,7 @@ export const TraineeDetail: React.FC = () => {
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
   const [assign, setAssign] = useState(false);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
+  const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
   const muscle = useMemo(() => buildMuscleViz(dash?.workouts.shared ? dash.workouts.data : []), [dash]);
 
   const loadPlans = React.useCallback(async () => {
@@ -79,10 +80,17 @@ export const TraineeDetail: React.FC = () => {
     </div>;
   }
 
+  const TABS = [
+    { key: 'overview' as const, label: 'Overview' },
+    { key: 'whoop' as const, label: 'Recovery' },
+    { key: 'training' as const, label: 'Training' },
+    { key: 'calendar' as const, label: 'Calendar' },
+  ];
+
   return (
-    <div className="max-w-2xl mx-auto px-4 pb-10">
+    <div className="max-w-5xl mx-auto px-4 pb-10">
       {/* Header */}
-      <div className="flex items-center gap-3 pt-2 pb-5">
+      <div className="flex items-center gap-3 pt-2 pb-4">
         <button onClick={() => navigate('/coach')} aria-label="Back"
           className="h-10 w-10 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)' }}>
           <AppIcon name="Back" size="md" />
@@ -101,54 +109,74 @@ export const TraineeDetail: React.FC = () => {
         </button>
       </div>
 
-      <div className="space-y-6">
-        {plans.length > 0 && (
-          <Section title="Assigned plans">
-            <div className="space-y-3">
-              {plans.map((p) => (
-                <PlanCard
-                  key={p.id}
-                  plan={p}
-                  workouts={dash.workouts.shared ? dash.workouts.data : []}
-                  onRemove={async () => { await archivePlan(p.id); loadPlans(); }}
-                />
-              ))}
-            </div>
-          </Section>
-        )}
-        {/* The exact same WHOOP board the athlete sees (recovery/sleep/strain
-            rings + tiles + Cardiac Health + Training Load), fed the trainee's
-            cached data via RLS. Self-hides pieces the trainee hasn't shared. */}
-        {id && <WhoopDashboard userId={id} coachView />}
-        <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
-        <Section title="Muscle map">
-          {dash.workouts.shared
-            ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles · last sessions" unit="lbs" gender={dash.sex} /></Card>
-            : <NotShared label="Workouts" />}
-        </Section>
-        <Section title="Muscle balance">
-          {dash.workouts.shared
-            ? <Card><MuscleRadar muscleData={muscle.radar} /></Card>
-            : <NotShared label="Workouts" />}
-        </Section>
-        <Section title="Training volume">
-          {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
-        </Section>
-        <Section title="Personal records">
-          {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />}
-        </Section>
-        <Section title="Body weight">
-          {dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />}
-        </Section>
-        <Section title="Runs">
-          {dash.runs.shared ? <RunsView runs={dash.runs.data} /> : <NotShared label="Runs" />}
-        </Section>
-        <Section title="Calendar">
-          {dash.workouts.shared
-            ? <div className="glass-card overflow-hidden"><Calendar userId={id!} readOnly /></div>
-            : <NotShared label="Workouts" />}
-        </Section>
+      {/* Menu bar — jump between grouped views so a coach never scrolls far */}
+      <div className="flex gap-1 mb-5 p-1 rounded-2xl overflow-x-auto" style={{ background: 'var(--bg-elevated)' }}>
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className="flex-1 min-w-[84px] h-10 rounded-xl text-[14px] font-semibold transition-colors"
+              style={{ background: active ? 'var(--accent)' : 'transparent', color: active ? '#000' : 'var(--text-secondary)' }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
+
+      {tab === 'overview' && (
+        <div className="space-y-4">
+          <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
+          {plans.length > 0 && (
+            <Section title="Assigned plans">
+              <div className="space-y-3">
+                {plans.map((p) => (
+                  <PlanCard key={p.id} plan={p} workouts={dash.workouts.shared ? dash.workouts.data : []} onRemove={async () => { await archivePlan(p.id); loadPlans(); }} />
+                ))}
+              </div>
+            </Section>
+          )}
+          <div className="grid lg:grid-cols-2 gap-4">
+            <Section title="Muscle map">
+              {dash.workouts.shared
+                ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card>
+                : <NotShared label="Workouts" />}
+            </Section>
+            <Section title="Muscle balance">
+              {dash.workouts.shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Workouts" />}
+            </Section>
+          </div>
+        </div>
+      )}
+
+      {/* The exact same WHOOP board the athlete sees, fed the trainee's cached data. */}
+      {tab === 'whoop' && (id ? <WhoopDashboard userId={id} coachView /> : null)}
+
+      {tab === 'training' && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <Section title="Training volume">
+            {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
+          </Section>
+          <Section title="Personal records">
+            {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />}
+          </Section>
+          <Section title="Body weight">
+            {dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />}
+          </Section>
+          <Section title="Runs">
+            {dash.runs.shared ? <RunsView runs={dash.runs.data} /> : <NotShared label="Runs" />}
+          </Section>
+        </div>
+      )}
+
+      {tab === 'calendar' && (
+        dash.workouts.shared
+          ? <div className="glass-card overflow-hidden"><Calendar userId={id!} readOnly /></div>
+          : <NotShared label="Workouts" />
+      )}
 
       <AssignPlanSheet
         open={assign}
