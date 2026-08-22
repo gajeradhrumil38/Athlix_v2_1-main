@@ -31,6 +31,7 @@ export interface CoachLink {
   shared_scopes: Partial<Record<ScopeKey, boolean>>;
   trainer_name: string | null;
   trainee_name: string | null;
+  coach_notes: string | null;
   created_at: string;
   responded_at: string | null;
 }
@@ -102,6 +103,12 @@ export async function getSentLinks(): Promise<CoachLink[]> {
     .eq('trainer_id', u.id)
     .order('created_at', { ascending: false });
   return (data ?? []) as CoachLink[];
+}
+
+// Trainer's private notes on a trainee (they own the link row → RLS allows it).
+export async function updateCoachNotes(linkId: string, notes: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.from('coach_links').update({ coach_notes: notes }).eq('id', linkId);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 // ── Trainee side ────────────────────────────────────────────────────

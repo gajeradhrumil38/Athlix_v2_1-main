@@ -12,6 +12,7 @@ import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
+import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 
@@ -52,6 +53,8 @@ export const TraineeDetail: React.FC = () => {
   const [assign, setAssign] = useState(false);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
+  const [notes, setNotes] = useState('');
+  const [notesSaved, setNotesSaved] = useState(false);
   // Radar is "this week" (matches its label + the sets normalization, so it
   // isn't pinned to the edge by months of cumulative sets); the anatomical map
   // uses a 4-week window like the athlete's own Home.
@@ -71,7 +74,7 @@ export const TraineeDetail: React.FC = () => {
     if (!id) return;
     (async () => {
       const d = await getTraineeDashboard(id);
-      if (!d) setMissing(true); else setDash(d);
+      if (!d) setMissing(true); else { setDash(d); setNotes(d.link.coach_notes ?? ''); }
       await loadPlans();
       setLoading(false);
     })();
@@ -96,6 +99,32 @@ export const TraineeDetail: React.FC = () => {
     { key: 'calendar' as const, label: 'Calendar' },
   ];
 
+  // Coaching triage — surface the things a trainer should act on, up front.
+  const flags: string[] = (() => {
+    if (!dash.workouts.shared) return [];
+    const ws = dash.workouts.data;
+    const now = Date.now();
+    const out: string[] = [];
+    const last = ws.reduce((m, w) => Math.max(m, parseDay(w.date)), 0);
+    const daysAgo = last ? Math.floor((now - last) / DAY) : null;
+    if (daysAgo == null) out.push('No workouts logged yet');
+    else if (daysAgo >= 7) out.push(`No workout in ${daysAgo} days`);
+    else {
+      const week = new Set(ws.filter((w) => now - parseDay(w.date) <= 7 * DAY).map((w) => w.date)).size;
+      if (week < 3) out.push(`Only ${week} session${week === 1 ? '' : 's'} this week`);
+    }
+    const notStarted = plans.filter((p) => !ws.some((w) => w.source_plan_id === p.id));
+    if (notStarted.length) out.push(`${notStarted.length} assigned plan${notStarted.length > 1 ? 's' : ''} not started`);
+    if (dash.recovery.shared && dash.recovery.data != null && dash.recovery.data < 40) out.push(`Low recovery (${dash.recovery.data}%)`);
+    return out;
+  })();
+
+  const saveNotes = async () => {
+    await updateCoachNotes(dash.link.id, notes);
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 1500);
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 pb-10">
       {/* Header */}
@@ -117,6 +146,25 @@ export const TraineeDetail: React.FC = () => {
           <AppIcon name="Clipboard" size="sm" /> Assign
         </button>
       </div>
+
+      {/* Coaching triage banner — red flags first, or an all-clear */}
+      {flags.length > 0 ? (
+        <div className="mb-4 rounded-2xl px-4 py-3" style={{ background: 'rgba(255,128,128,0.10)', border: '1px solid rgba(255,128,128,0.28)' }}>
+          <p className="text-[12px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: '#ff8080' }}>Needs attention</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {flags.map((f, i) => (
+              <span key={i} className="text-[13px] text-[var(--text-primary)] flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: '#ff8080' }} />{f}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : dash.workouts.shared ? (
+        <div className="mb-4 rounded-2xl px-4 py-2.5 flex items-center gap-2" style={{ background: 'rgba(77,255,145,0.08)', border: '1px solid rgba(77,255,145,0.22)' }}>
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#4dff91' }} />
+          <span className="text-[13px] font-medium" style={{ color: '#4dff91' }}>On track — no flags this week</span>
+        </div>
+      ) : null}
 
       {/* Menu bar — jump between grouped views so a coach never scrolls far */}
       <div className="flex gap-1 mb-5 p-1 rounded-2xl overflow-x-auto" style={{ background: 'var(--bg-elevated)' }}>
@@ -151,6 +199,20 @@ export const TraineeDetail: React.FC = () => {
               {dash.workouts.shared
                 ? <RecentSessions workouts={dash.workouts.data} />
                 : <NotShared label="Workouts" />}
+              <Card className="!p-0 overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Coach notes</p>
+                  {notesSaved && <span className="text-[11px] font-semibold" style={{ color: '#4dff91' }}>Saved</span>}
+                </div>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                  placeholder="Private notes — injuries, goals, cues…"
+                  rows={4}
+                  className="w-full bg-transparent px-4 py-3 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-muted)]"
+                />
+              </Card>
             </div>
             <div className="space-y-4">
               <Section title="Training volume">
