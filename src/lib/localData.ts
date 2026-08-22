@@ -36,6 +36,8 @@ export interface LocalProfile {
   is_trainer?: boolean;
   trainer_display_name?: string | null;
   trainer_bio?: string | null;
+  // Body model for the muscle map. Optional; absent → male model.
+  sex?: 'male' | 'female' | null;
 }
 
 export interface LocalWorkout {

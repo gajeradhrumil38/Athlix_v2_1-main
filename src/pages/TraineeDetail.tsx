@@ -118,7 +118,7 @@ export const TraineeDetail: React.FC = () => {
         <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
         <Section title="Muscle map">
           {dash.workouts.shared
-            ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles · last sessions" unit="lbs" /></Card>
+            ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles · last sessions" unit="lbs" gender={dash.sex} /></Card>
             : <NotShared label="Workouts" />}
         </Section>
         <Section title="Muscle balance">

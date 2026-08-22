@@ -598,7 +598,7 @@ export const Home: React.FC = () => {
     quick_stats: null,
     muscle_map: (
       <div key="muscle_map" ref={muscleMapRef} className="flex flex-col h-full">
-        <MuscleMap muscleData={muscleMapData} view={muscleView} onViewChange={setMuscleView} title={muscleMapTitle} unit={displayUnit} />
+        <MuscleMap muscleData={muscleMapData} view={muscleView} onViewChange={setMuscleView} title={muscleMapTitle} unit={displayUnit} gender={profile?.sex === 'female' ? 'female' : 'male'} />
       </div>
     ),
     weekly_goal: (

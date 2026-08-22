@@ -411,6 +411,12 @@ export const Settings: React.FC = () => {
     setNameChanged(false);
   };
 
+  const saveSex = (sex: 'male' | 'female') => {
+    if (draftProfile?.sex === sex) return;
+    setDraftProfile((prev: any) => ({ ...prev, sex }));
+    save({ sex }, 'Body model updated');
+  };
+
   const saveMetrics = () => {
     if (!metricsChanged) return;
     save(
@@ -503,40 +509,71 @@ export const Settings: React.FC = () => {
   return (
     <div className="max-w-lg mx-auto space-y-4 pb-10 pt-1 animate-fade-in">
       {/* ── Profile (headerless — the avatar + name make it self-evident) ── */}
-      <section className="glass-card p-5 flex items-center gap-4">
-        <div
-          className="h-14 w-14 rounded-2xl flex items-center justify-center text-[22px] font-bold shrink-0 border border-[var(--accent)]/25"
-          style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}
-        >
-          {initial}
-        </div>
-        <div className="flex-1 min-w-0">
-          {/* Name is edited in place — click it and type */}
-          <input
-            type="text"
-            value={draftProfile?.full_name || ''}
-            onChange={(e) => {
-              setDraftProfile({ ...draftProfile, full_name: e.target.value });
-              setNameChanged(true);
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            onBlur={() => nameChanged && saveName()}
-            aria-label="Display name"
-            placeholder="Your name"
-            className="w-full bg-transparent text-[17px] font-semibold text-[var(--text-primary)] outline-none rounded-lg px-1.5 -mx-1.5 py-0.5 focus:bg-[var(--bg-elevated)] focus:ring-1 focus:ring-[var(--accent)]/40 transition-colors truncate"
-          />
-          <p className="text-[13px] text-[var(--text-muted)] truncate px-1.5 -mx-1.5 mt-0.5">{user?.email}</p>
-        </div>
-        {nameChanged && (
-          <button
-            onClick={saveName}
-            disabled={saving}
-            aria-label="Save name"
-            className="h-9 w-9 rounded-xl bg-[var(--accent)] text-black flex items-center justify-center shrink-0 disabled:opacity-40 transition-opacity"
+      <section className="glass-card p-5">
+        <div className="flex items-center gap-4">
+          <div
+            className="h-14 w-14 rounded-2xl flex items-center justify-center text-[22px] font-bold shrink-0 border border-[var(--accent)]/25"
+            style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          </button>
-        )}
+            {initial}
+          </div>
+          <div className="flex-1 min-w-0">
+            {/* Name is edited in place — click it and type */}
+            <input
+              type="text"
+              value={draftProfile?.full_name || ''}
+              onChange={(e) => {
+                setDraftProfile({ ...draftProfile, full_name: e.target.value });
+                setNameChanged(true);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              onBlur={() => nameChanged && saveName()}
+              aria-label="Display name"
+              placeholder="Your name"
+              className="w-full bg-transparent text-[17px] font-semibold text-[var(--text-primary)] outline-none rounded-lg px-1.5 -mx-1.5 py-0.5 focus:bg-[var(--bg-elevated)] focus:ring-1 focus:ring-[var(--accent)]/40 transition-colors truncate"
+            />
+            <p className="text-[13px] text-[var(--text-muted)] truncate px-1.5 -mx-1.5 mt-0.5">{user?.email}</p>
+          </div>
+          {nameChanged && (
+            <button
+              onClick={saveName}
+              disabled={saving}
+              aria-label="Save name"
+              className="h-9 w-9 rounded-xl bg-[var(--accent)] text-black flex items-center justify-center shrink-0 disabled:opacity-40 transition-opacity"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+
+        {/* Body model — drives the muscle-map figure (male / female) */}
+        <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-[var(--border)]">
+          <div className="min-w-0">
+            <p className="text-[14px] font-medium text-[var(--text-primary)]">Body model</p>
+            <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Figure used in your muscle map</p>
+          </div>
+          <div className="flex gap-1.5 shrink-0 p-1 rounded-xl" style={{ background: 'var(--bg-elevated)' }}>
+            {(['male', 'female'] as const).map((s) => {
+              const active = draftProfile?.sex === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => saveSex(s)}
+                  disabled={saving}
+                  aria-pressed={active}
+                  className="px-4 h-9 rounded-lg text-[14px] font-semibold transition-colors disabled:opacity-50"
+                  style={{
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? '#000' : 'var(--text-secondary)',
+                  }}
+                >
+                  {s === 'male' ? 'Male' : 'Female'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </section>
 
       {/* ── Preferences ───────────────────────── */}

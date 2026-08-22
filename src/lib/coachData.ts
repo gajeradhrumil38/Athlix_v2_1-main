@@ -21,6 +21,7 @@ export interface TraineeWeight { date: string; weight: number; unit: string; }
 export interface TraineeDashboard {
   link: CoachLink;
   name: string;
+  sex: 'male' | 'female';
   workouts: Section<TraineeWorkout[]>;
   prs: Section<TraineePR[]>;
   runs: Section<TraineeRun[]>;
@@ -63,7 +64,7 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
   const wantStrain = on(link, 'strain');
 
   const [profileRes, workoutRes, prRes, runRes, bwRes, recRes, sleepRes, strainRes] = await Promise.all([
-    supabase.from('profiles').select('full_name, trainer_display_name').eq('id', traineeId).maybeSingle(),
+    supabase.from('profiles').select('full_name, trainer_display_name, sex').eq('id', traineeId).maybeSingle(),
     wantWorkouts
       ? supabase.from('workouts')
           .select('id, date, title, duration_minutes, muscle_groups, source_plan_id, exercises(name, muscle_group, sets, reps, weight, unit)')
@@ -93,10 +94,12 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
   ]);
 
   const name = link.trainee_name || (profileRes as any)?.data?.full_name || link.invited_email;
+  const sex: 'male' | 'female' = (profileRes as any)?.data?.sex === 'female' ? 'female' : 'male';
 
   return {
     link,
     name,
+    sex,
     workouts: { shared: wantWorkouts, data: ((workoutRes as any).data ?? []) as TraineeWorkout[] },
     prs: { shared: wantPRs, data: ((prRes as any).data ?? []) as TraineePR[] },
     runs: { shared: wantRuns, data: ((runRes as any).data ?? []) as TraineeRun[] },

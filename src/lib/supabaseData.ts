@@ -785,6 +785,7 @@ const normalizeProfile = (userId: string, row: RawRecord | null): LocalProfile =
     is_trainer: Boolean(row?.is_trainer),
     trainer_display_name: (row?.trainer_display_name as string | null) ?? null,
     trainer_bio: (row?.trainer_bio as string | null) ?? null,
+    sex: (row?.sex === 'female' || row?.sex === 'male') ? row.sex : null,
   };
 };
 

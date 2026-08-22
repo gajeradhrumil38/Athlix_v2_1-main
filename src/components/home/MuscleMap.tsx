@@ -12,6 +12,7 @@ interface MuscleMapProps {
   onViewChange: (v: 'front' | 'back') => void
   title?: string
   unit?: string
+  gender?: 'male' | 'female'
 }
 
 const VALID_SLUGS = new Set<Slug>(Object.keys(MUSCLE_SLUG_LABELS) as MuscleSlug[])
@@ -66,7 +67,7 @@ const loadToIntensity = (load: number, maxLoad: number): number => {
 const getMetric = (entry: MuscleEntry) => entry.relativeLoad || entry.load || entry.sets || 0
 
 export const MuscleMap: React.FC<MuscleMapProps> = ({
-  muscleData, view, onViewChange, title, unit = 'lbs'
+  muscleData, view, onViewChange, title, unit = 'lbs', gender = 'male'
 }) => {
   const [tooltip, setTooltip] = useState<{ slug: string; x: number; y: number } | null>(null)
 
@@ -159,7 +160,7 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
           <Body
             data={bodyData}
             side={view}
-            gender="male"
+            gender={gender}
             scale={0.88}
             defaultFill="#1A2538"
             border="#1E2F42"
