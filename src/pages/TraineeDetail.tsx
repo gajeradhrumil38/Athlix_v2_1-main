@@ -52,7 +52,16 @@ export const TraineeDetail: React.FC = () => {
   const [assign, setAssign] = useState(false);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
-  const muscle = useMemo(() => buildMuscleViz(dash?.workouts.shared ? dash.workouts.data : []), [dash]);
+  // Radar is "this week" (matches its label + the sets normalization, so it
+  // isn't pinned to the edge by months of cumulative sets); the anatomical map
+  // uses a 4-week window like the athlete's own Home.
+  const muscle = useMemo(() => {
+    const all = dash?.workouts.shared ? dash.workouts.data : [];
+    const now = Date.now();
+    const week = all.filter((w) => now - parseDay(w.date) <= 7 * DAY);
+    const month = all.filter((w) => now - parseDay(w.date) <= 28 * DAY);
+    return { map: buildMuscleViz(month).map, radar: buildMuscleViz(week).radar };
+  }, [dash]);
 
   const loadPlans = React.useCallback(async () => {
     if (id) setPlans(await getAssignedPlansFor(id));
