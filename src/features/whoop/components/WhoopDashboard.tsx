@@ -599,10 +599,16 @@ export const WhoopDashboard: React.FC = () => {
   // last night's sleep and today's cycle can format to a different local day
   // than the recovery, which made them blank under exact-date matching. Fall
   // back to date match when there's no recovery/id for the day.
-  const daySleep = (dayRec?.sleep_id && sleep.find((s) => s.id === dayRec.sleep_id))
-    || (selectedDate ? sleep.find((s) => s.date === selectedDate) : sleep[0]);
-  const dayCycle = (dayRec?.cycle_id != null && steps.find((c) => c.id === dayRec.cycle_id))
-    || (selectedDate ? steps.find((c) => c.date === selectedDate) : steps[0]);
+  // Priority: WHOOP id-link (TZ-immune) → same-day match → on the LATEST day,
+  // the newest record. The last step guarantees the current day is never blank
+  // when data exists, no matter how timezones shift the date strings.
+  const onLatestDay = clampedDayIdx === 0;
+  const daySleep = (dayRec?.sleep_id ? sleep.find((s) => s.id === dayRec.sleep_id) : undefined)
+    ?? (selectedDate ? sleep.find((s) => s.date === selectedDate) : undefined)
+    ?? (onLatestDay ? sleep[0] : undefined);
+  const dayCycle = (dayRec?.cycle_id != null ? steps.find((c) => c.id === dayRec.cycle_id) : undefined)
+    ?? (selectedDate ? steps.find((c) => c.date === selectedDate) : undefined)
+    ?? (onLatestDay ? steps[0] : undefined);
 
   // ── Ring values ────────────────────────────────────────────
   let recoveryVal: number | null = null;
