@@ -5,10 +5,16 @@ export interface WhoopRecovery {
   resting_heart_rate: number;
   spo2_percentage?: number;
   skin_temp_celsius?: number;
+  // WHOOP's own links — the sleep/cycle this recovery was computed from. Used to
+  // match the day view's sleep/strain to the selected recovery TZ-immune, rather
+  // than by fragile local-date strings (different anchors drift across midnight).
+  cycle_id?: number;
+  sleep_id?: string;
 }
 
 export interface WhoopSleep {
   date: string;
+  id?: string;
   sleep_performance_percentage: number;
   sleep_efficiency_percentage: number;
   total_in_bed_time_milli: number;
@@ -23,6 +29,7 @@ export interface WhoopHeartRate {
 
 export interface WhoopCycle {
   date: string;
+  id?: number;
   estimated_steps: number;
   raw_kilojoules: number;
   strain_score?: number;

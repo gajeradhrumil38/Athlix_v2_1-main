@@ -42,6 +42,8 @@ function parseRecovery(raw: { records?: unknown[] }): WhoopRecovery[] {
       const score = r.score as Record<string, number>;
       return {
         date: format(new Date(r.created_at as string), 'yyyy-MM-dd'),
+        cycle_id: r.cycle_id as number | undefined,
+        sleep_id: r.sleep_id as string | undefined,
         recovery_score: score?.recovery_score ?? 0,
         hrv_rmssd_milli: score?.hrv_rmssd_milli ?? 0,
         resting_heart_rate: score?.resting_heart_rate ?? 0,
@@ -58,7 +60,10 @@ function parseSleep(raw: { records?: unknown[] }): WhoopSleep[] {
       const score = r.score as Record<string, unknown>;
       const stages = score?.stage_summary as Record<string, number> | undefined;
       return {
-        date: format(new Date(r.start as string), 'yyyy-MM-dd'),
+        // Anchor sleep on WAKE (end), so "last night's" sleep shares the day of
+        // the recovery created that morning — not the calendar day bedtime began.
+        date: format(new Date((r.end ?? r.start) as string), 'yyyy-MM-dd'),
+        id: r.id as string | undefined,
         sleep_performance_percentage: (score?.sleep_performance_percentage as number) ?? 0,
         sleep_efficiency_percentage: (score?.sleep_efficiency_percentage as number) ?? 0,
         total_in_bed_time_milli: stages?.total_in_bed_time_milli ?? 0,
@@ -84,6 +89,7 @@ function parseCycles(raw: { records?: unknown[] }): WhoopCycle[] {
     const kj = score?.kilojoule ?? 0;
     return {
       date: format(new Date(r.start as string), 'yyyy-MM-dd'),
+      id: r.id as number | undefined,
       estimated_steps: Math.round(kj * KJ_TO_STEPS),
       raw_kilojoules: kj,
       strain_score: score?.strain,

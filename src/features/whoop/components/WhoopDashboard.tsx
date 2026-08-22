@@ -595,8 +595,14 @@ export const WhoopDashboard: React.FC = () => {
   const clampedDayIdx = Math.min(dayIdx, Math.max(0, dayDates.length - 1));
   const selectedDate = dayDates[clampedDayIdx] ?? null;
   const dayRec = selectedDate ? recovery.find((r) => r.date === selectedDate) : recovery[0];
-  const daySleep = selectedDate ? sleep.find((s) => s.date === selectedDate) : sleep[0];
-  const dayCycle = selectedDate ? steps.find((c) => c.date === selectedDate) : steps[0];
+  // Link sleep/strain to the day's recovery via WHOOP's own ids (TZ-immune) —
+  // last night's sleep and today's cycle can format to a different local day
+  // than the recovery, which made them blank under exact-date matching. Fall
+  // back to date match when there's no recovery/id for the day.
+  const daySleep = (dayRec?.sleep_id && sleep.find((s) => s.id === dayRec.sleep_id))
+    || (selectedDate ? sleep.find((s) => s.date === selectedDate) : sleep[0]);
+  const dayCycle = (dayRec?.cycle_id != null && steps.find((c) => c.id === dayRec.cycle_id))
+    || (selectedDate ? steps.find((c) => c.date === selectedDate) : steps[0]);
 
   // ── Ring values ────────────────────────────────────────────
   let recoveryVal: number | null = null;
