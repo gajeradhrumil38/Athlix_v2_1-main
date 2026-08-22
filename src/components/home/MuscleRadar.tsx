@@ -117,7 +117,9 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData }) => {
 
       {/* Radar SVG — fills the card width */}
       <div className="relative w-full" style={{ aspectRatio: '1/1', maxHeight: 300 }}>
-        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" height="100%">
+        {/* Widen the viewBox horizontally so long edge labels (CORE / BACK /
+            SHOULDERS) render fully instead of clipping at the SVG edge. */}
+        <svg viewBox={`-60 0 ${SIZE + 120} ${SIZE}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
           <defs>
             <radialGradient id="chartBg2" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="rgba(255,255,255,0.03)" />

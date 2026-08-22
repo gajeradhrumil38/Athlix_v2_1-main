@@ -139,6 +139,9 @@ export const TraineeDetail: React.FC = () => {
             <div className="space-y-4">
               <WeeklyStats workouts={dash.workouts.shared ? dash.workouts.data : null} />
               <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />
+              {dash.workouts.shared
+                ? <RecentSessions workouts={dash.workouts.data} />
+                : <NotShared label="Workouts" />}
             </div>
             <div className="space-y-4">
               <Section title="Training volume">
@@ -238,6 +241,58 @@ const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string
           <span className="text-[11px] text-[var(--text-muted)] mt-1">{centerBottom}</span>
         </div>
       </div>
+    </Card>
+  );
+};
+
+/* ── Recent sessions (last 2 weeks) — calendar-style, scrollable ── */
+const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
+  const recent = useMemo(() => {
+    if (!workouts) return [];
+    const now = Date.now();
+    return workouts
+      .filter((w) => now - parseDay(w.date) <= 14 * DAY)
+      .sort((a, b) => parseDay(b.date) - parseDay(a.date));
+  }, [workouts]);
+
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <div className="px-4 py-3 border-b border-[var(--border)]">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Recent sessions · 2 weeks</p>
+      </div>
+      {recent.length === 0 ? (
+        <p className="text-[13px] text-[var(--text-muted)] text-center py-6">No sessions in the last 2 weeks.</p>
+      ) : (
+        <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--border)]">
+          {recent.map((w) => {
+            // Fold the per-set rows into one line per exercise (top set + count).
+            const groups = new Map<string, { sets: number; reps: number; weight: number }>();
+            for (const e of w.exercises || []) {
+              const g = groups.get(e.name) || { sets: 0, reps: e.reps, weight: e.weight };
+              g.sets += 1;
+              if (e.weight > g.weight || (e.weight === g.weight && e.reps > g.reps)) { g.weight = e.weight; g.reps = e.reps; }
+              groups.set(e.name, g);
+            }
+            const when = new Date(`${w.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            return (
+              <div key={w.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[14px] font-semibold text-[var(--text-primary)] truncate">{w.title || 'Workout'}</p>
+                  <p className="text-[12px] text-[var(--text-muted)] shrink-0">{when}</p>
+                </div>
+                <div className="mt-1.5 space-y-1">
+                  {[...groups.entries()].map(([name, g]) => (
+                    <div key={name} className="flex items-center justify-between gap-3">
+                      <p className="text-[13px] text-[var(--text-secondary)] truncate">{name}</p>
+                      <p className="text-[13px] text-[var(--text-muted)] tabular-nums shrink-0">{g.sets}×{g.reps}{g.weight ? ` @${g.weight}` : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 };
