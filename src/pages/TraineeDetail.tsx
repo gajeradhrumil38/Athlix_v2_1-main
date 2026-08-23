@@ -21,7 +21,7 @@ import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 
 const ACCENT = '#c8ff00';
 const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
-const DEFAULT_OVERVIEW_ORDER = ['stats', 'gauge', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
+const DEFAULT_OVERVIEW_ORDER = ['stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
 
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
@@ -215,11 +215,46 @@ export const TraineeDetail: React.FC = () => {
         const GOAL = 5;
         const shared = dash.workouts.shared;
 
+        // This-week vs last-week (sessions + volume) for the trend card.
+        const inWindow = (w: TraineeWorkout, from: number, to: number) => { const t = parseDay(w.date); return t > from && t <= to; };
+        const volOf = (list: TraineeWorkout[]) => list.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0) * (e.reps || 0) * (e.weight || 0), 0), 0);
+        const thisWk = ws.filter((w) => inWindow(w, now - 7 * DAY, now));
+        const lastWk = ws.filter((w) => inWindow(w, now - 14 * DAY, now - 7 * DAY));
+        const thisVol = Math.round(volOf(thisWk)); const lastVol = Math.round(volOf(lastWk));
+        const lastSessions = new Set(lastWk.map((w) => w.date)).size;
+        const pctDelta = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : a > 0 ? 100 : 0);
+
+        // Least-trained muscle group this week → suggest a focus.
+        const REGIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Glutes', 'Core'];
+        const regionSets = REGIONS.map((r) => ({ r, sets: Math.round(muscle.radar[r]?.sets || 0) }));
+        const anyTrained = regionSets.some((x) => x.sets > 0);
+        const focusPick = [...regionSets].sort((a, b) => a.sets - b.sets)[0];
+
         // Each card is a draggable widget. Drag the ⠿ handle to rearrange;
-        // order persists per coach. Tighter grid + no wrapper padding = bigger cards.
+        // order persists per coach. Masonry columns pack tightly — no dead space.
         const WIDGETS: Record<string, React.ReactNode> = {
           stats: <WeeklyStats workouts={shared ? dash.workouts.data : null} />,
           gauge: <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />,
+          trend: shared ? (
+            <Card>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-3">This week vs last</p>
+              <div className="grid grid-cols-2 gap-3">
+                <TrendStat label="Sessions" now={weekSessions} prev={lastSessions} delta={pctDelta(weekSessions, lastSessions)} />
+                <TrendStat label="Volume" now={thisVol} prev={lastVol} delta={pctDelta(thisVol, lastVol)} />
+              </div>
+            </Card>
+          ) : <NotShared label="Workouts" />,
+          focus: shared ? (
+            <Card>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-2">Focus next</p>
+              {anyTrained ? (
+                <>
+                  <p className="text-[24px] font-bold text-[var(--text-primary)] leading-none">{focusPick.r}</p>
+                  <p className="text-[13px] text-[var(--text-muted)] mt-1.5">Least-trained this week ({focusPick.sets} set{focusPick.sets === 1 ? '' : 's'}) — worth programming next.</p>
+                </>
+              ) : <p className="text-[14px] text-[var(--text-muted)] py-2">No training logged this week yet.</p>}
+            </Card>
+          ) : <NotShared label="Workouts" />,
           radar: shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Muscle balance" />,
           map: shared ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card> : <NotShared label="Muscle map" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
@@ -247,7 +282,8 @@ export const TraineeDetail: React.FC = () => {
         return (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={ids} strategy={rectSortingStrategy}>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
+              {/* Masonry columns — cards pack tightly with no empty space under them. */}
+              <div className="columns-1 md:columns-2 xl:columns-3" style={{ columnGap: '0.75rem' }}>
                 {ids.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
               </div>
             </SortableContext>
@@ -317,7 +353,7 @@ const SortableCard: React.FC<{ id: string; children: React.ReactNode }> = ({ id,
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 20 : undefined }}
-      className="relative"
+      className="relative mb-3 break-inside-avoid"
     >
       <button
         {...attributes}
@@ -353,6 +389,17 @@ const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string
     </Card>
   );
 };
+
+/* ── This-vs-last stat (trend card) ──────────────────────── */
+const TrendStat: React.FC<{ label: string; now: number; prev: number; delta: number }> = ({ label, now, delta }) => (
+  <div className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
+    <p className="text-[12px] text-[var(--text-muted)]">{label}</p>
+    <p className="text-[22px] font-bold text-[var(--text-primary)] leading-none mt-1 tabular-nums">{now.toLocaleString()}</p>
+    <p className="text-[12px] font-semibold mt-1" style={{ color: delta === 0 ? 'var(--text-muted)' : delta > 0 ? '#4dff91' : '#ff8080' }}>
+      {delta > 0 ? '▲' : delta < 0 ? '▼' : '—'} {Math.abs(delta)}% vs last
+    </p>
+  </div>
+);
 
 /* ── Recent sessions (last 2 weeks) — calendar-style, scrollable ── */
 const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
