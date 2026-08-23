@@ -463,6 +463,41 @@ const SetSummary: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'l
   );
 };
 
+// Per-set box grid — the SAME tactile layout the athlete sees in the Calendar
+// day view and the workout logger: a lime set number, then a big weight box and
+// a big reps box. Every set is its own row, so different loads never collapse.
+// Bodyweight lifts (no weight) drop the weight column.
+const SetGrid: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' }) => {
+  if (!sets.length) return null;
+  const weighted = sets.some((s) => s.weight > 0);
+  return (
+    <div className="flex flex-col gap-1.5">
+      {sets.map((s, i) => (
+        <div key={i} className="grid overflow-hidden rounded-[10px]"
+          style={{ gridTemplateColumns: weighted ? '38px 1fr 1fr' : '38px 1fr', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.012)' }}>
+          <div className="flex items-center justify-center font-victory text-[22px]"
+            style={{ background: 'rgba(200,255,0,0.05)', color: ACCENT, borderRight: '1px solid var(--border)' }}>
+            {i + 1}
+          </div>
+          {weighted && (
+            <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2">
+              <span className="font-victory text-[26px] leading-none text-white tabular-nums">
+                {s.weight ? s.weight.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
+              </span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>{unit}</span>
+            </div>
+          )}
+          <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2"
+            style={weighted ? { borderLeft: '1px solid var(--border)' } : undefined}>
+            <span className="font-victory text-[26px] leading-none text-white tabular-nums">{s.reps}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>reps</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 /* ── This-vs-last stat (trend card) ──────────────────────── */
 const TrendStat: React.FC<{ label: string; now: number; prev: number; delta: number }> = ({ label, now, delta }) => (
   <div className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
@@ -508,11 +543,14 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
                   <p className="text-[15px] font-bold text-[var(--text-primary)] truncate">{w.title || 'Workout'}</p>
                   <p className="text-[12px] text-[var(--text-muted)] shrink-0">{when}</p>
                 </div>
-                <div className="mt-2 space-y-1.5">
+                <div className="mt-2.5 space-y-3">
                   {[...groups.entries()].map(([name, sets]) => (
-                    <div key={name} className="flex items-start justify-between gap-3">
-                      <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate pt-0.5">{name}</p>
-                      <SetSummary sets={sets} />
+                    <div key={name}>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{name}</p>
+                        <p className="text-[12px] font-semibold text-[var(--text-muted)] shrink-0">{sets.length} set{sets.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      <SetGrid sets={sets} />
                     </div>
                   ))}
                 </div>
@@ -585,15 +623,13 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                   </div>
                 </button>
                 {expanded && (
-                  <div className="px-4 pb-3 -mt-1">
-                    <div className="rounded-xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
-                      {ex.byDate.slice(0, 12).map((h) => (
-                        <div key={h.date} className="flex items-start justify-between gap-3 px-3 py-2.5">
-                          <p className="text-[13px] font-medium text-[var(--text-secondary)] pt-0.5 shrink-0">{fmtDay(h.date)}</p>
-                          <SetSummary sets={h.sets} />
-                        </div>
-                      ))}
-                    </div>
+                  <div className="px-4 pb-3 -mt-1 space-y-3">
+                    {ex.byDate.slice(0, 12).map((h) => (
+                      <div key={h.date}>
+                        <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5">{fmtDay(h.date)}</p>
+                        <SetGrid sets={h.sets} />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
