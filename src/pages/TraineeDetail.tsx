@@ -441,6 +441,28 @@ const Metric: React.FC<{ sets?: number; reps: number; weight?: number; unit?: st
   </span>
 );
 
+// Honest set display: one clean line when every set matched, but the ACTUAL
+// per-set breakdown when weight/reps varied (e.g. 3 sets at different loads) —
+// so "3 × 8 @ 20" never masks a pyramid like 8@20 / 6@22.5 / 4@25.
+type SetT = { reps: number; weight: number };
+const SetSummary: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' }) => {
+  if (!sets.length) return <span className="text-[13px] text-[var(--text-muted)]">—</span>;
+  const uniform = sets.every((s) => s.reps === sets[0].reps && s.weight === sets[0].weight);
+  if (uniform) return <Metric sets={sets.length} reps={sets[0].reps} weight={sets[0].weight || undefined} unit={unit} />;
+  return (
+    <div className="flex flex-wrap gap-1.5 justify-end">
+      {sets.map((s, i) => (
+        <span key={i} className="text-[13px] tabular-nums px-2 py-0.5 rounded-md" style={{ background: 'var(--bg-elevated)' }}>
+          <span className="font-bold text-[var(--text-primary)]">{s.reps}</span>
+          {s.weight ? (
+            <><span className="text-[var(--text-muted)] px-0.5">×</span><span className="font-bold" style={{ color: ACCENT }}>{s.weight}</span></>
+          ) : null}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 /* ── This-vs-last stat (trend card) ──────────────────────── */
 const TrendStat: React.FC<{ label: string; now: number; prev: number; delta: number }> = ({ label, now, delta }) => (
   <div className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
@@ -472,13 +494,12 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
       ) : (
         <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--border)]">
           {recent.map((w) => {
-            // Fold the per-set rows into one line per exercise (top set + count).
-            const groups = new Map<string, { sets: number; reps: number; weight: number }>();
+            // Keep EVERY set per exercise so varying loads are shown accurately.
+            const groups = new Map<string, SetT[]>();
             for (const e of w.exercises || []) {
-              const g = groups.get(e.name) || { sets: 0, reps: e.reps, weight: e.weight };
-              g.sets += 1;
-              if (e.weight > g.weight || (e.weight === g.weight && e.reps > g.reps)) { g.weight = e.weight; g.reps = e.reps; }
-              groups.set(e.name, g);
+              const arr = groups.get(e.name) || [];
+              arr.push({ reps: e.reps, weight: e.weight });
+              groups.set(e.name, arr);
             }
             const when = new Date(`${w.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
             return (
@@ -488,10 +509,10 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
                   <p className="text-[12px] text-[var(--text-muted)] shrink-0">{when}</p>
                 </div>
                 <div className="mt-2 space-y-1.5">
-                  {[...groups.entries()].map(([name, g]) => (
-                    <div key={name} className="flex items-center justify-between gap-3">
-                      <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{name}</p>
-                      <Metric sets={g.sets} reps={g.reps} weight={g.weight || undefined} />
+                  {[...groups.entries()].map(([name, sets]) => (
+                    <div key={name} className="flex items-start justify-between gap-3">
+                      <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate pt-0.5">{name}</p>
+                      <SetSummary sets={sets} />
                     </div>
                   ))}
                 </div>
@@ -505,9 +526,9 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
 };
 
 /* ── Exercise history — every lift the trainee has done + its progression ── */
-interface ExHist { name: string; sessions: number; best: { w: number; r: number }; last: string; byDate: { date: string; sets: number; w: number; r: number }[]; }
+interface ExHist { name: string; sessions: number; best: { w: number; r: number }; last: string; byDate: { date: string; sets: SetT[] }[]; }
 function buildExerciseHistory(workouts: TraineeWorkout[]): ExHist[] {
-  const map = new Map<string, { sessions: Set<string>; best: { w: number; r: number }; last: string; byDate: Map<string, { sets: number; w: number; r: number }> }>();
+  const map = new Map<string, { sessions: Set<string>; best: { w: number; r: number }; last: string; byDate: Map<string, SetT[]> }>();
   for (const w of workouts) {
     for (const e of w.exercises || []) {
       let m = map.get(e.name);
@@ -515,14 +536,13 @@ function buildExerciseHistory(workouts: TraineeWorkout[]): ExHist[] {
       m.sessions.add(w.date);
       if (w.date > m.last) m.last = w.date;
       if (e.weight > m.best.w || (e.weight === m.best.w && e.reps > m.best.r)) m.best = { w: e.weight, r: e.reps };
-      const d = m.byDate.get(w.date) || { sets: 0, w: 0, r: 0 };
-      d.sets += 1;
-      if (e.weight > d.w || (e.weight === d.w && e.reps > d.r)) { d.w = e.weight; d.r = e.reps; }
-      m.byDate.set(w.date, d);
+      const arr = m.byDate.get(w.date) || [];
+      arr.push({ reps: e.reps, weight: e.weight });
+      m.byDate.set(w.date, arr);
     }
   }
   return [...map.entries()]
-    .map(([name, m]) => ({ name, sessions: m.sessions.size, best: m.best, last: m.last, byDate: [...m.byDate.entries()].map(([date, d]) => ({ date, ...d })).sort((a, b) => b.date.localeCompare(a.date)) }))
+    .map(([name, m]) => ({ name, sessions: m.sessions.size, best: m.best, last: m.last, byDate: [...m.byDate.entries()].map(([date, sets]) => ({ date, sets })).sort((a, b) => b.date.localeCompare(a.date)) }))
     .sort((a, b) => b.last.localeCompare(a.last));
 }
 
@@ -568,9 +588,9 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                   <div className="px-4 pb-3 -mt-1">
                     <div className="rounded-xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
                       {ex.byDate.slice(0, 12).map((h) => (
-                        <div key={h.date} className="flex items-center justify-between px-3 py-2.5">
-                          <p className="text-[13px] font-medium text-[var(--text-secondary)]">{fmtDay(h.date)}</p>
-                          <Metric sets={h.sets} reps={h.r} weight={h.w || undefined} />
+                        <div key={h.date} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                          <p className="text-[13px] font-medium text-[var(--text-secondary)] pt-0.5 shrink-0">{fmtDay(h.date)}</p>
+                          <SetSummary sets={h.sets} />
                         </div>
                       ))}
                     </div>
@@ -724,14 +744,13 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRem
   const daysAgo = latest ? Math.floor((Date.now() - parseDay(latest.date)) / DAY) : null;
   const lastLabel = daysAgo == null ? '' : daysAgo === 0 ? 'today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
 
-  // For the latest session, fold the flat set-rows (one row per set) into a
-  // per-exercise "actual": how many sets + the top set. Matched by name.
-  const actualFor = (name: string) => {
+  // For the latest session, collect every logged set of an exercise (matched by
+  // name) so 3 sets at different weights show honestly, not collapsed.
+  const actualFor = (name: string): SetT[] | null => {
     if (!latest) return null;
     const rows = latest.exercises.filter((e) => e.name.toLowerCase() === name.toLowerCase());
     if (!rows.length) return null;
-    const top = rows.reduce((a, b) => (b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a));
-    return { sets: rows.length, reps: top.reps, weight: top.weight };
+    return rows.map((e) => ({ reps: e.reps, weight: e.weight }));
   };
 
   return (
@@ -759,14 +778,13 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRem
               const act = actualFor(ex.name);
               const rx = `${ex.default_sets}×${ex.default_reps}${ex.default_weight ? ` @${ex.default_weight}` : ''}`;
               return (
-                <div key={i} className="flex items-center justify-between gap-3 py-2">
-                  <p className="text-[14px] text-[var(--text-primary)] truncate flex-1">{ex.name}</p>
-                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{rx}</p>
+                <div key={i} className="flex items-start justify-between gap-3 py-2">
+                  <p className="text-[14px] text-[var(--text-primary)] truncate flex-1 pt-0.5">{ex.name}</p>
+                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums pt-0.5">{rx}</p>
                   {latest && (
-                    <p className="text-[13px] font-semibold shrink-0 tabular-nums w-[74px] text-right"
-                      style={{ color: act ? 'var(--accent)' : '#ff8080' }}>
-                      {act ? `${act.sets}×${act.reps}${act.weight ? ` @${act.weight}` : ''}` : 'missed'}
-                    </p>
+                    <div className="shrink-0 min-w-[74px] flex justify-end">
+                      {act ? <SetSummary sets={act} /> : <span className="text-[13px] font-semibold" style={{ color: '#ff8080' }}>missed</span>}
+                    </div>
                   )}
                 </div>
               );
