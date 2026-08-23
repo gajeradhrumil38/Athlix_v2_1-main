@@ -22,6 +22,18 @@ import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 const ACCENT = '#c8ff00';
 const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
 const DEFAULT_OVERVIEW_ORDER = ['stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
+// Rough card heights → greedy shortest-column packing (true masonry, no gaps).
+const CARD_WEIGHT: Record<string, number> = { stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
+function distributeMasonry(ids: string[], cols: number): string[][] {
+  const columns: string[][] = Array.from({ length: cols }, () => []);
+  const heights = new Array(cols).fill(0);
+  for (const id of ids) {
+    const shortest = heights.indexOf(Math.min(...heights));
+    columns[shortest].push(id);
+    heights[shortest] += CARD_WEIGHT[id] ?? 1.5;
+  }
+  return columns;
+}
 
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
@@ -60,6 +72,14 @@ export const TraineeDetail: React.FC = () => {
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
+  // Responsive column count for the masonry distribution (1 / 2 / 3).
+  const [cols, setCols] = useState(3);
+  useEffect(() => {
+    const compute = () => setCols(window.innerWidth >= 1280 ? 3 : window.innerWidth >= 768 ? 2 : 1);
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, []);
 
   // Draggable Overview — order persisted locally so a coach's arrangement sticks.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -282,9 +302,14 @@ export const TraineeDetail: React.FC = () => {
         return (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext items={ids} strategy={rectSortingStrategy}>
-              {/* Masonry columns — cards pack tightly with no empty space under them. */}
-              <div className="columns-1 md:columns-2 xl:columns-3" style={{ columnGap: '0.75rem' }}>
-                {ids.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
+              {/* Balanced masonry — cards packed into the shortest column so the
+                  whole width is used with no dead space; still drag-reorderable. */}
+              <div className="flex gap-3 items-start">
+                {distributeMasonry(ids, cols).map((colIds, ci) => (
+                  <div key={ci} className="flex-1 min-w-0 space-y-3">
+                    {colIds.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
+                  </div>
+                ))}
               </div>
             </SortableContext>
           </DndContext>
@@ -353,7 +378,7 @@ const SortableCard: React.FC<{ id: string; children: React.ReactNode }> = ({ id,
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 20 : undefined }}
-      className="relative mb-3 break-inside-avoid"
+      className="relative"
     >
       <button
         {...attributes}
