@@ -210,22 +210,24 @@ export const TraineeDetail: React.FC = () => {
         </div>
       ) : null}
 
-      {/* Menu bar — jump between grouped views so a coach never scrolls far */}
-      <div className="flex gap-1 mb-5 p-1 rounded-2xl overflow-x-auto" style={{ background: 'var(--bg-elevated)' }}>
-        {TABS.map((t) => {
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className="flex-1 min-w-[84px] h-10 rounded-xl text-[14px] font-semibold transition-colors"
-              style={{ background: active ? 'var(--accent)' : 'transparent', color: active ? '#000' : 'var(--text-secondary)' }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
+      {/* Menu bar — sticky so it stays put while scrolling; jumps between views */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 pt-1 pb-3" style={{ background: 'var(--bg-base)' }}>
+        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto" style={{ background: 'var(--bg-elevated)' }}>
+          {TABS.map((t) => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className="flex-1 min-w-[84px] h-10 rounded-xl text-[14px] font-semibold transition-colors"
+                style={{ background: active ? 'var(--accent)' : 'transparent', color: active ? '#000' : 'var(--text-secondary)' }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {tab === 'overview' && (() => {
@@ -415,6 +417,30 @@ const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string
   );
 };
 
+/* ── Set metric — one readable visual language for sets/reps/weight ── */
+// Bold primary numbers, accent weight, muted small units → the eye lands on
+// the data instantly. Reused across recent sessions, PRs and exercise history.
+const Metric: React.FC<{ sets?: number; reps: number; weight?: number; unit?: string }> = ({ sets, reps, weight, unit = 'lb' }) => (
+  <span className="flex items-baseline gap-1 shrink-0 tabular-nums">
+    {sets != null && (
+      <>
+        <span className="text-[17px] font-bold text-[var(--text-primary)]">{sets}</span>
+        <span className="text-[13px] text-[var(--text-muted)]">×</span>
+      </>
+    )}
+    <span className="text-[17px] font-bold text-[var(--text-primary)]">{reps}</span>
+    {weight ? (
+      <>
+        <span className="text-[13px] text-[var(--text-muted)] px-0.5">@</span>
+        <span className="text-[17px] font-bold" style={{ color: ACCENT }}>{weight}</span>
+        <span className="text-[11px] font-medium text-[var(--text-muted)]">{unit}</span>
+      </>
+    ) : (
+      <span className="text-[11px] font-medium text-[var(--text-muted)] ml-0.5">reps</span>
+    )}
+  </span>
+);
+
 /* ── This-vs-last stat (trend card) ──────────────────────── */
 const TrendStat: React.FC<{ label: string; now: number; prev: number; delta: number }> = ({ label, now, delta }) => (
   <div className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
@@ -456,16 +482,16 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
             }
             const when = new Date(`${w.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
             return (
-              <div key={w.id} className="px-4 py-3">
+              <div key={w.id} className="px-4 py-3.5">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[14px] font-semibold text-[var(--text-primary)] truncate">{w.title || 'Workout'}</p>
+                  <p className="text-[15px] font-bold text-[var(--text-primary)] truncate">{w.title || 'Workout'}</p>
                   <p className="text-[12px] text-[var(--text-muted)] shrink-0">{when}</p>
                 </div>
-                <div className="mt-1.5 space-y-1">
+                <div className="mt-2 space-y-1.5">
                   {[...groups.entries()].map(([name, g]) => (
                     <div key={name} className="flex items-center justify-between gap-3">
-                      <p className="text-[13px] text-[var(--text-secondary)] truncate">{name}</p>
-                      <p className="text-[13px] text-[var(--text-muted)] tabular-nums shrink-0">{g.sets}×{g.reps}{g.weight ? ` @${g.weight}` : ''}</p>
+                      <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{name}</p>
+                      <Metric sets={g.sets} reps={g.reps} weight={g.weight || undefined} />
                     </div>
                   ))}
                 </div>
@@ -528,13 +554,13 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
             const expanded = open === ex.name;
             return (
               <div key={ex.name}>
-                <button type="button" onClick={() => setOpen(expanded ? null : ex.name)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
+                <button type="button" onClick={() => setOpen(expanded ? null : ex.name)} className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left">
                   <div className="min-w-0">
-                    <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{ex.name}</p>
+                    <p className="text-[16px] font-bold text-[var(--text-primary)] truncate">{ex.name}</p>
                     <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{ex.sessions}× · last {fmtDay(ex.last)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[13px] font-bold tabular-nums" style={{ color: ACCENT }}>{ex.best.w ? `${ex.best.w}×${ex.best.r}` : `${ex.best.r} reps`}</span>
+                    <Metric reps={ex.best.r} weight={ex.best.w || undefined} />
                     <span className={`text-[var(--text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}><AppIcon name="ExpandDown" size="sm" /></span>
                   </div>
                 </button>
@@ -542,9 +568,9 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                   <div className="px-4 pb-3 -mt-1">
                     <div className="rounded-xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
                       {ex.byDate.slice(0, 12).map((h) => (
-                        <div key={h.date} className="flex items-center justify-between px-3 py-2">
-                          <p className="text-[12px] text-[var(--text-muted)]">{fmtDay(h.date)}</p>
-                          <p className="text-[13px] text-[var(--text-secondary)] tabular-nums">{h.sets}×{h.r}{h.w ? ` @${h.w}` : ''}</p>
+                        <div key={h.date} className="flex items-center justify-between px-3 py-2.5">
+                          <p className="text-[13px] font-medium text-[var(--text-secondary)]">{fmtDay(h.date)}</p>
+                          <Metric sets={h.sets} reps={h.r} weight={h.w || undefined} />
                         </div>
                       ))}
                     </div>
@@ -642,10 +668,8 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
     <Card className="!p-0 overflow-hidden">
       {prs.slice(0, 8).map((p, i) => (
         <div key={i} className="flex items-center justify-between px-4 py-3.5 border-t border-[var(--border)] first:border-t-0">
-          <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{p.exercise_name}</p>
-          <p className="text-[16px] font-bold shrink-0" style={{ color: ACCENT }}>
-            {p.best_weight}<span className="text-[12px] text-[var(--text-muted)] font-semibold"> {p.unit} × {p.best_reps}</span>
-          </p>
+          <p className="text-[16px] font-bold text-[var(--text-primary)] truncate pr-3">{p.exercise_name}</p>
+          <Metric reps={p.best_reps} weight={p.best_weight || undefined} unit={p.unit} />
         </div>
       ))}
     </Card>
