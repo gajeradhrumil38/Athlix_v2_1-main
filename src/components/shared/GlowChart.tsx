@@ -29,13 +29,63 @@ export const DotGridCard: React.FC<{ accent?: string; children: React.ReactNode;
 
 export interface GlowChartPoint { label: string; value: number }
 
+// Monotone cubic Hermite interpolation (Fritsch–Carlson), converted to SVG
+// cubic-Bezier segments — same family as D3's curveMonotoneX. Unlike a plain
+// Catmull-Rom spline, it never overshoots past the data: two equal
+// consecutive values (e.g. 20lb, then 20lb again) get a perfectly flat
+// segment instead of a bulge/dip borrowed from a neighboring point.
+function monotoneCubicPath(pts: readonly (readonly [number, number])[]): string {
+  const n = pts.length;
+  if (n < 2) return '';
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  if (n === 2) return `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)} L ${xs[1].toFixed(1)} ${ys[1].toFixed(1)}`;
+
+  const dx: number[] = [];
+  const d: number[] = []; // secant slope per segment
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = xs[i + 1] - xs[i];
+    d[i] = dx[i] !== 0 ? (ys[i + 1] - ys[i]) / dx[i] : 0;
+  }
+
+  const m: number[] = new Array(n);
+  m[0] = d[0];
+  m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    // Zero tangent at a flat run or a local min/max — required for a flat
+    // stretch to render truly flat, and to keep the curve monotone.
+    m[i] = d[i - 1] === 0 || d[i] === 0 || (d[i - 1] < 0) !== (d[i] < 0) ? 0 : (d[i - 1] + d[i]) / 2;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / d[i];
+    const b = m[i + 1] / d[i];
+    if (a < 0) m[i] = 0;
+    if (b < 0) m[i + 1] = 0;
+    const s = a * a + b * b;
+    if (s > 9) {
+      const tau = 3 / Math.sqrt(s);
+      m[i] = tau * a * d[i];
+      m[i + 1] = tau * b * d[i];
+    }
+  }
+
+  let path = `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const c1x = xs[i] + dx[i] / 3, c1y = ys[i] + (m[i] * dx[i]) / 3;
+    const c2x = xs[i + 1] - dx[i] / 3, c2y = ys[i + 1] - (m[i + 1] * dx[i]) / 3;
+    path += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${xs[i + 1].toFixed(1)} ${ys[i + 1].toFixed(1)}`;
+  }
+  return path;
+}
+
 /**
- * Glowing smoothed trend line — the "Cardiac Health" VO2max-spark look
- * (Catmull-Rom smoothed SVG path, soft gradient fill, glowing dots), made
- * into a real small chart: labeled Y-axis levels, X-axis date ticks, a dot
- * on every point, and scrub-to-read-the-value (mouse hover or touch drag).
- * The line runs edge-to-edge — no fade-out, so the most recent point never
- * reads as "cut off" or incomplete.
+ * Glowing trend line — the "Cardiac Health" VO2max-spark look (monotone
+ * cubic SVG path, soft gradient fill, glowing dots), made into a real small
+ * chart: labeled Y-axis levels, X-axis date ticks, a dot on every point, and
+ * scrub-to-read-the-value (mouse hover or touch drag). The line runs
+ * edge-to-edge — no fade-out, so the most recent point never reads as "cut
+ * off" or incomplete.
  */
 export const GlowSparkline: React.FC<{
   points: GlowChartPoint[];
@@ -63,18 +113,7 @@ export const GlowSparkline: React.FC<{
     const range = max - min || 1;
     const y = (v: number) => padTop + plotH - ((v - min) / range) * plotH;
     const pts = values.map((v, i) => [padX + (i / (values.length - 1)) * (w - 2 * padX), y(v)] as const);
-    const smooth = (p: readonly (readonly [number, number])[]): string => {
-      let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
-      const t = 0.16;
-      for (let i = 0; i < p.length - 1; i++) {
-        const p0 = p[i - 1] ?? p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] ?? p[i + 1];
-        const c1x = p1[0] + (p2[0] - p0[0]) * t, c1y = p1[1] + (p2[1] - p0[1]) * t;
-        const c2x = p2[0] - (p3[0] - p1[0]) * t, c2y = p2[1] - (p3[1] - p1[1]) * t;
-        d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
-      }
-      return d;
-    };
-    const line = smooth(pts);
+    const line = monotoneCubicPath(pts);
     const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
     const mid = (min + max) / 2;
     return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min] };
@@ -112,8 +151,10 @@ export const GlowSparkline: React.FC<{
         {/* Y-axis: labeled value levels. The top/bottom labels anchor to
             their own edge (not centered on the line) so they can never
             clip against the card's overflow-hidden — only the middle
-            label centers on its line. */}
+            label centers on its line. A left-side scrim sits behind the
+            numbers so they stay legible over the card's dot-grid texture. */}
         <div className="relative shrink-0" style={{ width: 30 }}>
+          <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, rgba(9,13,19,0.7) 55%, transparent 100%)' }} />
           {geo.yTicks.map((v, i) => (
             <span
               key={i}
@@ -146,12 +187,6 @@ export const GlowSparkline: React.FC<{
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
             </defs>
-            {/* Labeled horizontal grid lines only — real levels, not decoration */}
-            <g opacity="0.16">
-              {geo.yTicks.map((v, i) => (
-                <line key={i} x1="0" y1={geo.yOf(v)} x2={w} y2={geo.yOf(v)} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-              ))}
-            </g>
             <path d={geo.area} fill={`url(#${uid}-fill)`} />
             <path d={geo.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
             {activeIdx != null && (
@@ -177,10 +212,12 @@ export const GlowSparkline: React.FC<{
                 style={{
                   left: `${(x / w) * 100}%`, top: `${(y / h) * 100}%`,
                   transform: 'translate(-50%,-50%)',
-                  width: big ? 9 : 5, height: big ? 9 : 5,
+                  width: big ? 9 : 6, height: big ? 9 : 6,
                   background: color,
-                  opacity: big ? 1 : 0.5,
-                  boxShadow: big ? `0 0 0 2px #0a0f16, 0 0 8px color-mix(in srgb, ${color} 55%, transparent)` : 'none',
+                  opacity: big ? 1 : 0.75,
+                  boxShadow: big
+                    ? `0 0 0 2px #0a0f16, 0 0 8px color-mix(in srgb, ${color} 55%, transparent)`
+                    : `0 0 0 2px #0a0f16`,
                 }}
               />
             );
@@ -217,10 +254,13 @@ export const GlowSparkline: React.FC<{
         </div>
       </div>
 
-      {/* X-axis: date/period ticks, indented to line up with the plot area */}
-      <div className="flex items-center justify-between" style={{ marginTop: 4, marginLeft: 30 }}>
+      {/* X-axis: date/period ticks, indented to line up with the plot area.
+          A bottom scrim (matching the Y-axis one) keeps the dates legible
+          over the card's dot-grid texture. */}
+      <div className="relative flex items-center justify-between py-1" style={{ marginTop: 4, marginLeft: 30 }}>
+        <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(0deg, rgba(9,13,19,0.6) 0%, transparent 100%)' }} />
         {tickIdxs.map((idx) => (
-          <span key={idx} style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{points[idx].label}</span>
+          <span key={idx} className="relative" style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{points[idx].label}</span>
         ))}
       </div>
     </div>
