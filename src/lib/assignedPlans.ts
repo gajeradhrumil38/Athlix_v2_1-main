@@ -108,3 +108,12 @@ export async function archivePlan(id: string): Promise<{ ok: boolean; error?: st
   const { error } = await supabase.from('assigned_plans').update({ status: 'archived' }).eq('id', id);
   return error ? { ok: false, error: error.message } : { ok: true };
 }
+
+// Hard delete — there's no "view archived plans" UI anywhere, so an
+// archived plan just silently vanished forever anyway; this removes the
+// row for real instead of leaving an orphan. Cascades to
+// assigned_plan_exercises via its ON DELETE CASCADE FK.
+export async function deletePlan(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.from('assigned_plans').delete().eq('id', id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}

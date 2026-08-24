@@ -13,7 +13,7 @@ import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
-import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assignedPlans';
+import { getAssignedPlansFor, deletePlan, type AssignedPlan } from '../lib/assignedPlans';
 import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
@@ -405,7 +405,16 @@ export const TraineeDetail: React.FC = () => {
           plans: plans.length > 0 ? (
             <div className="grid gap-3">
               {plans.map((p) => (
-                <PlanCard key={p.id} plan={p} workouts={shared ? dash.workouts.data : []} onRemove={async () => { await archivePlan(p.id); loadPlans(); }} />
+                <PlanCard
+                  key={p.id}
+                  plan={p}
+                  workouts={shared ? dash.workouts.data : []}
+                  onRemove={async () => {
+                    if (!window.confirm(`Delete "${p.title}"? This can't be undone.`)) return;
+                    await deletePlan(p.id);
+                    loadPlans();
+                  }}
+                />
               ))}
             </div>
           ) : null,
@@ -615,27 +624,7 @@ const ExerciseAccent: React.FC<{ name: string; muscleGroup: string; right?: Reac
   );
 };
 
-// Honest set display: one clean line when every set matched, but the ACTUAL
-// per-set breakdown when weight/reps varied (e.g. 3 sets at different loads) —
-// so "3 × 8 @ 20" never masks a pyramid like 8@20 / 6@22.5 / 4@25.
 type SetT = { reps: number; weight: number };
-const SetSummary: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' }) => {
-  if (!sets.length) return <span className="text-[13px] text-[var(--text-muted)]">—</span>;
-  const uniform = sets.every((s) => s.reps === sets[0].reps && s.weight === sets[0].weight);
-  if (uniform) return <Metric sets={sets.length} reps={sets[0].reps} weight={sets[0].weight || undefined} unit={unit} />;
-  return (
-    <div className="flex flex-wrap gap-1.5 justify-end">
-      {sets.map((s, i) => (
-        <span key={i} className="text-[13px] tabular-nums px-2 py-0.5 rounded-md" style={{ background: 'var(--bg-elevated)' }}>
-          <span className="font-bold text-[var(--text-primary)]">{s.reps}</span>
-          {s.weight ? (
-            <><span className="text-[var(--text-muted)] px-0.5">×</span><span className="font-bold" style={{ color: ACCENT }}>{s.weight}</span></>
-          ) : null}
-        </span>
-      ))}
-    </div>
-  );
-};
 
 // Per-set box grid — the SAME tactile layout the athlete sees in the Calendar
 // day view and the workout logger: a lime set number, then a big weight box and
@@ -1069,6 +1058,9 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRem
     return rows.map((e) => ({ reps: e.reps, weight: e.weight }));
   };
 
+  const doneCount = latest ? plan.exercises.filter((ex) => actualFor(ex.name) != null).length : 0;
+  const donePct = latest && plan.exercises.length ? doneCount / plan.exercises.length : 0;
+
   return (
     <Card className="!p-0 overflow-hidden">
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-3.5 text-left">
@@ -1083,26 +1075,55 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRem
 
       {open && (
         <div className="px-4 pb-3 border-t border-[var(--border)]">
-          <div className="flex items-center justify-between pt-3 pb-1.5">
+          <div className="flex items-center justify-between pt-3 pb-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
-              {latest ? `Prescribed → actual (${lastLabel})` : 'Prescribed'}
+              {latest ? `Last session (${lastLabel})` : 'Prescribed'}
             </p>
-            <button type="button" onClick={onRemove} className="text-[12px] font-semibold" style={{ color: '#ff8080' }}>Remove</button>
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label="Delete plan"
+              className="flex items-center gap-1 h-7 px-2 rounded-lg text-[12px] font-semibold transition-colors"
+              style={{ color: '#ff8080', background: 'rgba(255,128,128,0.08)' }}
+            >
+              <AppIcon name="Trash" size="sm" /> Delete
+            </button>
           </div>
-          <div className="divide-y divide-[var(--border)]">
+
+          {/* Completion progress — "did they do it or not" at a glance */}
+          {latest && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[13px] font-semibold text-[var(--text-primary)]">{doneCount}/{plan.exercises.length} exercises done</p>
+                <p className="text-[12px] font-bold" style={{ color: donePct === 1 ? '#4dff91' : donePct > 0 ? ACCENT : '#ff8080' }}>
+                  {Math.round(donePct * 100)}%
+                </p>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
+                <div className="h-full rounded-full" style={{ width: `${donePct * 100}%`, background: donePct === 1 ? '#4dff91' : ACCENT }} />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
             {plan.exercises.map((ex, i) => {
               const act = actualFor(ex.name);
-              const rx = `${ex.default_sets}×${ex.default_reps}${ex.default_weight ? ` @${ex.default_weight}` : ''}`;
+              const group = resolveMuscleGroup(ex.name, ex.muscle_group);
+              const rx = `Prescribed ${ex.default_sets}×${ex.default_reps}${ex.default_weight ? ` @ ${ex.default_weight} lb` : ''}`;
               return (
-                <div key={i} className="flex items-start justify-between gap-3 py-2">
-                  <p className="text-[14px] text-[var(--text-primary)] truncate flex-1 pt-0.5">{ex.name}</p>
-                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums pt-0.5">{rx}</p>
-                  {latest && (
-                    <div className="shrink-0 min-w-[74px] flex justify-end">
-                      {act ? <SetSummary sets={act} /> : <span className="text-[13px] font-semibold" style={{ color: '#ff8080' }}>missed</span>}
-                    </div>
-                  )}
-                </div>
+                <ExerciseAccent
+                  key={i}
+                  name={ex.name}
+                  muscleGroup={group}
+                  right={latest ? (
+                    act
+                      ? <span className="text-[11px] font-bold" style={{ color: '#4dff91' }}>✓ Done</span>
+                      : <span className="text-[11px] font-bold" style={{ color: '#ff8080' }}>Missed</span>
+                  ) : undefined}
+                >
+                  <p className="text-[12px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>{rx}</p>
+                  {act && <div className="mt-2"><SetGrid sets={act} /></div>}
+                </ExerciseAccent>
               );
             })}
           </div>
