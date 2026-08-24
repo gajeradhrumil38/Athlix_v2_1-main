@@ -489,13 +489,13 @@ const SetGrid: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' 
               <span className="font-victory text-[26px] leading-none text-white tabular-nums">
                 {s.weight ? s.weight.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}
               </span>
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>{unit}</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>{unit}</span>
             </div>
           )}
           <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2"
             style={weighted ? { borderLeft: '1px solid var(--border)' } : undefined}>
             <span className="font-victory text-[26px] leading-none text-white tabular-nums">{s.reps}</span>
-            <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>reps</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>reps</span>
           </div>
         </div>
       ))}
@@ -766,12 +766,12 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
                 {p.best_weight ? (
                   <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2" style={{ borderRight: '1px solid var(--border)' }}>
                     <span className="font-victory text-[26px] leading-none text-white tabular-nums">{p.best_weight.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>{p.unit || 'lb'}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>{p.unit || 'lb'}</span>
                   </div>
                 ) : null}
                 <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2">
                   <span className="font-victory text-[26px] leading-none text-white tabular-nums">{p.best_reps}</span>
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>reps</span>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>reps</span>
                 </div>
               </div>
             </div>

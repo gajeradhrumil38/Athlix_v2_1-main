@@ -906,14 +906,14 @@ const WorkoutCard: React.FC<{
                                     ? s.weight.toLocaleString(undefined, { maximumFractionDigits: 2 })
                                     : s.weight.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                 </span>
-                                <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>
                                   {g.isCardio ? (g.distanceUnit || 'mi') : unit}
                                 </span>
                               </div>
                               <div className="flex flex-col items-center justify-center gap-0.5 py-3 px-2"
                                 style={{ borderLeft: '1px solid var(--border)' }}>
                                 <span className="font-victory text-[32px] leading-none text-white tabular-nums">{s.reps}</span>
-                                <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>
                                   {g.isCardio ? 'min' : 'reps'}
                                 </span>
                               </div>
