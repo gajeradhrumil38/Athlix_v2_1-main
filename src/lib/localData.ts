@@ -1198,6 +1198,12 @@ export const updateBodyWeightLog = async (
   return db.bodyWeightLogs[idx];
 };
 
+export const deleteBodyWeightLog = async (_userId: string, id: string): Promise<void> => {
+  const db = readDb();
+  db.bodyWeightLogs = db.bodyWeightLogs.filter((l) => l.id !== id);
+  writeDb(db);
+};
+
 export const getPersonalRecords = async (userId: string, options?: { startDate?: string; endDate?: string }) => {
   const db = readDb();
   return db.personalRecords

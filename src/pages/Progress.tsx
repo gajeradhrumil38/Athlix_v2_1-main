@@ -23,7 +23,7 @@ import {
 } from 'date-fns';
 
 import { LineChart, AreaChart, ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceDot } from 'recharts';
-import { Target, TrendingUp, Activity, Scale, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CalendarDays, Pencil, Heart, Bluetooth, PlugZap, Unplug, Info, Flame, X, Camera, Utensils, History, Trophy } from 'lucide-react';
+import { Target, TrendingUp, Activity, Scale, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, CalendarDays, Pencil, Heart, Bluetooth, PlugZap, Unplug, Info, Flame, X, Camera, Utensils, History, Trophy, Trash2 } from 'lucide-react';
 import { DopamineTracker } from '../components/progress/DopamineTracker';
 import { GoalsSection } from '../components/progress/GoalsSection';
 import { ExerciseRadialChart } from '../components/progress/ExerciseRadialChart';
@@ -38,6 +38,7 @@ import {
   getWorkouts,
   logBodyWeight,
   updateBodyWeightLog,
+  deleteBodyWeightLog,
 } from '../lib/supabaseData';
 import type { LocalBodyWeightLog } from '../lib/supabaseData';
 import { parseDateAtStartOfDay } from '../lib/dates';
@@ -743,6 +744,20 @@ export const Progress: React.FC = () => {
       fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to update entry');
+    }
+  };
+
+  const handleDeleteWeight = async () => {
+    if (!editEntry || !user) return;
+    if (!window.confirm('Delete this body-weight entry? This cannot be undone.')) return;
+    try {
+      await deleteBodyWeightLog(user.id, editEntry.id);
+      setEditEntry(null);
+      setEditWeight('');
+      toast.success('Entry deleted');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete entry');
     }
   };
 
@@ -1927,6 +1942,15 @@ export const Progress: React.FC = () => {
 
                     {/* Actions */}
                     <div className="flex gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleDeleteWeight}
+                        aria-label="Delete entry"
+                        className="h-12 w-12 shrink-0 flex items-center justify-center rounded-full transition-all active:scale-[0.97]"
+                        style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.25)', color: '#ff6b60' }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => { setEditEntry(null); setEditWeight(''); }}

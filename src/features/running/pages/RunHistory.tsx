@@ -512,11 +512,20 @@ const WZoneLegend: React.FC<{ zones: WhoopWorkout['zone_durations'] }> = ({ zone
 
 type RunTab = 'all' | 'outdoor' | 'treadmill';
 
-export const RunHistory: React.FC = () => {
+interface RunHistoryProps {
+  // Coach view: read a TRAINEE's runs instead of the signed-in user's own.
+  // Device-local runs (getRuns()) belong to whichever phone is open, never
+  // the trainee's, so they're skipped entirely; delete/share are hidden.
+  userId?: string;
+  coachView?: boolean;
+}
+
+export const RunHistory: React.FC<RunHistoryProps> = ({ userId, coachView = false }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const [localRuns, setLocalRuns] = useState<SavedRun[]>(() => getRuns());
+  const effectiveUserId = coachView ? userId : user?.id;
+  const [localRuns, setLocalRuns] = useState<SavedRun[]>(() => (coachView ? [] : getRuns()));
   const [cloudRuns, setCloudRuns] = useState<SavedRun[]>([]);
   const [cloudLoading, setCloudLoading] = useState(false);
   const [selected, setSelected] = useState<SavedRun | null>(null);
@@ -531,24 +540,33 @@ export const RunHistory: React.FC = () => {
   // Hide the floating AI coach pill while one of this page's own full-screen
   // overlays is up, so it doesn't float on top of the run detail / calendar.
   useEffect(() => {
+    if (coachView) return;
     const overlayUp = !!selected || !!confirmDelete || showCalendar;
     window.dispatchEvent(new CustomEvent('athlix:coach-overlay', { detail: { open: overlayUp } }));
     return () => { window.dispatchEvent(new CustomEvent('athlix:coach-overlay', { detail: { open: false } })); };
-  }, [selected, confirmDelete, showCalendar]);
+  }, [selected, confirmDelete, showCalendar, coachView]);
 
   // Load cloud runs once on mount
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     setCloudLoading(true);
-    loadRunsFromCloud(user.id)
+    loadRunsFromCloud(effectiveUserId)
       .then(setCloudRuns)
       .finally(() => setCloudLoading(false));
-  }, [user]);
+  }, [effectiveUserId]);
 
-  // Load WHOOP workouts for the last 60 days — used to enrich run detail with HR data
+  // Load WHOOP workouts — used to enrich run detail with HR data. Coach view
+  // reads the trainee's shared cache directly (fetchAll would hit the edge
+  // function with the COACH's own token and return the coach's own data).
   useEffect(() => {
-    if (!user) return;
-    whoopService.getConnectionInfo(user.id).then((info) => {
+    if (!effectiveUserId) return;
+    if (coachView) {
+      whoopService.fetchAllFromCache(effectiveUserId)
+        .then((data) => setWhoopWorkouts(data.workouts))
+        .catch(() => {/* non-critical */});
+      return;
+    }
+    whoopService.getConnectionInfo(effectiveUserId).then((info) => {
       if (!info?.connected) return;
       const start = subDays(new Date(), 60).toISOString();
       const end = new Date().toISOString();
@@ -556,15 +574,15 @@ export const RunHistory: React.FC = () => {
     }).then((data) => {
       if (data) setWhoopWorkouts(data.workouts);
     }).catch(() => {/* non-critical */});
-  }, [user]);
+  }, [effectiveUserId, coachView]);
 
   const refreshCloud = useCallback(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     setCloudLoading(true);
-    loadRunsFromCloud(user.id)
+    loadRunsFromCloud(effectiveUserId)
       .then(setCloudRuns)
       .finally(() => setCloudLoading(false));
-  }, [user]);
+  }, [effectiveUserId]);
 
   // Merged: real runs (local + cloud) + demo only when 0 real runs
   const realRuns = useMemo(() => mergeRuns(localRuns, cloudRuns), [localRuns, cloudRuns]);
@@ -677,16 +695,18 @@ export const RunHistory: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ background: '#0d0f14', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className={`flex flex-col ${coachView ? '' : 'min-h-screen'}`} style={{ background: '#0d0f14', paddingBottom: coachView ? 0 : 'env(safe-area-inset-bottom)' }}>
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-3 px-4 pb-3"
-        style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}>
-        <button onClick={() => navigate(-1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 transition-all active:scale-95"
-          style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <ChevronLeft className="h-5 w-5" />
-        </button>
+        style={{ paddingTop: coachView ? 0 : 'max(16px, env(safe-area-inset-top))' }}>
+        {!coachView && (
+          <button onClick={() => navigate(-1)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 transition-all active:scale-95"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
         <div className="flex flex-col gap-0">
           <span className="font-victory text-[22px] font-black tracking-[0.18em] text-white uppercase leading-tight">
             RUN HISTORY
@@ -914,13 +934,15 @@ export const RunHistory: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(run); }}
-                          aria-label="Delete run"
-                          className="flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-90"
-                          style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)' }}>
-                          <Trash2 className="h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.6)' }} />
-                        </button>
+                        {!coachView && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDelete(run); }}
+                            aria-label="Delete run"
+                            className="flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-90"
+                            style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)' }}>
+                            <Trash2 className="h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.6)' }} />
+                          </button>
+                        )}
                         <div className="flex h-8 w-8 items-center justify-center rounded-full"
                           style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)' }}>
                           <ChevronRight className="h-4 w-4 shrink-0" style={{ color: 'rgba(255,255,255,0.6)' }} />
@@ -1149,22 +1171,26 @@ export const RunHistory: React.FC = () => {
                     {format(new Date(selected.timestamp), "h:mm a")} · {demo ? 'Cedar Rapids, IA' : 'Outdoor'}
                   </span>
                 </motion.div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (navigator.share) {
-                      navigator.share({
-                        title: 'My Run',
-                        text: `I ran ${dist(selected.distance).toFixed(2)} ${distanceUnit} in ${formatDuration(selected.duration)}!`,
-                      }).catch(() => {});
-                    } else {
-                      toast('Share not supported on this device');
-                    }
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 transition-all active:scale-95"
-                  style={{ background: 'rgba(13,15,20,0.65)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)' }}>
-                  <Share2 className="h-4 w-4" />
-                </button>
+                {coachView ? (
+                  <div className="h-9 w-9" />
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (navigator.share) {
+                        navigator.share({
+                          title: 'My Run',
+                          text: `I ran ${dist(selected.distance).toFixed(2)} ${distanceUnit} in ${formatDuration(selected.duration)}!`,
+                        }).catch(() => {});
+                      } else {
+                        toast('Share not supported on this device');
+                      }
+                    }}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white/60 transition-all active:scale-95"
+                    style={{ background: 'rgba(13,15,20,0.65)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)' }}>
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
 
               {/* PR badge */}

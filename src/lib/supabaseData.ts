@@ -2156,6 +2156,18 @@ export const updateBodyWeightLog = async (
   return data as LocalBodyWeightLog;
 };
 
+export const deleteBodyWeightLog = async (userId: string, id: string): Promise<void> => {
+  if (!hasSupabaseConfig) return localData.deleteBodyWeightLog(userId, id);
+
+  const { error } = await supabase
+    .from('body_weight_logs')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+
+  if (error) throw normalizeError(error, 'Failed to delete weight log.');
+};
+
 export const getPersonalRecords = async (
   userId: string,
   options?: { startDate?: string; endDate?: string },

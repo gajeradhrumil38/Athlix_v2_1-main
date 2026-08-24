@@ -18,6 +18,7 @@ import { getAssignedPlansFor, archivePlan, type AssignedPlan } from '../lib/assi
 import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
+import { RunHistory } from '../features/running/pages/RunHistory';
 
 const ACCENT = '#c8ff00';
 const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
@@ -332,15 +333,19 @@ export const TraineeDetail: React.FC = () => {
           <Section title="Training volume">
             {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
           </Section>
-          <Section title="Personal records">
-            {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />}
-          </Section>
+          {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <Section title="Personal records"><NotShared label="Personal records" /></Section>}
           <Section title="Body weight">
             {dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />}
           </Section>
-          <Section title="Runs">
-            {dash.runs.shared ? <RunsView runs={dash.runs.data} /> : <NotShared label="Runs" />}
-          </Section>
+          <div className="lg:col-span-2">
+            {dash.runs.shared ? (
+              <div className="glass-card overflow-hidden">
+                <RunHistory userId={id!} coachView />
+              </div>
+            ) : (
+              <Section title="Runs"><NotShared label="Runs" /></Section>
+            )}
+          </div>
         </div>
       )}
 
@@ -622,16 +627,40 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                     <span className={`text-[var(--text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}><AppIcon name="ExpandDown" size="sm" /></span>
                   </div>
                 </button>
-                {expanded && (
-                  <div className="px-4 pb-3 -mt-1 space-y-3">
-                    {ex.byDate.slice(0, 12).map((h) => (
-                      <div key={h.date}>
-                        <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5">{fmtDay(h.date)}</p>
-                        <SetGrid sets={h.sets} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {expanded && (() => {
+                  // Progression = best weight (fallback reps for bodyweight) per
+                  // date, oldest→newest, so the coach sees the trend at a glance.
+                  const chart = [...ex.byDate].reverse().map((h) => {
+                    const topW = h.sets.reduce((m, s) => Math.max(m, s.weight), 0);
+                    const topR = h.sets.reduce((m, s) => Math.max(m, s.reps), 0);
+                    return { date: fmtDay(h.date), value: topW || topR };
+                  });
+                  const weighted = ex.byDate.some((h) => h.sets.some((s) => s.weight > 0));
+                  return (
+                    <div className="px-4 pb-3 -mt-1 space-y-3">
+                      {chart.length >= 2 && (
+                        <div className="rounded-xl px-1 pt-2 pb-1" style={{ background: 'var(--bg-elevated)' }}>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] px-3 pt-1">{weighted ? 'Top weight' : 'Top reps'} over time</p>
+                          <ResponsiveContainer width="100%" height={130}>
+                            <LineChart data={chart} margin={{ top: 10, right: 12, left: -20, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                              <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={16} />
+                              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} width={40} domain={['dataMin - 2', 'dataMax + 2']} />
+                              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-secondary)' }} formatter={(v: any) => [`${v}${weighted ? ' lb' : ' reps'}`, weighted ? 'Top' : 'Reps']} />
+                              <Line type="monotone" dataKey="value" stroke={ACCENT} strokeWidth={2.5} dot={{ r: 3, fill: ACCENT }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                      {ex.byDate.slice(0, 12).map((h) => (
+                        <div key={h.date}>
+                          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5">{fmtDay(h.date)}</p>
+                          <SetGrid sets={h.sets} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -719,15 +748,36 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
 
 /* ── PRs ─────────────────────────────────────────────────── */
 const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best_reps: number; unit: string }[] }> = ({ prs }) => {
-  if (!prs.length) return <Card><Empty text="No personal records yet." /></Card>;
   return (
     <Card className="!p-0 overflow-hidden">
-      {prs.slice(0, 8).map((p, i) => (
-        <div key={i} className="flex items-center justify-between px-4 py-3.5 border-t border-[var(--border)] first:border-t-0">
-          <p className="text-[16px] font-bold text-[var(--text-primary)] truncate pr-3">{p.exercise_name}</p>
-          <Metric reps={p.best_reps} weight={p.best_weight || undefined} unit={p.unit} />
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)]">
+        <AppIcon name="Trophy" size="sm" />
+        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Personal records</p>
+      </div>
+      {!prs.length ? (
+        <Empty text="No personal records yet." />
+      ) : (
+        <div className="p-3 space-y-3">
+          {prs.slice(0, 8).map((p, i) => (
+            <div key={i}>
+              <p className="text-[15px] font-bold text-[var(--text-primary)] truncate mb-1.5">{p.exercise_name}</p>
+              <div className="grid overflow-hidden rounded-[10px]"
+                style={{ gridTemplateColumns: p.best_weight ? '1fr 1fr' : '1fr', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.012)' }}>
+                {p.best_weight ? (
+                  <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2" style={{ borderRight: '1px solid var(--border)' }}>
+                    <span className="font-victory text-[26px] leading-none text-white tabular-nums">{p.best_weight.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>{p.unit || 'lb'}</span>
+                  </div>
+                ) : null}
+                <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2">
+                  <span className="font-victory text-[26px] leading-none text-white tabular-nums">{p.best_reps}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>reps</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </Card>
   );
 };
@@ -748,25 +798,6 @@ const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: str
           <Line type="monotone" dataKey="weight" stroke="#4FC3F7" strokeWidth={2.5} dot={false} />
         </LineChart>
       </ResponsiveContainer>
-    </Card>
-  );
-};
-
-/* ── Runs ────────────────────────────────────────────────── */
-const RunsView: React.FC<{ runs: { id: number; run_ts: number; distance: number; duration: number; pace: number }[] }> = ({ runs }) => {
-  if (!runs.length) return <Card><Empty text="No runs logged." /></Card>;
-  const fmtPace = (p: number) => { const m = Math.floor(p); const s = Math.round((p - m) * 60); return `${m}:${String(s).padStart(2, '0')}`; };
-  return (
-    <Card className="!p-0 overflow-hidden">
-      {runs.slice(0, 6).map((r) => (
-        <div key={r.id} className="flex items-center justify-between px-4 py-3.5 border-t border-[var(--border)] first:border-t-0">
-          <div>
-            <p className="text-[16px] font-semibold text-[var(--text-primary)]">{r.distance.toFixed(2)} km</p>
-            <p className="text-[12px] text-[var(--text-muted)]">{new Date(r.run_ts).toLocaleDateString()}</p>
-          </div>
-          <p className="text-[15px] font-medium text-[var(--text-secondary)]">{fmtPace(r.pace)} /km</p>
-        </div>
-      ))}
     </Card>
   );
 };
