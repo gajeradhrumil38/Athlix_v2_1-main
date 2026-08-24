@@ -93,7 +93,10 @@ export const GlowSparkline: React.FC<{
   unit?: string;
   height?: number;
   emptyText?: string;
-}> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet' }) => {
+  // Shades any run of 3+ consecutive points that never increases (flat or
+  // declining) — a stall a coach should act on, not just a wiggly line.
+  flagPlateaus?: boolean;
+}> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet', flagPlateaus = false }) => {
   const uid = useId().replace(/:/g, '');
   const plotRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -116,8 +119,21 @@ export const GlowSparkline: React.FC<{
     const line = monotoneCubicPath(pts);
     const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
     const mid = (min + max) / 2;
-    return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min] };
-  }, [points, h]);
+
+    let plateaus: { start: number; end: number }[] = [];
+    if (flagPlateaus) {
+      let runStart = 0;
+      for (let i = 1; i <= values.length; i++) {
+        const brokeRun = i === values.length || values[i] > values[i - 1];
+        if (brokeRun) {
+          if (i - 1 - runStart >= 2) plateaus.push({ start: runStart, end: i - 1 });
+          runStart = i;
+        }
+      }
+    }
+
+    return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min], plateaus };
+  }, [points, h, flagPlateaus]);
 
   if (!geo) {
     return (
@@ -187,6 +203,14 @@ export const GlowSparkline: React.FC<{
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
             </defs>
+            {geo.plateaus.map((p, i) => (
+              <rect
+                key={i}
+                x={geo.pts[p.start][0]} y={0}
+                width={geo.pts[p.end][0] - geo.pts[p.start][0]} height={h}
+                fill="#ffd54f" opacity="0.09"
+              />
+            ))}
             <path d={geo.area} fill={`url(#${uid}-fill)`} />
             <path d={geo.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
             {activeIdx != null && (
@@ -263,6 +287,20 @@ export const GlowSparkline: React.FC<{
           <span key={idx} className="relative" style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{points[idx].label}</span>
         ))}
       </div>
+
+      {/* Plateau callout — only the most recent stall, so it stays a single
+          clear line rather than a wall of historical stalls. */}
+      {geo.plateaus.length > 0 && (() => {
+        const run = geo.plateaus[geo.plateaus.length - 1];
+        return (
+          <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(255,213,79,0.08)', border: '1px solid rgba(255,213,79,0.22)' }}>
+            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: '#ffd54f' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#ffd54f' }}>
+              No progress {points[run.start].label}–{points[run.end].label}
+            </span>
+          </div>
+        );
+      })()}
     </div>
   );
 };

@@ -731,6 +731,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                             color={accent}
                             unit={weighted ? ' lb' : ' reps'}
                             height={100}
+                            flagPlateaus
                           />
                         </DotGridCard>
                       )}
@@ -837,7 +838,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
           <p className="font-victory text-[16px] font-black text-white mt-1">{peak.toLocaleString()}</p>
         </div>
       </div>
-      <GlowSparkline points={points} color={ACCENT} />
+      <GlowSparkline points={points} color={ACCENT} flagPlateaus />
     </DotGridCard>
   );
 };
