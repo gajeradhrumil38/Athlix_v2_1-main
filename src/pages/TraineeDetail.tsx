@@ -22,6 +22,12 @@ import { RunHistory } from '../features/running/pages/RunHistory';
 import { muscleColor } from '../lib/muscleColors';
 
 const ACCENT = '#c8ff00';
+
+// Muscle group for an exercise — prefer the group actually stored on the
+// logged set; fall back to name-pattern inference so every exercise still
+// gets a color + label even on legacy rows with a null muscle_group.
+const resolveMuscleGroup = (name: string, stored?: string | null): string =>
+  stored || getExerciseMuscleProfile(name).primary[0] || 'Core';
 const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
 const DEFAULT_OVERVIEW_ORDER = ['stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
 // Rough card heights → greedy shortest-column packing (true masonry, no gaps).
@@ -446,6 +452,26 @@ const Metric: React.FC<{ sets?: number; reps: number; weight?: number; unit?: st
   </span>
 );
 
+// Exercise row with the muscle group's color as a left accent bar + the
+// group name spelled out under the title — the same visual language as the
+// athlete's own Calendar cards (colored strip + colored muscle-group label).
+const ExerciseAccent: React.FC<{ name: string; muscleGroup: string; right?: React.ReactNode; children?: React.ReactNode }> = ({ name, muscleGroup, right, children }) => {
+  const accent = muscleColor(muscleGroup);
+  return (
+    <div className="relative pl-3">
+      <div className="absolute inset-y-0 left-0 w-[3px] rounded-full" style={{ background: accent }} />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[15px] font-bold text-[var(--text-primary)] truncate">{name}</p>
+          <p className="text-[11px] font-semibold mt-0.5" style={{ color: accent }}>{muscleGroup}</p>
+        </div>
+        {right && <div className="shrink-0">{right}</div>}
+      </div>
+      {children}
+    </div>
+  );
+};
+
 // Honest set display: one clean line when every set matched, but the ACTUAL
 // per-set breakdown when weight/reps varied (e.g. 3 sets at different loads) —
 // so "3 × 8 @ 20" never masks a pyramid like 8@20 / 6@22.5 / 4@25.
@@ -535,11 +561,12 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
         <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--border)]">
           {recent.map((w) => {
             // Keep EVERY set per exercise so varying loads are shown accurately.
-            const groups = new Map<string, SetT[]>();
+            const groups = new Map<string, { sets: SetT[]; muscleGroup: string | null }>();
             for (const e of w.exercises || []) {
-              const arr = groups.get(e.name) || [];
-              arr.push({ reps: e.reps, weight: e.weight });
-              groups.set(e.name, arr);
+              const g = groups.get(e.name) || { sets: [], muscleGroup: e.muscle_group ?? null };
+              g.sets.push({ reps: e.reps, weight: e.weight });
+              if (!g.muscleGroup && e.muscle_group) g.muscleGroup = e.muscle_group;
+              groups.set(e.name, g);
             }
             const when = new Date(`${w.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
             return (
@@ -548,15 +575,16 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
                   <p className="text-[15px] font-bold text-[var(--text-primary)] truncate">{w.title || 'Workout'}</p>
                   <p className="text-[12px] text-[var(--text-muted)] shrink-0">{when}</p>
                 </div>
-                <div className="mt-2.5 space-y-3">
-                  {[...groups.entries()].map(([name, sets]) => (
-                    <div key={name}>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{name}</p>
-                        <p className="text-[12px] font-semibold text-[var(--text-muted)] shrink-0">{sets.length} set{sets.length !== 1 ? 's' : ''}</p>
-                      </div>
-                      <SetGrid sets={sets} />
-                    </div>
+                <div className="mt-2.5 space-y-4">
+                  {[...groups.entries()].map(([name, g]) => (
+                    <ExerciseAccent
+                      key={name}
+                      name={name}
+                      muscleGroup={resolveMuscleGroup(name, g.muscleGroup)}
+                      right={<span className="text-[12px] font-semibold text-[var(--text-muted)]">{g.sets.length} set{g.sets.length !== 1 ? 's' : ''}</span>}
+                    >
+                      <div className="mt-2"><SetGrid sets={g.sets} /></div>
+                    </ExerciseAccent>
                   ))}
                 </div>
               </div>
@@ -617,10 +645,10 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
   const [open, setOpen] = useState<string | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const list = useMemo(() => buildExerciseHistory(workouts ?? []), [workouts]);
-  const groups = useMemo(() => [...new Set(list.map((e) => e.muscleGroup).filter((g): g is string => !!g))].sort(), [list]);
+  const groups = useMemo(() => [...new Set(list.map((e) => resolveMuscleGroup(e.name, e.muscleGroup)))].sort(), [list]);
   const filtered = list
     .filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase()))
-    .filter((e) => !group || e.muscleGroup === group);
+    .filter((e) => !group || resolveMuscleGroup(e.name, e.muscleGroup) === group);
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -661,16 +689,19 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
         <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--border)]">
           {filtered.map((ex) => {
             const expanded = open === ex.name;
-            const dotColor = ex.muscleGroup ? muscleColor(ex.muscleGroup) : 'var(--text-muted)';
+            const group = resolveMuscleGroup(ex.name, ex.muscleGroup);
+            const accent = muscleColor(group);
             return (
-              <div key={ex.name}>
-                <button type="button" onClick={() => setOpen(expanded ? null : ex.name)} className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left">
+              <div key={ex.name} className="relative">
+                <div className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-full" style={{ background: accent }} />
+                <button type="button" onClick={() => setOpen(expanded ? null : ex.name)} className="w-full flex items-center justify-between gap-3 pl-5 pr-4 py-3.5 text-left">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full shrink-0" style={{ background: dotColor }} />
-                      <p className="text-[16px] font-bold text-[var(--text-primary)] truncate">{ex.name}</p>
+                    <p className="text-[16px] font-bold text-[var(--text-primary)] truncate">{ex.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[11px] font-semibold" style={{ color: accent }}>{group}</span>
+                      <span className="text-[var(--text-muted)]">·</span>
+                      <span className="text-[13px] font-semibold" style={{ color: 'var(--text-secondary)' }}>{fmtRelative(ex.last)}</span>
                     </div>
-                    <p className="text-[13px] font-semibold mt-0.5" style={{ color: 'var(--text-secondary)' }}>{fmtRelative(ex.last)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="flex flex-col items-end gap-0.5">
@@ -816,9 +847,8 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
       ) : (
         <div className="p-3 space-y-3">
           {prs.slice(0, 8).map((p, i) => (
-            <div key={i}>
-              <p className="text-[15px] font-bold text-[var(--text-primary)] truncate mb-1.5">{p.exercise_name}</p>
-              <div className="grid overflow-hidden rounded-[10px]"
+            <ExerciseAccent key={i} name={p.exercise_name} muscleGroup={resolveMuscleGroup(p.exercise_name)}>
+              <div className="grid overflow-hidden rounded-[10px] mt-2"
                 style={{ gridTemplateColumns: p.best_weight ? '1fr 1fr' : '1fr', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.012)' }}>
                 {p.best_weight ? (
                   <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2" style={{ borderRight: '1px solid var(--border)' }}>
@@ -831,7 +861,7 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
                   <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>reps</span>
                 </div>
               </div>
-            </div>
+            </ExerciseAccent>
           ))}
         </div>
       )}
