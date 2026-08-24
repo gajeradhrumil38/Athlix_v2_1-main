@@ -36,9 +36,9 @@ const resolveMuscleGroup = (name: string, stored?: string | null): string =>
 // the old design re-ran the guess on every render and could silently
 // relocate a card the coach had just placed.
 const OVERVIEW_COLUMNS_KEY = 'athlix:coach-overview-columns-v2';
-const DEFAULT_OVERVIEW_ORDER = ['stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
+const DEFAULT_OVERVIEW_ORDER = ['stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
 // Rough card heights, used only to seed an initial balanced split.
-const CARD_WEIGHT: Record<string, number> = { stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
+const CARD_WEIGHT: Record<string, number> = { stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
 function distributeMasonry(ids: string[], cols: number): string[][] {
   const columns: string[][] = Array.from({ length: cols }, () => []);
   const heights = new Array(cols).fill(0);
@@ -389,6 +389,7 @@ export const TraineeDetail: React.FC = () => {
           radar: shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Muscle balance" />,
           map: shared ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card> : <NotShared label="Muscle map" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
+          weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
           notes: (
@@ -999,8 +1000,8 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
       {!prs.length ? (
         <Empty text="No personal records yet." />
       ) : (
-        <div className="p-3 space-y-3">
-          {prs.slice(0, 8).map((p, i) => (
+        <div className="p-3 space-y-3 max-h-[320px] overflow-y-auto">
+          {prs.map((p, i) => (
             <ExerciseAccent key={i} name={p.exercise_name} muscleGroup={resolveMuscleGroup(p.exercise_name)}>
               <div className="grid overflow-hidden rounded-[10px] mt-2"
                 style={{ gridTemplateColumns: p.best_weight ? '1fr 1fr' : '1fr', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.012)' }}>
