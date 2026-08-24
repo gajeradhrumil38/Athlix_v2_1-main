@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
+import {
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners, useDroppable,
+  type DragStartEvent, type DragOverEvent, type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
@@ -25,14 +28,38 @@ const ACCENT = '#c8ff00';
 // gets a color + label even on legacy rows with a null muscle_group.
 const resolveMuscleGroup = (name: string, stored?: string | null): string =>
   stored || getExerciseMuscleProfile(name).primary[0] || 'Core';
-const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
+// v2: columns are now persisted as-arranged (string[][]), not recomputed by
+// a weight guess every render — that guess is only ever used to SEED a
+// column split (first load, a newly-added widget, or a responsive
+// column-count change), never to override where the coach actually dragged
+// a card. This was the root cause of "can't fit a card where I have space":
+// the old design re-ran the guess on every render and could silently
+// relocate a card the coach had just placed.
+const OVERVIEW_COLUMNS_KEY = 'athlix:coach-overview-columns-v2';
 const DEFAULT_OVERVIEW_ORDER = ['stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'prs', 'recent', 'notes', 'plans'];
-// Rough card heights → greedy shortest-column packing (true masonry, no gaps).
+// Rough card heights, used only to seed an initial balanced split.
 const CARD_WEIGHT: Record<string, number> = { stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
 function distributeMasonry(ids: string[], cols: number): string[][] {
   const columns: string[][] = Array.from({ length: cols }, () => []);
   const heights = new Array(cols).fill(0);
   for (const id of ids) {
+    const shortest = heights.indexOf(Math.min(...heights));
+    columns[shortest].push(id);
+    heights[shortest] += CARD_WEIGHT[id] ?? 1.5;
+  }
+  return columns;
+}
+// Reconcile a persisted column split against the widgets actually available
+// right now: drop ids that no longer exist, append newly-available ids to
+// whichever column is currently shortest (by weight), so a fresh widget
+// doesn't get lost or pile onto one column.
+function reconcileColumns(saved: string[][], availableIds: string[]): string[][] {
+  const known = new Set(availableIds);
+  const columns = saved.map((col) => col.filter((id) => known.has(id)));
+  const placed = new Set(columns.flat());
+  const missing = availableIds.filter((id) => !placed.has(id));
+  const heights = columns.map((col) => col.reduce((s, id) => s + (CARD_WEIGHT[id] ?? 1.5), 0));
+  for (const id of missing) {
     const shortest = heights.indexOf(Math.min(...heights));
     columns[shortest].push(id);
     heights[shortest] += CARD_WEIGHT[id] ?? 1.5;
@@ -86,21 +113,98 @@ export const TraineeDetail: React.FC = () => {
     return () => window.removeEventListener('resize', compute);
   }, []);
 
-  // Draggable Overview — order persisted locally so a coach's arrangement sticks.
+  // Draggable Overview — columns (not a flat order) are the source of truth,
+  // each its own SortableContext + droppable, matching dnd-kit's own
+  // multi-container pattern. A single SortableContext spanning a masonry
+  // split across separate DOM containers is what made dragging between
+  // columns feel broken ("stuck/straightened") — rectSortingStrategy
+  // computes transforms assuming siblings share one parent, which isn't
+  // true once the same flat list is rendered into 3 separate column divs.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const [order, setOrder] = useState<string[]>(() => {
+  const [columns, setColumns] = useState<string[][]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(OVERVIEW_ORDER_KEY) || 'null');
-      if (Array.isArray(saved)) return [...saved.filter((x: string) => DEFAULT_OVERVIEW_ORDER.includes(x)), ...DEFAULT_OVERVIEW_ORDER.filter((x) => !saved.includes(x))];
+      const saved = JSON.parse(localStorage.getItem(OVERVIEW_COLUMNS_KEY) || 'null');
+      if (Array.isArray(saved) && saved.every((c: unknown) => Array.isArray(c))) return saved;
     } catch { /* ignore */ }
-    return DEFAULT_OVERVIEW_ORDER;
+    return distributeMasonry(DEFAULT_OVERVIEW_ORDER, 3);
   });
-  const onDragEnd = (e: DragEndEvent) => {
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
+
+  // 'plans' is the only widget that can be genuinely absent (no assigned
+  // plans yet) — every other id always renders, either real content or a
+  // NotShared placeholder, so it always occupies a slot.
+  const availableIds = useMemo(
+    () => DEFAULT_OVERVIEW_ORDER.filter((k) => k !== 'plans' || plans.length > 0),
+    [plans],
+  );
+  const availableKey = availableIds.join(',');
+
+  // Reconcile only when what's available changes or a responsive
+  // breakpoint is crossed — never on every render, so a coach's own drag
+  // placement is never silently overwritten by the layout guess.
+  useEffect(() => {
+    setColumns((prev) => {
+      const flatPrev = prev.flat();
+      const sameIds = flatPrev.length === availableIds.length && flatPrev.every((x) => availableIds.includes(x));
+      const sameColCount = prev.length === cols;
+      if (sameIds && sameColCount) return prev;
+      const merged = reconcileColumns(prev, availableIds);
+      const next = sameColCount ? merged : distributeMasonry(merged.flat(), cols);
+      try { localStorage.setItem(OVERVIEW_COLUMNS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [availableKey, cols]);
+
+  const findColumn = (id: string, cols2: string[][]) => cols2.findIndex((c) => c.includes(id));
+
+  const onDragStart = (e: DragStartEvent) => {
+    setActiveCardId(String(e.active.id));
+    // DragOverlay renders via a portal with no containing block of its own,
+    // so without an explicit width it stretches to fit its content instead
+    // of matching the card it was picked up from.
+    setActiveCardWidth(e.active.rect.current.initial?.width ?? null);
+  };
+
+  // Live cross-column move as the pointer passes over another card or an
+  // empty column — this is what makes a card actually land where there's
+  // room, instead of only being able to reorder within its starting column.
+  const onDragOver = (e: DragOverEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    setOrder((prev) => {
-      const next = arrayMove(prev, prev.indexOf(String(active.id)), prev.indexOf(String(over.id)));
-      try { localStorage.setItem(OVERVIEW_ORDER_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    setColumns((prev) => {
+      const fromCol = findColumn(activeId, prev);
+      const toCol = overId.startsWith('col-') ? Number(overId.slice(4)) : findColumn(overId, prev);
+      if (fromCol === -1 || toCol === -1 || fromCol === toCol) return prev;
+      const next = prev.map((c) => [...c]);
+      next[fromCol].splice(next[fromCol].indexOf(activeId), 1);
+      const overIdx = next[toCol].indexOf(overId);
+      next[toCol].splice(overIdx === -1 ? next[toCol].length : overIdx, 0, activeId);
+      return next;
+    });
+  };
+
+  const onDragEnd = (e: DragEndEvent) => {
+    setActiveCardId(null);
+    setActiveCardWidth(null);
+    const { active, over } = e;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    setColumns((prev) => {
+      const col = findColumn(activeId, prev);
+      if (col === -1) return prev;
+      let next = prev;
+      if (!overId.startsWith('col-')) {
+        const overCol = findColumn(overId, prev);
+        if (overCol === col && activeId !== overId) {
+          const items = prev[col];
+          next = prev.map((c, i) => (i === col ? arrayMove(items, items.indexOf(activeId), items.indexOf(overId)) : c));
+        }
+      }
+      try { localStorage.setItem(OVERVIEW_COLUMNS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
   };
@@ -305,20 +409,33 @@ export const TraineeDetail: React.FC = () => {
             </div>
           ) : null,
         };
-        const ids = order.filter((k) => WIDGETS[k] != null);
+        // Columns may briefly lag a fresh 'plans' widget (reconciled by the
+        // effect above, not synchronously) — filter defensively so a
+        // stale id never renders a blank slot for one tick.
+        const renderColumns = columns.map((col) => col.filter((k) => WIDGETS[k] != null));
         return (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext items={ids} strategy={rectSortingStrategy}>
-              {/* Balanced masonry — cards packed into the shortest column so the
-                  whole width is used with no dead space; still drag-reorderable. */}
-              <div className="flex gap-3 items-start">
-                {distributeMasonry(ids, cols).map((colIds, ci) => (
-                  <div key={ci} className="flex-1 min-w-0 space-y-3">
-                    {colIds.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
-                  </div>
-                ))}
-              </div>
-            </SortableContext>
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
+            {/* Balanced masonry — each column is its own droppable +
+                SortableContext (dnd-kit's multi-container pattern), so a
+                card can actually move to wherever there's room, and the
+                drag animation stays correct across the column boundary. */}
+            <div className="flex gap-3 items-start">
+              {renderColumns.map((colIds, ci) => (
+                <MasonryColumn key={ci} id={`col-${ci}`} itemIds={colIds}>
+                  {colIds.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
+                </MasonryColumn>
+              ))}
+            </div>
+            <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.2, 0, 0, 1)' }}>
+              {activeCardId ? (
+                <div
+                  className="rotate-[1.5deg] scale-[1.03]"
+                  style={{ width: activeCardWidth ?? undefined, filter: 'drop-shadow(0 18px 34px rgba(0,0,0,0.55))' }}
+                >
+                  {WIDGETS[activeCardId]}
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         );
       })()}
@@ -388,19 +505,47 @@ const SortableCard: React.FC<{ id: string; children: React.ReactNode }> = ({ id,
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, zIndex: isDragging ? 20 : undefined }}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }}
       className="relative"
     >
+      {/* Inset within the card's own bounds (not overlapping the gap
+          between cards) so it never gets clipped or fights the neighboring
+          column for hit-testing space. */}
       <button
         {...attributes}
         {...listeners}
         aria-label="Drag to rearrange"
-        className="absolute -top-2 -right-2 z-10 touch-none cursor-grab active:cursor-grabbing h-7 w-7 flex items-center justify-center rounded-lg text-[13px] opacity-60 hover:opacity-100"
-        style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+        className="absolute top-2.5 right-2.5 z-10 touch-none cursor-grab active:cursor-grabbing h-7 w-7 flex items-center justify-center rounded-lg text-[14px]"
+        style={{ background: 'color-mix(in srgb, var(--bg-elevated) 88%, transparent)', backdropFilter: 'blur(4px)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
       >
         ⠿
       </button>
       {children}
+    </div>
+  );
+};
+
+/* ── Droppable + sortable column (dnd-kit multi-container pattern) ──── */
+const MasonryColumn: React.FC<{ id: string; itemIds: string[]; children: React.ReactNode }> = ({ id, itemIds, children }) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex-1 min-w-0 space-y-3 rounded-2xl transition-colors"
+      style={{
+        outline: isOver ? '2px dashed color-mix(in srgb, var(--accent) 45%, transparent)' : '2px dashed transparent',
+        outlineOffset: 4,
+        minHeight: itemIds.length ? undefined : 80,
+      }}
+    >
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+        {children}
+        {itemIds.length === 0 && (
+          <div className="h-20 rounded-2xl flex items-center justify-center text-[12px]" style={{ border: '1px dashed var(--border)', color: 'var(--text-muted)' }}>
+            Drop here
+          </div>
+        )}
+      </SortableContext>
     </div>
   );
 };
