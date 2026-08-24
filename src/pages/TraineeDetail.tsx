@@ -3,10 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  ResponsiveContainer, AreaChart, Area, LineChart, Line,
-  XAxis, YAxis, Tooltip, CartesianGrid,
-} from 'recharts';
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
 import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
@@ -20,6 +16,7 @@ import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { RunHistory } from '../features/running/pages/RunHistory';
 import { muscleColor } from '../lib/muscleColors';
+import { DotGridCard, GlowSparkline } from '../components/shared/GlowChart';
 
 const ACCENT = '#c8ff00';
 
@@ -727,18 +724,16 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                   return (
                     <div className="px-4 pb-3 -mt-1 space-y-3">
                       {chart.length >= 2 && (
-                        <div className="rounded-xl px-1 pt-2 pb-1" style={{ background: 'var(--bg-elevated)' }}>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] px-3 pt-1">{weighted ? 'Top weight' : 'Top reps'} over time</p>
-                          <ResponsiveContainer width="100%" height={130}>
-                            <LineChart data={chart} margin={{ top: 10, right: 12, left: -20, bottom: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                              <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={16} />
-                              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} width={40} domain={['dataMin - 2', 'dataMax + 2']} />
-                              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-secondary)' }} formatter={(v: any) => [`${v}${weighted ? ' lb' : ' reps'}`, weighted ? 'Top' : 'Reps']} />
-                              <Line type="monotone" dataKey="value" stroke={ACCENT} strokeWidth={2.5} dot={{ r: 3, fill: ACCENT }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
+                        <DotGridCard accent={accent} className="!p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] mb-1" style={{ color: accent }}>{weighted ? 'Top weight' : 'Top reps'} over time</p>
+                          <GlowSparkline
+                            values={chart.map((c) => c.value)}
+                            color={accent}
+                            height={100}
+                            leftLabel={chart[0].date}
+                            rightLabel="Now"
+                          />
+                        </DotGridCard>
                       )}
                       {ex.byDate.slice(0, 12).map((h) => (
                         <div key={h.date}>
@@ -799,38 +794,51 @@ const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts
 
 /* ── Volume trend (last 8 weeks) ─────────────────────────── */
 const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => {
-  const data = useMemo(() => {
+  const weeks = useMemo(() => {
     const now = Date.now();
-    const weeks = Array.from({ length: 8 }, (_, i) => ({ i: 7 - i, vol: 0, label: '' }));
+    const w8 = Array.from({ length: 8 }, () => 0);
     for (const w of workouts) {
       const age = now - parseDay(w.date);
       const wi = Math.floor(age / (7 * DAY));
       if (wi < 0 || wi > 7) continue;
       const vol = (w.exercises || []).reduce((a, e) => a + (e.sets || 0) * (e.reps || 0) * (e.weight || 0), 0);
-      weeks[7 - wi].vol += vol;
+      w8[7 - wi] += vol;
     }
-    return weeks.map((w, idx) => ({ label: idx === 7 ? 'This wk' : `${7 - idx}w`, vol: Math.round(w.vol) }));
+    return w8.map((v) => Math.round(v));
   }, [workouts]);
-  const empty = data.every((d) => d.vol === 0);
+  const empty = weeks.every((v) => v === 0);
   if (empty) return <Card><Empty text="No workouts logged yet." /></Card>;
+
+  const thisWk = weeks[weeks.length - 1];
+  const lastWk = weeks[weeks.length - 2] || 0;
+  const deltaPct = lastWk > 0 ? Math.round(((thisWk - lastWk) / lastWk) * 100) : null;
+  const peak = Math.max(...weeks);
+  const avg = Math.round(weeks.reduce((a, b) => a + b, 0) / weeks.length);
+
   return (
-    <Card>
-      <ResponsiveContainer width="100%" height={170}>
-        <AreaChart data={data} margin={{ top: 8, right: 4, left: -18, bottom: 0 }}>
-          <defs>
-            <linearGradient id="volFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={ACCENT} stopOpacity={0.35} />
-              <stop offset="100%" stopColor={ACCENT} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="label" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
-          <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--text-secondary)' }} formatter={(v: any) => [`${v}`, 'Volume']} />
-          <Area type="monotone" dataKey="vol" stroke={ACCENT} strokeWidth={2.5} fill="url(#volFill)" />
-        </AreaChart>
-      </ResponsiveContainer>
-    </Card>
+    <DotGridCard accent={ACCENT}>
+      <span className="text-[10px] font-black uppercase tracking-[0.24em]" style={{ color: ACCENT }}>Training volume</span>
+      <div className="flex items-baseline gap-2 mt-2 mb-1.5">
+        <span className="font-victory text-[40px] font-black leading-none text-white tabular-nums">{thisWk.toLocaleString()}</span>
+        <span className="font-victory text-[15px] font-black" style={{ color: ACCENT }}>this wk</span>
+      </div>
+      {deltaPct != null && (
+        <div className="text-[12px] font-semibold mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          <span style={{ color: deltaPct >= 0 ? ACCENT : 'rgba(255,100,100,0.9)' }}>{deltaPct >= 0 ? '+' : ''}{deltaPct}%</span> vs last week
+        </div>
+      )}
+      <div className="flex gap-6 mb-4">
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">8wk avg</span>
+          <p className="font-victory text-[16px] font-black text-white mt-1">{avg.toLocaleString()}</p>
+        </div>
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">Peak wk</span>
+          <p className="font-victory text-[16px] font-black text-white mt-1">{peak.toLocaleString()}</p>
+        </div>
+      </div>
+      <GlowSparkline values={weeks} color={ACCENT} leftLabel="8wk ago" rightLabel="This wk" />
+    </DotGridCard>
   );
 };
 
@@ -870,22 +878,29 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
 };
 
 /* ── Body weight ─────────────────────────────────────────── */
+const WEIGHT_BLUE = '#4FC3F7';
+const fmtShort = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: string }[] }> = ({ weights }) => {
   if (weights.length < 2) return <Card><Empty text="Not enough body-weight logs." /></Card>;
-  const data = weights.map((w) => ({ date: w.date.slice(5), weight: w.weight }));
   const unit = weights[weights.length - 1].unit;
+  const latest = weights[weights.length - 1].weight;
+  const first = weights[0].weight;
+  const delta = Math.round((latest - first) * 10) / 10;
+
   return (
-    <Card>
-      <ResponsiveContainer width="100%" height={160}>
-        <LineChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={24} />
-          <YAxis domain={['dataMin - 1', 'dataMax + 1']} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`${v} ${unit}`, 'Weight']} />
-          <Line type="monotone" dataKey="weight" stroke="#4FC3F7" strokeWidth={2.5} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </Card>
+    <DotGridCard accent={WEIGHT_BLUE}>
+      <span className="text-[10px] font-black uppercase tracking-[0.24em]" style={{ color: WEIGHT_BLUE }}>Body weight</span>
+      <div className="flex items-baseline gap-2 mt-2 mb-1.5">
+        <span className="font-victory text-[40px] font-black leading-none text-white tabular-nums">{latest.toFixed(1)}</span>
+        <span className="font-victory text-[15px] font-black" style={{ color: WEIGHT_BLUE }}>{unit}</span>
+      </div>
+      {delta !== 0 && (
+        <div className="text-[12px] font-semibold mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          <span style={{ color: 'rgba(255,255,255,0.85)' }}>{delta > 0 ? '+' : ''}{delta} {unit}</span> since {fmtShort(weights[0].date)}
+        </div>
+      )}
+      <GlowSparkline values={weights.map((w) => w.weight)} color={WEIGHT_BLUE} leftLabel={fmtShort(weights[0].date)} rightLabel="Now" />
+    </DotGridCard>
   );
 };
 
@@ -953,4 +968,3 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRem
 const Empty: React.FC<{ text: string }> = ({ text }) => (
   <p className="text-[14px] text-[var(--text-muted)] text-center py-6">{text}</p>
 );
-const tooltipStyle = { background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13, color: 'var(--text-primary)' } as const;
