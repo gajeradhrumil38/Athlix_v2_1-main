@@ -109,7 +109,10 @@ export const GlowSparkline: React.FC<{
   return (
     <div>
       <div className="flex" style={{ height: h }}>
-        {/* Y-axis: labeled value levels */}
+        {/* Y-axis: labeled value levels. The top/bottom labels anchor to
+            their own edge (not centered on the line) so they can never
+            clip against the card's overflow-hidden — only the middle
+            label centers on its line. */}
         <div className="relative shrink-0" style={{ width: 30 }}>
           {geo.yTicks.map((v, i) => (
             <span
@@ -117,7 +120,7 @@ export const GlowSparkline: React.FC<{
               className="absolute tabular-nums"
               style={{
                 top: `${(geo.yOf(v) / h) * 100}%`, left: 0,
-                transform: 'translateY(-50%)',
+                transform: i === 0 ? 'translateY(0%)' : i === geo.yTicks.length - 1 ? 'translateY(-100%)' : 'translateY(-50%)',
                 fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.38)',
               }}
             >
@@ -183,17 +186,21 @@ export const GlowSparkline: React.FC<{
             );
           })}
 
-          {/* Tooltip on the active (hovered/touched) point */}
+          {/* Tooltip on the active (hovered/touched) point — flips below
+              the point when it's near the top edge (e.g. scrubbing a peak)
+              so it can't clip against the card's overflow-hidden. */}
           {activeIdx != null && (() => {
             const [x, y] = geo.pts[activeIdx];
             const xPct = (x / w) * 100;
+            const yPct = (y / h) * 100;
             const align = xPct > 72 ? 'right' : xPct < 28 ? 'left' : 'center';
+            const below = yPct < 22;
             return (
               <div
                 className="absolute z-10 pointer-events-none rounded-lg px-2 py-1"
                 style={{
-                  left: `${xPct}%`, top: `${(y / h) * 100}%`,
-                  transform: `translate(${align === 'right' ? '-100%' : align === 'left' ? '0%' : '-50%'}, -135%)`,
+                  left: `${xPct}%`, top: `${yPct}%`,
+                  transform: `translate(${align === 'right' ? '-100%' : align === 'left' ? '0%' : '-50%'}, ${below ? '25%' : '-135%'})`,
                   background: '#1a2030', border: '1px solid rgba(255,255,255,0.14)',
                   whiteSpace: 'nowrap', boxShadow: '0 6px 16px rgba(0,0,0,0.45)',
                 }}
