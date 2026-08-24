@@ -19,6 +19,7 @@ import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { RunHistory } from '../features/running/pages/RunHistory';
+import { muscleColor } from '../lib/muscleColors';
 
 const ACCENT = '#c8ff00';
 const OVERVIEW_ORDER_KEY = 'athlix:coach-overview-order';
@@ -434,15 +435,14 @@ const Metric: React.FC<{ sets?: number; reps: number; weight?: number; unit?: st
       </>
     )}
     <span className="text-[17px] font-bold text-[var(--text-primary)]">{reps}</span>
+    <span className="text-[11px] font-medium text-[var(--text-muted)]">reps</span>
     {weight ? (
       <>
         <span className="text-[13px] text-[var(--text-muted)] px-0.5">@</span>
         <span className="text-[17px] font-bold" style={{ color: ACCENT }}>{weight}</span>
         <span className="text-[11px] font-medium text-[var(--text-muted)]">{unit}</span>
       </>
-    ) : (
-      <span className="text-[11px] font-medium text-[var(--text-muted)] ml-0.5">reps</span>
-    )}
+    ) : null}
   </span>
 );
 
@@ -569,13 +569,20 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
 };
 
 /* ── Exercise history — every lift the trainee has done + its progression ── */
-interface ExHist { name: string; sessions: number; best: { w: number; r: number }; last: string; byDate: { date: string; sets: SetT[] }[]; }
+interface ExHist {
+  name: string; muscleGroup: string | null; sessions: number;
+  best: { w: number; r: number }; last: string; byDate: { date: string; sets: SetT[] }[];
+  // Latest-vs-previous-session top weight, for the trend arrow. null when
+  // there's no earlier session to compare, or the lift is bodyweight-only.
+  trendLb: number | null;
+}
 function buildExerciseHistory(workouts: TraineeWorkout[]): ExHist[] {
-  const map = new Map<string, { sessions: Set<string>; best: { w: number; r: number }; last: string; byDate: Map<string, SetT[]> }>();
+  const map = new Map<string, { muscleGroup: string | null; sessions: Set<string>; best: { w: number; r: number }; last: string; byDate: Map<string, SetT[]> }>();
   for (const w of workouts) {
     for (const e of w.exercises || []) {
       let m = map.get(e.name);
-      if (!m) { m = { sessions: new Set(), best: { w: 0, r: 0 }, last: '', byDate: new Map() }; map.set(e.name, m); }
+      if (!m) { m = { muscleGroup: e.muscle_group ?? null, sessions: new Set(), best: { w: 0, r: 0 }, last: '', byDate: new Map() }; map.set(e.name, m); }
+      if (!m.muscleGroup && e.muscle_group) m.muscleGroup = e.muscle_group;
       m.sessions.add(w.date);
       if (w.date > m.last) m.last = w.date;
       if (e.weight > m.best.w || (e.weight === m.best.w && e.reps > m.best.r)) m.best = { w: e.weight, r: e.reps };
@@ -585,17 +592,35 @@ function buildExerciseHistory(workouts: TraineeWorkout[]): ExHist[] {
     }
   }
   return [...map.entries()]
-    .map(([name, m]) => ({ name, sessions: m.sessions.size, best: m.best, last: m.last, byDate: [...m.byDate.entries()].map(([date, sets]) => ({ date, sets })).sort((a, b) => b.date.localeCompare(a.date)) }))
+    .map(([name, m]) => {
+      const byDate = [...m.byDate.entries()].map(([date, sets]) => ({ date, sets })).sort((a, b) => b.date.localeCompare(a.date));
+      const topOf = (sets: SetT[]) => sets.reduce((mx, s) => Math.max(mx, s.weight), 0);
+      const latestTop = byDate[0] ? topOf(byDate[0].sets) : 0;
+      const prevTop = byDate[1] ? topOf(byDate[1].sets) : 0;
+      const trendLb = latestTop > 0 && prevTop > 0 ? Math.round((latestTop - prevTop) * 10) / 10 : null;
+      return { name, muscleGroup: m.muscleGroup, sessions: m.sessions.size, best: m.best, last: m.last, byDate, trendLb };
+    })
     .sort((a, b) => b.last.localeCompare(a.last));
 }
 
-const fmtDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const fmtDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const fmtRelative = (d: string) => {
+  const days = Math.round((Date.now() - parseDay(d)) / DAY);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
 
 const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [group, setGroup] = useState<string | null>(null);
   const list = useMemo(() => buildExerciseHistory(workouts ?? []), [workouts]);
-  const filtered = list.filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const groups = useMemo(() => [...new Set(list.map((e) => e.muscleGroup).filter((g): g is string => !!g))].sort(), [list]);
+  const filtered = list
+    .filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase()))
+    .filter((e) => !group || e.muscleGroup === group);
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -605,9 +630,30 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search exercises…"
-          className="w-full h-10 rounded-xl px-3 text-[14px] outline-none"
+          className="w-full h-10 rounded-xl px-3 text-[14px] outline-none mb-2.5"
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
         />
+        {groups.length > 1 && (
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1">
+            {[null, ...groups].map((g) => {
+              const active = group === g;
+              const c = g ? muscleColor(g) : ACCENT;
+              return (
+                <button
+                  key={g ?? 'all'}
+                  type="button"
+                  onClick={() => setGroup(g)}
+                  className="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
+                  style={active
+                    ? { background: `color-mix(in srgb, ${c} 18%, transparent)`, color: c, border: `1px solid color-mix(in srgb, ${c} 35%, transparent)` }
+                    : { background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid transparent' }}
+                >
+                  {g ?? 'All'}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       {filtered.length === 0 ? (
         <p className="text-[13px] text-[var(--text-muted)] text-center py-6">{list.length ? 'No match.' : 'No exercises logged.'}</p>
@@ -615,15 +661,26 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
         <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--border)]">
           {filtered.map((ex) => {
             const expanded = open === ex.name;
+            const dotColor = ex.muscleGroup ? muscleColor(ex.muscleGroup) : 'var(--text-muted)';
             return (
               <div key={ex.name}>
                 <button type="button" onClick={() => setOpen(expanded ? null : ex.name)} className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left">
                   <div className="min-w-0">
-                    <p className="text-[16px] font-bold text-[var(--text-primary)] truncate">{ex.name}</p>
-                    <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{ex.sessions}× · last {fmtDay(ex.last)}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ background: dotColor }} />
+                      <p className="text-[16px] font-bold text-[var(--text-primary)] truncate">{ex.name}</p>
+                    </div>
+                    <p className="text-[13px] font-semibold mt-0.5" style={{ color: 'var(--text-secondary)' }}>{fmtRelative(ex.last)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Metric reps={ex.best.r} weight={ex.best.w || undefined} />
+                    <div className="flex flex-col items-end gap-0.5">
+                      <Metric reps={ex.best.r} weight={ex.best.w || undefined} />
+                      {ex.trendLb != null && ex.trendLb !== 0 && (
+                        <span className="text-[11px] font-semibold" style={{ color: ex.trendLb > 0 ? '#4dff91' : '#ff8080' }}>
+                          {ex.trendLb > 0 ? '▲' : '▼'} {Math.abs(ex.trendLb)} lb vs last
+                        </span>
+                      )}
+                    </div>
                     <span className={`text-[var(--text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}><AppIcon name="ExpandDown" size="sm" /></span>
                   </div>
                 </button>
@@ -633,7 +690,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                   const chart = [...ex.byDate].reverse().map((h) => {
                     const topW = h.sets.reduce((m, s) => Math.max(m, s.weight), 0);
                     const topR = h.sets.reduce((m, s) => Math.max(m, s.reps), 0);
-                    return { date: fmtDay(h.date), value: topW || topR };
+                    return { date: fmtDay(h.date).replace(/^\w+, /, ''), value: topW || topR };
                   });
                   const weighted = ex.byDate.some((h) => h.sets.some((s) => s.weight > 0));
                   return (
@@ -654,7 +711,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                       )}
                       {ex.byDate.slice(0, 12).map((h) => (
                         <div key={h.date}>
-                          <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5">{fmtDay(h.date)}</p>
+                          <p className="text-[13px] font-bold mb-1.5" style={{ color: 'var(--text-secondary)' }}>{fmtDay(h.date)}</p>
                           <SetGrid sets={h.sets} />
                         </div>
                       ))}
