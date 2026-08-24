@@ -1,4 +1,4 @@
-import React, { useId, useMemo } from 'react';
+import React, { useId, useMemo, useRef, useState } from 'react';
 
 /**
  * Frosted, dot-grid-textured card shell — the "Weekly Summary" card language
@@ -27,36 +27,42 @@ export const DotGridCard: React.FC<{ accent?: string; children: React.ReactNode;
   </div>
 );
 
+export interface GlowChartPoint { label: string; value: number }
+
 /**
- * Glowing smoothed trend line — the "Cardiac Health" VO2max-spark style:
- * Catmull-Rom smoothed SVG path, soft gradient fill, faint edge-fading grid,
- * a glowing end-dot. Non-interactive by design (no tooltip/axis) — for a
- * glanceable trend strip, not a data-inspection chart.
+ * Glowing smoothed trend line — the "Cardiac Health" VO2max-spark look
+ * (Catmull-Rom smoothed SVG path, soft gradient fill, glowing dots), made
+ * into a real small chart: labeled Y-axis levels, X-axis date ticks, a dot
+ * on every point, and scrub-to-read-the-value (mouse hover or touch drag).
+ * The line runs edge-to-edge — no fade-out, so the most recent point never
+ * reads as "cut off" or incomplete.
  */
 export const GlowSparkline: React.FC<{
-  values: number[];
+  points: GlowChartPoint[];
   color: string;
+  unit?: string;
   height?: number;
-  leftLabel?: string;
-  rightLabel?: string;
-  bg?: string; // must match the immediate solid background this sits on, for the edge fade
   emptyText?: string;
-}> = ({ values, color, height = 72, leftLabel, rightLabel, bg = '#0d1420', emptyText = 'Not enough data yet' }) => {
+}> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet' }) => {
   const uid = useId().replace(/:/g, '');
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
   const w = 320;
   const h = height;
-  const pad = 4;
+  const padX = 6;
+  const padTop = 8;
+  const padBottom = 6;
+  const plotH = h - padTop - padBottom;
 
-  const path = useMemo(() => {
-    if (values.length < 2) return null;
+  const geo = useMemo(() => {
+    if (points.length < 2) return null;
+    const values = points.map((p) => p.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const range = max - min || 1;
-    const pts = values.map((v, i) => {
-      const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
-      const y = h - pad - ((v - min) / range) * (h - 2 * pad);
-      return [x, y] as const;
-    });
+    const y = (v: number) => padTop + plotH - ((v - min) / range) * plotH;
+    const pts = values.map((v, i) => [padX + (i / (values.length - 1)) * (w - 2 * padX), y(v)] as const);
     const smooth = (p: readonly (readonly [number, number])[]): string => {
       let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}`;
       const t = 0.16;
@@ -70,10 +76,11 @@ export const GlowSparkline: React.FC<{
     };
     const line = smooth(pts);
     const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
-    return { line, area, last: pts[pts.length - 1] };
-  }, [values, h]);
+    const mid = (min + max) / 2;
+    return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min] };
+  }, [points, h]);
 
-  if (!path) {
+  if (!geo) {
     return (
       <div style={{ height: h }} className="flex items-center justify-center">
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{emptyText}</span>
@@ -81,53 +88,134 @@ export const GlowSparkline: React.FC<{
     );
   }
 
-  const rows = [0.28, 0.5, 0.72];
-  const cols = [0.2, 0.4, 0.6, 0.8];
+  const scrub = (clientX: number) => {
+    const el = plotRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const relX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    setActiveIdx(Math.round(relX * (points.length - 1)));
+  };
+
+  // Up to 4 evenly-spaced X-axis tick labels (by index, so they land exactly
+  // under their point since points are laid out at even index intervals).
+  const tickCount = Math.min(4, points.length);
+  const tickIdxs = [...new Set(Array.from({ length: tickCount }, (_, i) =>
+    Math.round((i * (points.length - 1)) / Math.max(1, tickCount - 1)),
+  ))];
+
+  const fmtVal = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: Math.abs(v) < 10 ? 1 : 0 });
 
   return (
     <div>
-      <div className="relative w-full" style={{ height: h }}>
-        <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-          <defs>
-            <linearGradient id={`${uid}-fill`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.26" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id={`${uid}-gridfade`} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#000" />
-              <stop offset="38%" stopColor="#fff" />
-              <stop offset="62%" stopColor="#fff" />
-              <stop offset="100%" stopColor="#000" />
-            </linearGradient>
-            <mask id={`${uid}-mask`}><rect x="0" y="0" width={w} height={h} fill={`url(#${uid}-gridfade)`} /></mask>
-          </defs>
-          <g mask={`url(#${uid}-mask)`} opacity="0.11">
-            {rows.map((f, i) => <line key={`r${i}`} x1="0" y1={h * f} x2={w} y2={h * f} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-            {cols.map((f, i) => <line key={`c${i}`} x1={w * f} y1="0" x2={w * f} y2={h} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-          </g>
-          <path d={path.area} fill={`url(#${uid}-fill)`} />
-          <path d={path.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        </svg>
-        <div aria-hidden className="absolute inset-y-0 left-0 pointer-events-none" style={{ width: '10%', background: `linear-gradient(90deg, ${bg} 0%, transparent 100%)` }} />
-        <div aria-hidden className="absolute inset-y-0 right-0 pointer-events-none" style={{ width: '10%', background: `linear-gradient(270deg, ${bg} 0%, transparent 100%)` }} />
-        <span
-          aria-hidden
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            left: `${(path.last[0] / w) * 100}%`,
-            top: `${(path.last[1] / h) * 100}%`,
-            transform: 'translate(-50%,-50%)',
-            width: 8, height: 8, background: color,
-            boxShadow: `0 0 0 2px ${bg}, 0 0 8px color-mix(in srgb, ${color} 55%, transparent)`,
-          }}
-        />
-      </div>
-      {(leftLabel || rightLabel) && (
-        <div className="flex items-center justify-between" style={{ marginTop: 3 }}>
-          <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{leftLabel}</span>
-          <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{rightLabel}</span>
+      <div className="flex" style={{ height: h }}>
+        {/* Y-axis: labeled value levels */}
+        <div className="relative shrink-0" style={{ width: 30 }}>
+          {geo.yTicks.map((v, i) => (
+            <span
+              key={i}
+              className="absolute tabular-nums"
+              style={{
+                top: `${(geo.yOf(v) / h) * 100}%`, left: 0,
+                transform: 'translateY(-50%)',
+                fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.38)',
+              }}
+            >
+              {fmtVal(v)}
+            </span>
+          ))}
         </div>
-      )}
+
+        {/* Plot area — hover (mouse) or drag (touch) to read any point */}
+        <div
+          ref={plotRef}
+          className="relative flex-1 min-w-0"
+          style={{ cursor: 'crosshair', touchAction: 'none' }}
+          onMouseMove={(e) => scrub(e.clientX)}
+          onMouseLeave={() => setActiveIdx(null)}
+          onTouchStart={(e) => scrub(e.touches[0].clientX)}
+          onTouchMove={(e) => scrub(e.touches[0].clientX)}
+        >
+          <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+            <defs>
+              <linearGradient id={`${uid}-fill`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity="0.26" />
+                <stop offset="100%" stopColor={color} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {/* Labeled horizontal grid lines only — real levels, not decoration */}
+            <g opacity="0.16">
+              {geo.yTicks.map((v, i) => (
+                <line key={i} x1="0" y1={geo.yOf(v)} x2={w} y2={geo.yOf(v)} stroke="#8692a4" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+              ))}
+            </g>
+            <path d={geo.area} fill={`url(#${uid}-fill)`} />
+            <path d={geo.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            {activeIdx != null && (
+              <line
+                x1={geo.pts[activeIdx][0]} y1={0} x2={geo.pts[activeIdx][0]} y2={h}
+                stroke={color} strokeOpacity="0.4" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"
+              />
+            )}
+          </svg>
+
+          {/* Dots as HTML overlays (not SVG circles) — the SVG's non-uniform
+              stretch (preserveAspectRatio="none") would otherwise squash them
+              into ellipses. */}
+          {geo.pts.map(([x, y], i) => {
+            const active = activeIdx === i;
+            const isLast = i === geo.pts.length - 1;
+            const big = active || isLast;
+            return (
+              <span
+                key={i}
+                aria-hidden
+                className="absolute rounded-full pointer-events-none"
+                style={{
+                  left: `${(x / w) * 100}%`, top: `${(y / h) * 100}%`,
+                  transform: 'translate(-50%,-50%)',
+                  width: big ? 9 : 5, height: big ? 9 : 5,
+                  background: color,
+                  opacity: big ? 1 : 0.5,
+                  boxShadow: big ? `0 0 0 2px #0a0f16, 0 0 8px color-mix(in srgb, ${color} 55%, transparent)` : 'none',
+                }}
+              />
+            );
+          })}
+
+          {/* Tooltip on the active (hovered/touched) point */}
+          {activeIdx != null && (() => {
+            const [x, y] = geo.pts[activeIdx];
+            const xPct = (x / w) * 100;
+            const align = xPct > 72 ? 'right' : xPct < 28 ? 'left' : 'center';
+            return (
+              <div
+                className="absolute z-10 pointer-events-none rounded-lg px-2 py-1"
+                style={{
+                  left: `${xPct}%`, top: `${(y / h) * 100}%`,
+                  transform: `translate(${align === 'right' ? '-100%' : align === 'left' ? '0%' : '-50%'}, -135%)`,
+                  background: '#1a2030', border: '1px solid rgba(255,255,255,0.14)',
+                  whiteSpace: 'nowrap', boxShadow: '0 6px 16px rgba(0,0,0,0.45)',
+                }}
+              >
+                <p style={{ fontSize: 12, fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
+                  {fmtVal(points[activeIdx].value)}{unit}
+                </p>
+                <p style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.5)', lineHeight: 1.2 }}>
+                  {points[activeIdx].label}
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* X-axis: date/period ticks, indented to line up with the plot area */}
+      <div className="flex items-center justify-between" style={{ marginTop: 4, marginLeft: 30 }}>
+        {tickIdxs.map((idx) => (
+          <span key={idx} style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{points[idx].label}</span>
+        ))}
+      </div>
     </div>
   );
 };

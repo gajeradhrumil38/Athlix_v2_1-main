@@ -727,11 +727,10 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                         <DotGridCard accent={accent} className="!p-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] mb-1" style={{ color: accent }}>{weighted ? 'Top weight' : 'Top reps'} over time</p>
                           <GlowSparkline
-                            values={chart.map((c) => c.value)}
+                            points={chart.map((c) => ({ label: c.date, value: c.value }))}
                             color={accent}
+                            unit={weighted ? ' lb' : ' reps'}
                             height={100}
-                            leftLabel={chart[0].date}
-                            rightLabel="Now"
                           />
                         </DotGridCard>
                       )}
@@ -794,7 +793,7 @@ const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts
 
 /* ── Volume trend (last 8 weeks) ─────────────────────────── */
 const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => {
-  const weeks = useMemo(() => {
+  const points = useMemo(() => {
     const now = Date.now();
     const w8 = Array.from({ length: 8 }, () => 0);
     for (const w of workouts) {
@@ -804,8 +803,9 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
       const vol = (w.exercises || []).reduce((a, e) => a + (e.sets || 0) * (e.reps || 0) * (e.weight || 0), 0);
       w8[7 - wi] += vol;
     }
-    return w8.map((v) => Math.round(v));
+    return w8.map((v, idx) => ({ label: idx === 7 ? 'Now' : `${7 - idx}w`, value: Math.round(v) }));
   }, [workouts]);
+  const weeks = points.map((p) => p.value);
   const empty = weeks.every((v) => v === 0);
   if (empty) return <Card><Empty text="No workouts logged yet." /></Card>;
 
@@ -837,7 +837,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
           <p className="font-victory text-[16px] font-black text-white mt-1">{peak.toLocaleString()}</p>
         </div>
       </div>
-      <GlowSparkline values={weeks} color={ACCENT} leftLabel="8wk ago" rightLabel="This wk" />
+      <GlowSparkline points={points} color={ACCENT} />
     </DotGridCard>
   );
 };
@@ -899,7 +899,7 @@ const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: str
           <span style={{ color: 'rgba(255,255,255,0.85)' }}>{delta > 0 ? '+' : ''}{delta} {unit}</span> since {fmtShort(weights[0].date)}
         </div>
       )}
-      <GlowSparkline values={weights.map((w) => w.weight)} color={WEIGHT_BLUE} leftLabel={fmtShort(weights[0].date)} rightLabel="Now" />
+      <GlowSparkline points={weights.map((w) => ({ label: fmtShort(w.date), value: w.weight }))} color={WEIGHT_BLUE} unit={` ${unit}`} />
     </DotGridCard>
   );
 };
