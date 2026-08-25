@@ -113,7 +113,15 @@ export async function archivePlan(id: string): Promise<{ ok: boolean; error?: st
 // archived plan just silently vanished forever anyway; this removes the
 // row for real instead of leaving an orphan. Cascades to
 // assigned_plan_exercises via its ON DELETE CASCADE FK.
+//
+// Supabase's delete() does NOT error when zero rows match (e.g. RLS
+// silently filters the row out, or it's already gone) — it just reports
+// success having deleted nothing. .select() forces the deleted row(s) back
+// so we can tell a real delete from a silent no-op instead of reporting
+// "ok" when the plan is actually still there.
 export async function deletePlan(id: string): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.from('assigned_plans').delete().eq('id', id);
-  return error ? { ok: false, error: error.message } : { ok: true };
+  const { data, error } = await supabase.from('assigned_plans').delete().eq('id', id).select('id');
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: 'Plan not found or you do not have permission to delete it.' };
+  return { ok: true };
 }

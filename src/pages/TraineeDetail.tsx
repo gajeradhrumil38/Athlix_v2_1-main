@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners, useDroppable,
   type DragStartEvent, type DragOverEvent, type DragEndEvent,
@@ -411,8 +412,10 @@ export const TraineeDetail: React.FC = () => {
                   workouts={shared ? dash.workouts.data : []}
                   onRemove={async () => {
                     if (!window.confirm(`Delete "${p.title}"? This can't be undone.`)) return;
-                    await deletePlan(p.id);
-                    loadPlans();
+                    const res = await deletePlan(p.id);
+                    if (!res.ok) { toast.error(res.error || 'Could not delete plan.'); return; }
+                    toast.success('Plan deleted');
+                    await loadPlans();
                   }}
                 />
               ))}
