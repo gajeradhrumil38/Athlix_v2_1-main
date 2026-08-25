@@ -1920,19 +1920,23 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
                       onClick={() => setShowCreateAppt(true)}
                       aria-label="Schedule an appointment"
                       title="Schedule an appointment"
-                      className="h-8 pl-2.5 pr-3 flex items-center gap-1.5 rounded-full text-[12px] font-bold whitespace-nowrap"
+                      className="h-8 pl-2.5 pr-2.5 flex items-center gap-1 rounded-full text-[12px] font-bold whitespace-nowrap"
                       style={{ background: 'var(--bg-elevated)', color: APPOINTMENT_BLUE, border: `1px solid color-mix(in srgb, ${APPOINTMENT_BLUE} 35%, transparent)` }}
                     >
                       <Clock3 className="w-3.5 h-3.5" />
                       Appointment
+                      <Plus className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <Link
                     to={`/log?date=${format(selectedDate, 'yyyy-MM-dd')}`}
-                    className="h-8 w-8 flex items-center justify-center rounded-full"
+                    aria-label="Log a workout"
+                    title="Log a workout"
+                    className="h-8 pl-2.5 pr-3 flex items-center gap-1 rounded-full text-[12px] font-bold whitespace-nowrap"
                     style={{ background: 'var(--accent)', color: '#000' }}
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
+                    Log
                   </Link>
                 </div>
               )}
