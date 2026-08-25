@@ -53,7 +53,7 @@ import { muscleColor } from '../lib/muscleColors';
 import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
 import { ExerciseProgressSheet } from '../components/calendar/ExerciseProgressSheet';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
-import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, deleteAppointment, type TrainerAppointment } from '../lib/appointments';
+import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, deleteAppointment, updateAppointment, type TrainerAppointment } from '../lib/appointments';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -296,6 +296,17 @@ const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' |
     onChanged();
   };
 
+  const complete = async () => {
+    setBusy(true);
+    const res = await updateAppointment(appt.id, { status: 'completed' });
+    setBusy(false);
+    if (!res.ok) { toast.error(res.error || 'Could not update appointment.'); return; }
+    toast.success('Marked as completed');
+    onChanged();
+  };
+
+  const isPast = when.getTime() < Date.now();
+
   return (
     <div className="relative overflow-hidden rounded-2xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: APPOINTMENT_BLUE }} />
@@ -335,12 +346,25 @@ const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' |
           {appt.status === 'cancelled' && (
             <p className="text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#ff8080' }}>Cancelled</p>
           )}
+          {appt.status === 'completed' && (
+            <p className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#7cd992' }}>
+              <Check className="h-3 w-3" /> Completed
+            </p>
+          )}
         </div>
         {appt.role === 'trainer' && appt.status === 'scheduled' && (
-          <button type="button" onClick={remove} disabled={busy} aria-label="Cancel appointment"
-            className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-40" style={{ color: '#ff8080' }}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {isPast && (
+              <button type="button" onClick={complete} disabled={busy} aria-label="Mark completed"
+                className="h-7 w-7 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ color: '#7cd992' }}>
+                <Check className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button type="button" onClick={remove} disabled={busy} aria-label="Cancel appointment"
+              className="h-7 w-7 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ color: '#ff8080' }}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </div>
