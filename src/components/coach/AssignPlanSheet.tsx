@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
 import { ExercisePicker, type Exercise } from '../log/ExercisePicker';
 import { assignPlan, updatePlan, type AssignedPlan, type NewPlanExercise } from '../../lib/assignedPlans';
+import { saveTemplate } from '../../lib/supabaseData';
+import { useAuth } from '../../contexts/AuthContext';
 import type { TraineeWorkout } from '../../lib/coachData';
 
 // Trainer builds a program: exercises picked (multi-select) from the SAME
@@ -24,6 +27,7 @@ type Row = { name: string; sets: number; reps: number; weight: number; rest: num
 type Day = { id: number; label: string };
 
 export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], editingPlan, onClose, onAssigned }) => {
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [days, setDays] = useState<Day[]>([{ id: 0, label: '' }]);
@@ -32,6 +36,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [picking, setPicking] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const hasContent = title.trim().length > 0 || rows.length > 0;
 
@@ -179,6 +184,42 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
       const last = lastSetFor(name);
       return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90, note: '', dayId: activeDayId }];
     });
+
+  // Bulk-add every exercise from a saved template into the active day at
+  // once (via ExercisePicker's "My Plans" tab) — the reuse side of "save
+  // this plan so I can build it again for another trainee".
+  const loadFromTemplate = (exercises: Exercise[]) =>
+    setRows((p) => {
+      const existing = new Set(p.filter((r) => r.dayId === activeDayId).map((r) => r.name.toLowerCase()));
+      const additions = exercises
+        .filter((ex) => !existing.has(ex.name.toLowerCase()))
+        .map((ex) => ({ name: ex.name, sets: ex.defaultSets || 3, reps: ex.defaultReps || 10, weight: ex.defaultWeight || 0, rest: 90, note: '', dayId: activeDayId }));
+      return [...p, ...additions];
+    });
+
+  // Save the exercises currently in the sheet as a reusable template —
+  // under the COACH's own account, so it's available for any future
+  // trainee, not just this one. Day-grouping, rest, and notes don't carry
+  // over (the templates table doesn't have room for them) — a template is
+  // a quick starting point, not a full copy of a multi-day program.
+  const saveAsTemplate = async () => {
+    if (!user) return;
+    if (!rows.length) { toast.error('Add at least one exercise first.'); return; }
+    setSavingTemplate(true);
+    try {
+      await saveTemplate(user.id, {
+        title: title.trim() || 'Untitled plan',
+        exercises: rows.map((r, i) => ({
+          name: r.name, muscle_group: null, default_sets: r.sets, default_reps: r.reps, default_weight: r.weight, order_index: i,
+        })),
+      });
+      toast.success('Saved as a reusable template');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not save template.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
 
   const submit = async () => {
     setBusy(true); setError('');
@@ -357,14 +398,25 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 <AppIcon name="Search" size="sm" /> Add exercise{showDayChrome && activeDay?.label ? ` to ${activeDay.label}` : ''}
               </button>
 
-              <button
-                type="button"
-                onClick={addDay}
-                className="w-full h-11 mt-2 rounded-2xl font-semibold text-[14px] flex items-center justify-center gap-1.5"
-                style={{ color: 'var(--accent)' }}
-              >
-                <AppIcon name="Plus" size="sm" /> Add day
-              </button>
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={addDay}
+                  className="flex-1 h-11 rounded-2xl font-semibold text-[14px] flex items-center justify-center gap-1.5"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  <AppIcon name="Plus" size="sm" /> Add day
+                </button>
+                <button
+                  type="button"
+                  onClick={saveAsTemplate}
+                  disabled={savingTemplate || rows.length === 0}
+                  className="flex-1 h-11 rounded-2xl font-semibold text-[14px] flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  <AppIcon name="Duplicate" size="sm" /> Save as template
+                </button>
+              </div>
 
               {error && <p className="text-[14px] mt-2" style={{ color: '#ff8080' }}>{error}</p>}
             </div>
@@ -391,6 +443,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 multiSelect
                 contextLabel={showDayChrome ? `Adding to ${activeDay?.label || 'this day'}` : undefined}
                 onSelect={(ex) => addExercise(ex.name, ex.defaultSets, ex.defaultReps)}
+                onLoadTemplate={(exs) => { loadFromTemplate(exs); setPicking(false); }}
                 onClose={() => setPicking(false)}
               />
             </div>
