@@ -4,7 +4,7 @@ import {
   Search, Check, X, ChevronLeft, ChevronRight, ChevronDown,
   TrendingUp, Settings, MoreHorizontal, History,
   ClipboardList, Footprints, Utensils, Sparkles,
-  Dumbbell, Loader2, Users, UserPlus, Mail, Trash2, Trophy,
+  Dumbbell, Loader2, Users, UserPlus, Mail, Trash2, Trophy, Pencil,
 } from 'lucide-react'
 
 // Central registry of all UI icons used in the app
@@ -36,6 +36,7 @@ export const ICONS = {
   Mail,
   Trash: Trash2,
   Trophy,
+  Edit: Pencil,
 }
 
 export type IconName = keyof typeof ICONS

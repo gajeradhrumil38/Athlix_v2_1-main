@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
 import { ExercisePicker } from '../log/ExercisePicker';
-import { assignPlan, type NewPlanExercise } from '../../lib/assignedPlans';
+import { assignPlan, updatePlan, type AssignedPlan, type NewPlanExercise } from '../../lib/assignedPlans';
 import type { TraineeWorkout } from '../../lib/coachData';
 
 // Trainer builds a program: exercises picked (multi-select) from the SAME
 // searchable catalog the athlete uses, each prescribed with sets/reps/weight/
 // rest via logger-style tiles — pre-filled from the trainee's last session so
 // the coach starts from real numbers — reorderable, then assigned in one tap.
-interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; onClose: () => void; onAssigned: () => void; }
+// editingPlan turns this into an edit sheet: pre-filled from the plan, saved
+// via updatePlan() instead of assignPlan().
+interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; editingPlan?: AssignedPlan | null; onClose: () => void; onAssigned: () => void; }
 
 type Row = { name: string; sets: number; reps: number; weight: number; rest: number; note: string };
 
-export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], onClose, onAssigned }) => {
+export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], editingPlan, onClose, onAssigned }) => {
   const [title, setTitle] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
@@ -23,6 +25,21 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
 
   const reset = () => { setTitle(''); setRows([]); setError(''); setBusy(false); setPicking(false); };
   const close = () => { onClose(); reset(); };
+
+  useEffect(() => {
+    if (!open) return;
+    if (editingPlan) {
+      setTitle(editingPlan.title);
+      setRows(editingPlan.exercises.map((e) => ({
+        name: e.name, sets: e.default_sets, reps: e.default_reps, weight: e.default_weight,
+        rest: e.rest_seconds ?? 90, note: e.note ?? '',
+      })));
+    } else {
+      setTitle(''); setRows([]);
+    }
+    setError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingPlan?.id]);
 
   const set = (i: number, k: 'sets' | 'reps' | 'weight' | 'rest', v: number) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
   const setNote = (i: number, v: string) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, note: v } : r));
@@ -58,9 +75,11 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     const exercises: NewPlanExercise[] = rows
       .filter((r) => r.name.trim())
       .map((r) => ({ name: r.name, sets: r.sets, reps: r.reps, weight: r.weight, rest: r.rest, note: r.note }));
-    const res = await assignPlan(traineeId, { title, exercises });
+    const res = editingPlan
+      ? await updatePlan(editingPlan.id, { title, exercises })
+      : await assignPlan(traineeId, { title, exercises });
     setBusy(false);
-    if (!res.ok) { setError(res.error || 'Could not assign.'); return; }
+    if (!res.ok) { setError(res.error || (editingPlan ? 'Could not save changes.' : 'Could not assign.')); return; }
     onAssigned();
     close();
   };
@@ -82,7 +101,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', maxHeight: '90vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="px-6 pt-6 pb-3">
-              <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">Assign a plan</h2>
+              <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">{editingPlan ? 'Edit plan' : 'Assign a plan'}</h2>
               <p className="text-[15px] text-[var(--text-secondary)] mt-1">For {traineeName}</p>
             </div>
 
@@ -157,7 +176,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 className="w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-50"
                 style={{ background: 'var(--accent)', color: '#000' }}
               >
-                {busy ? <AppIcon name="Spinner" size="md" /> : 'Assign plan'}
+                {busy ? <AppIcon name="Spinner" size="md" /> : editingPlan ? 'Save changes' : 'Assign plan'}
               </button>
             </div>
           </motion.div>

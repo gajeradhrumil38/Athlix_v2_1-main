@@ -71,6 +71,51 @@ export async function assignPlan(
   return { ok: true };
 }
 
+// Edit an existing plan — updates title/notes, then replaces its exercises
+// wholesale (simplest way to keep order_index consistent without
+// reconciling adds/removes/reorders row by row). If the exercises insert
+// fails after the old rows are already gone, best-effort restores them so
+// a flaky network error can't leave the plan silently empty.
+export async function updatePlan(
+  planId: string,
+  plan: { title: string; notes?: string; exercises: NewPlanExercise[] },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!plan.title.trim()) return { ok: false, error: 'Give the plan a name.' };
+  if (!plan.exercises.length) return { ok: false, error: 'Add at least one exercise.' };
+
+  const { error: updateErr } = await supabase
+    .from('assigned_plans')
+    .update({ title: plan.title.trim(), notes: plan.notes?.trim() || null })
+    .eq('id', planId);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  const { data: oldRows } = await supabase
+    .from('assigned_plan_exercises')
+    .select('name, muscle_group, default_sets, default_reps, default_weight, unit, order_index, day_label, rest_seconds, note')
+    .eq('plan_id', planId);
+
+  const { error: delErr } = await supabase.from('assigned_plan_exercises').delete().eq('plan_id', planId);
+  if (delErr) return { ok: false, error: delErr.message };
+
+  const rows = plan.exercises.map((e, i) => ({
+    plan_id: planId,
+    name: e.name.trim(),
+    default_sets: Math.max(1, Math.round(e.sets) || 3),
+    default_reps: Math.max(1, Math.round(e.reps) || 10),
+    default_weight: Number(e.weight) || 0,
+    unit: 'lbs',
+    order_index: i,
+    rest_seconds: e.rest != null ? Math.max(0, Math.round(e.rest)) : null,
+    note: e.note?.trim() || null,
+  }));
+  const { error: insErr } = await supabase.from('assigned_plan_exercises').insert(rows);
+  if (insErr) {
+    if (oldRows?.length) await supabase.from('assigned_plan_exercises').insert(oldRows.map((r) => ({ ...r, plan_id: planId })));
+    return { ok: false, error: insErr.message };
+  }
+  return { ok: true };
+}
+
 function shape(rows: any[]): AssignedPlan[] {
   return (rows ?? []).map((p) => ({
     ...p,

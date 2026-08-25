@@ -101,6 +101,7 @@ export const TraineeDetail: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
   const [assign, setAssign] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
   const [notes, setNotes] = useState('');
@@ -132,13 +133,10 @@ export const TraineeDetail: React.FC = () => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
 
-  // 'plans' is the only widget that can be genuinely absent (no assigned
-  // plans yet) — every other id always renders, either real content or a
-  // NotShared placeholder, so it always occupies a slot.
-  const availableIds = useMemo(
-    () => DEFAULT_OVERVIEW_ORDER.filter((k) => k !== 'plans' || plans.length > 0),
-    [plans],
-  );
+  // Every widget id always renders something — real content, a NotShared
+  // placeholder, or (for 'plans') an empty-state CTA — so every id always
+  // occupies a slot.
+  const availableIds = DEFAULT_OVERVIEW_ORDER;
   const availableKey = availableIds.join(',');
 
   // Reconcile only when what's available changes or a responsive
@@ -403,24 +401,53 @@ export const TraineeDetail: React.FC = () => {
                 className="w-full bg-transparent px-4 py-3 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-muted)]" />
             </Card>
           ),
-          plans: plans.length > 0 ? (
-            <div className="grid gap-3">
-              {plans.map((p) => (
-                <PlanCard
-                  key={p.id}
-                  plan={p}
-                  workouts={shared ? dash.workouts.data : []}
-                  onRemove={async () => {
-                    if (!window.confirm(`Delete "${p.title}"? This can't be undone.`)) return;
-                    const res = await deletePlan(p.id);
-                    if (!res.ok) { toast.error(res.error || 'Could not delete plan.'); return; }
-                    toast.success('Plan deleted');
-                    await loadPlans();
-                  }}
-                />
-              ))}
+          plans: (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <AppIcon name="Clipboard" size="sm" />
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                    Assigned plans{plans.length ? ` · ${plans.length}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setEditingPlan(null); setAssign(true); }}
+                  aria-label="Assign a new plan"
+                  className="h-7 w-7 flex items-center justify-center rounded-lg shrink-0"
+                  style={{ background: 'rgba(200,255,0,0.1)', color: ACCENT, border: '1px solid rgba(200,255,0,0.25)' }}
+                >
+                  <AppIcon name="Plus" size="sm" />
+                </button>
+              </div>
+              {plans.length === 0 ? (
+                <Card className="flex flex-col items-center text-center py-6 gap-1.5">
+                  <p className="text-[14px] text-[var(--text-muted)]">No plans assigned yet.</p>
+                  <button type="button" onClick={() => { setEditingPlan(null); setAssign(true); }} className="text-[13px] font-bold" style={{ color: ACCENT }}>
+                    + Assign a plan
+                  </button>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {plans.map((p) => (
+                    <PlanCard
+                      key={p.id}
+                      plan={p}
+                      workouts={shared ? dash.workouts.data : []}
+                      onEdit={() => { setEditingPlan(p); setAssign(true); }}
+                      onRemove={async () => {
+                        if (!window.confirm(`Delete "${p.title}"? This can't be undone.`)) return;
+                        const res = await deletePlan(p.id);
+                        if (!res.ok) { toast.error(res.error || 'Could not delete plan.'); return; }
+                        toast.success('Plan deleted');
+                        await loadPlans();
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          ) : null,
+          ),
         };
         // Columns may briefly lag a fresh 'plans' widget (reconciled by the
         // effect above, not synchronously) — filter defensively so a
@@ -494,7 +521,8 @@ export const TraineeDetail: React.FC = () => {
         traineeId={id!}
         traineeName={dash.name}
         traineeWorkouts={dash.workouts.shared ? dash.workouts.data : []}
-        onClose={() => setAssign(false)}
+        editingPlan={editingPlan}
+        onClose={() => { setAssign(false); setEditingPlan(null); }}
         onAssigned={loadPlans}
       />
     </div>
@@ -1044,7 +1072,7 @@ const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: str
 };
 
 /* ── Assigned plan: adherence + prescribed vs actual ─────── */
-const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRemove: () => void }> = ({ plan, workouts, onRemove }) => {
+const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdit: () => void; onRemove: () => void }> = ({ plan, workouts, onEdit, onRemove }) => {
   const [open, setOpen] = useState(false);
   // Every logged session performed from THIS plan (linked via source_plan_id).
   const performed = useMemo(() => workouts.filter((w) => w.source_plan_id === plan.id), [workouts, plan.id]);
@@ -1082,15 +1110,26 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onRem
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
               {latest ? `Last session (${lastLabel})` : 'Prescribed'}
             </p>
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label="Delete plan"
-              className="flex items-center gap-1 h-7 px-2 rounded-lg text-[12px] font-semibold transition-colors"
-              style={{ color: '#ff8080', background: 'rgba(255,128,128,0.08)' }}
-            >
-              <AppIcon name="Trash" size="sm" /> Delete
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onEdit}
+                aria-label="Edit plan"
+                className="flex items-center gap-1 h-7 px-2 rounded-lg text-[12px] font-semibold transition-colors"
+                style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}
+              >
+                <AppIcon name="Edit" size="sm" /> Edit
+              </button>
+              <button
+                type="button"
+                onClick={onRemove}
+                aria-label="Delete plan"
+                className="flex items-center gap-1 h-7 px-2 rounded-lg text-[12px] font-semibold transition-colors"
+                style={{ color: '#ff8080', background: 'rgba(255,128,128,0.08)' }}
+              >
+                <AppIcon name="Trash" size="sm" /> Delete
+              </button>
+            </div>
           </div>
 
           {/* Completion progress — "did they do it or not" at a glance */}
