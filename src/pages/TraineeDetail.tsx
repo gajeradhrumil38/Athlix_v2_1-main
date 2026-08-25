@@ -14,7 +14,7 @@ import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
-import { getAssignedPlansFor, deletePlan, type AssignedPlan } from '../lib/assignedPlans';
+import { getAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
 import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
@@ -1147,28 +1147,35 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
             </div>
           )}
 
-          <div className="space-y-4">
-            {plan.exercises.map((ex, i) => {
-              const act = actualFor(ex.name);
-              const group = resolveMuscleGroup(ex.name, ex.muscle_group);
-              const rx = `Prescribed ${ex.default_sets}×${ex.default_reps}${ex.default_weight ? ` @ ${ex.default_weight} lb` : ''}`;
-              return (
-                <ExerciseAccent
-                  key={i}
-                  name={ex.name}
-                  muscleGroup={group}
-                  right={latest ? (
-                    act
-                      ? <span className="text-[11px] font-bold" style={{ color: '#4dff91' }}>✓ Done</span>
-                      : <span className="text-[11px] font-bold" style={{ color: '#ff8080' }}>Missed</span>
-                  ) : undefined}
-                >
-                  <p className="text-[12px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>{rx}</p>
-                  {act && <div className="mt-2"><SetGrid sets={act} /></div>}
-                </ExerciseAccent>
-              );
-            })}
-          </div>
+          {groupByDay(plan.exercises).map(([dayLabel, exs], gi) => (
+            <div key={gi} className={gi > 0 ? 'mt-5' : ''}>
+              {dayLabel && (
+                <p className="text-[13px] font-bold mb-2.5" style={{ color: ACCENT }}>{dayLabel}</p>
+              )}
+              <div className="space-y-4">
+                {exs.map((ex, i) => {
+                  const act = actualFor(ex.name);
+                  const group = resolveMuscleGroup(ex.name, ex.muscle_group);
+                  const rx = `Prescribed ${ex.default_sets}×${ex.default_reps}${ex.default_weight ? ` @ ${ex.default_weight} lb` : ''}`;
+                  return (
+                    <ExerciseAccent
+                      key={i}
+                      name={ex.name}
+                      muscleGroup={group}
+                      right={latest ? (
+                        act
+                          ? <span className="text-[11px] font-bold" style={{ color: '#4dff91' }}>✓ Done</span>
+                          : <span className="text-[11px] font-bold" style={{ color: '#ff8080' }}>Missed</span>
+                      ) : undefined}
+                    >
+                      <p className="text-[12px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>{rx}</p>
+                      {act && <div className="mt-2"><SetGrid sets={act} /></div>}
+                    </ExerciseAccent>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </Card>

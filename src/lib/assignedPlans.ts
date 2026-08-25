@@ -28,7 +28,7 @@ export interface AssignedPlan {
   exercises: AssignedPlanExercise[];
 }
 
-export interface NewPlanExercise { name: string; sets: number; reps: number; weight: number; rest?: number; note?: string; }
+export interface NewPlanExercise { name: string; sets: number; reps: number; weight: number; rest?: number; note?: string; day?: string; }
 
 async function meId(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
@@ -62,6 +62,7 @@ export async function assignPlan(
     order_index: i,
     rest_seconds: e.rest != null ? Math.max(0, Math.round(e.rest)) : null,
     note: e.note?.trim() || null,
+    day_label: e.day?.trim() || null,
   }));
   const { error: exErr } = await supabase.from('assigned_plan_exercises').insert(rows);
   if (exErr) {
@@ -107,6 +108,7 @@ export async function updatePlan(
     order_index: i,
     rest_seconds: e.rest != null ? Math.max(0, Math.round(e.rest)) : null,
     note: e.note?.trim() || null,
+    day_label: e.day?.trim() || null,
   }));
   const { error: insErr } = await supabase.from('assigned_plan_exercises').insert(rows);
   if (insErr) {
@@ -114,6 +116,21 @@ export async function updatePlan(
     return { ok: false, error: insErr.message };
   }
   return { ok: true };
+}
+
+// Group a plan's exercises by day_label, preserving first-appearance order.
+// A plan with no days set (every day_label null) collapses to one group
+// with an empty label — callers should treat that as "no day chrome to
+// show", not render a blank day header.
+export function groupByDay(exercises: AssignedPlanExercise[]): [string, AssignedPlanExercise[]][] {
+  const order: string[] = [];
+  const map = new Map<string, AssignedPlanExercise[]>();
+  for (const ex of exercises) {
+    const label = ex.day_label?.trim() || '';
+    if (!map.has(label)) { map.set(label, []); order.push(label); }
+    map.get(label)!.push(ex);
+  }
+  return order.map((label) => [label, map.get(label)!]);
 }
 
 function shape(rows: any[]): AssignedPlan[] {

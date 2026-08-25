@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
-import { getMyAssignedPlans, type AssignedPlan } from '../../lib/assignedPlans';
+import { getMyAssignedPlans, groupByDay, type AssignedPlan } from '../../lib/assignedPlans';
 
 // App-wide popup: when the trainee's coach assigns a plan, this surfaces it with
 // its exercises and a one-tap "Start workout" that loads them straight into the
@@ -36,16 +36,23 @@ export const AssignedPlanModal: React.FC = () => {
   const current = plans[0];
   if (!current) return null;
 
+  const dayGroups = groupByDay(current.exercises);
+  const isMultiDay = dayGroups.length > 1;
+
   const dismiss = () => { markSeen(current.id); setPlans((p) => p.slice(1)); };
 
+  // A multi-day plan can't be blindly "started" — that would bundle every
+  // day's exercises into one session. Send the trainee to My Coach instead,
+  // where each day gets its own Start button.
   const start = () => {
+    markSeen(current.id);
+    setPlans((p) => p.slice(1));
+    if (isMultiDay) { navigate('/my-coach'); return; }
     const recommendedExercises = current.exercises.map((e) => ({
       name: e.name,
       sets: e.default_sets,
       reps: String(e.default_reps),
     }));
-    markSeen(current.id);
-    setPlans((p) => p.slice(1));
     navigate('/log', { state: { recommendedExercises, suggestedTitle: current.title, sourcePlanId: current.id } });
   };
 
@@ -85,17 +92,28 @@ export const AssignedPlanModal: React.FC = () => {
           </div>
 
           {/* Exercise preview */}
-          <div className="mx-5 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
-            {current.exercises.slice(0, 5).map((e, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                <p className="text-[15px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
-                <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}</p>
-              </div>
-            ))}
-            {current.exercises.length > 5 && (
-              <p className="px-4 py-2 text-[13px] text-[var(--text-muted)]">+{current.exercises.length - 5} more</p>
-            )}
-          </div>
+          {isMultiDay ? (
+            <div className="mx-5 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
+              {dayGroups.map(([dayLabel, exercises], i) => (
+                <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                  <p className="text-[15px] font-medium text-[var(--text-primary)] truncate pr-3">{dayLabel || `Day ${i + 1}`}</p>
+                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mx-5 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
+              {current.exercises.slice(0, 5).map((e, i) => (
+                <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                  <p className="text-[15px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
+                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}</p>
+                </div>
+              ))}
+              {current.exercises.length > 5 && (
+                <p className="px-4 py-2 text-[13px] text-[var(--text-muted)]">+{current.exercises.length - 5} more</p>
+              )}
+            </div>
+          )}
 
           <div className="px-5 pt-4 pb-5 flex flex-col gap-2.5">
             <button
@@ -104,7 +122,7 @@ export const AssignedPlanModal: React.FC = () => {
               className="w-full h-13 py-3.5 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2"
               style={{ background: 'var(--accent)', color: '#000' }}
             >
-              <AppIcon name="Plus" size="sm" /> Start workout
+              <AppIcon name="Plus" size="sm" /> {isMultiDay ? 'View plan' : 'Start workout'}
             </button>
             <button
               type="button"

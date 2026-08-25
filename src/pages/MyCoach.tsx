@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppIcon } from '../config/icons';
-import { getMyAssignedPlans, type AssignedPlan } from '../lib/assignedPlans';
+import { getMyAssignedPlans, groupByDay, type AssignedPlan, type AssignedPlanExercise } from '../lib/assignedPlans';
 
 // Trainee's view of what their coach assigned. Each plan can be started — it
 // loads straight into the logger, pre-filled, via the same route.state the
-// recommendation cards use.
+// recommendation cards use. A plan split into named days (Push/Pull/Legs,
+// Day 1/2/3) shows each day with its own Start button, so starting one day
+// never bundles a whole multi-day program into a single session.
 export const MyCoach: React.FC = () => {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
@@ -15,13 +17,14 @@ export const MyCoach: React.FC = () => {
     (async () => { setPlans(await getMyAssignedPlans()); setLoading(false); })();
   }, []);
 
-  const start = (plan: AssignedPlan) => {
-    const recommendedExercises = plan.exercises.map((e) => ({
+  const start = (plan: AssignedPlan, exercises: AssignedPlanExercise[], dayLabel?: string) => {
+    const recommendedExercises = exercises.map((e) => ({
       name: e.name,
       sets: e.default_sets,
       reps: String(e.default_reps),
     }));
-    navigate('/log', { state: { recommendedExercises, suggestedTitle: plan.title, sourcePlanId: plan.id } });
+    const suggestedTitle = dayLabel ? `${plan.title} — ${dayLabel}` : plan.title;
+    navigate('/log', { state: { recommendedExercises, suggestedTitle, sourcePlanId: plan.id } });
   };
 
   return (
@@ -48,37 +51,51 @@ export const MyCoach: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {plans.map((p) => (
-            <div key={p.id} className="glass-card overflow-hidden">
-              <div className="px-5 pt-4 pb-3">
-                <p className="text-[20px] font-bold text-[var(--text-primary)]">{p.title}</p>
-                {p.notes && <p className="text-[14px] text-[var(--text-secondary)] mt-1 leading-snug">{p.notes}</p>}
-              </div>
-              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
-                {p.exercises.map((e, i) => (
-                  <div key={i} className="px-5 py-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
-                      <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
-                        {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${e.rest_seconds}s` : ''}
+          {plans.map((p) => {
+            const dayGroups = groupByDay(p.exercises);
+            const isMultiDay = dayGroups.length > 1;
+            return (
+              <div key={p.id} className="glass-card overflow-hidden">
+                <div className="px-5 pt-4 pb-3">
+                  <p className="text-[20px] font-bold text-[var(--text-primary)]">{p.title}</p>
+                  {p.notes && <p className="text-[14px] text-[var(--text-secondary)] mt-1 leading-snug">{p.notes}</p>}
+                </div>
+
+                {dayGroups.map(([dayLabel, exercises], gi) => (
+                  <div key={gi} className={gi > 0 ? 'border-t-4' : ''} style={gi > 0 ? { borderColor: 'var(--bg-base)' } : undefined}>
+                    {isMultiDay && (
+                      <p className="px-5 pt-3 pb-1 text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: 'var(--accent)' }}>
+                        {dayLabel || `Day ${gi + 1}`}
                       </p>
+                    )}
+                    <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                      {exercises.map((e, i) => (
+                        <div key={i} className="px-5 py-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
+                            <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
+                              {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${e.rest_seconds}s` : ''}
+                            </p>
+                          </div>
+                          {e.note && <p className="text-[13px] mt-1 leading-snug" style={{ color: 'var(--accent)' }}>{e.note}</p>}
+                        </div>
+                      ))}
                     </div>
-                    {e.note && <p className="text-[13px] mt-1 leading-snug" style={{ color: 'var(--accent)' }}>{e.note}</p>}
+                    <div className="p-4">
+                      <button
+                        type="button"
+                        onClick={() => start(p, exercises, isMultiDay ? (dayLabel || `Day ${gi + 1}`) : undefined)}
+                        className="w-full h-13 py-3.5 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2"
+                        style={{ background: 'var(--accent)', color: '#000' }}
+                      >
+                        <AppIcon name="Plus" size="sm" /> Start {isMultiDay ? (dayLabel || `Day ${gi + 1}`) : 'this workout'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="p-4">
-                <button
-                  type="button"
-                  onClick={() => start(p)}
-                  className="w-full h-13 py-3.5 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2"
-                  style={{ background: 'var(--accent)', color: '#000' }}
-                >
-                  <AppIcon name="Plus" size="sm" /> Start this workout
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

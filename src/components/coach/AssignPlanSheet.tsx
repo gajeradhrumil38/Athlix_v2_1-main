@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
@@ -12,30 +12,67 @@ import type { TraineeWorkout } from '../../lib/coachData';
 // the coach starts from real numbers — reorderable, then assigned in one tap.
 // editingPlan turns this into an edit sheet: pre-filled from the plan, saved
 // via updatePlan() instead of assignPlan().
+//
+// Optional multi-day split ("+ Add day"): a real program is rarely one flat
+// list — Push/Pull/Legs, or Day 1/2/3 — so exercises can be grouped into
+// named days. A brand-new plan starts as a single unlabeled day and shows
+// none of this chrome until the coach actually asks for a second day, so a
+// simple one-session plan stays exactly as simple as before.
 interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; editingPlan?: AssignedPlan | null; onClose: () => void; onAssigned: () => void; }
 
-type Row = { name: string; sets: number; reps: number; weight: number; rest: number; note: string };
+type Row = { name: string; sets: number; reps: number; weight: number; rest: number; note: string; dayId: number };
+type Day = { id: number; label: string };
 
 export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], editingPlan, onClose, onAssigned }) => {
   const [title, setTitle] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
+  const [days, setDays] = useState<Day[]>([{ id: 0, label: '' }]);
+  const [activeDayId, setActiveDayId] = useState(0);
+  const nextDayId = useRef(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [picking, setPicking] = useState(false);
 
-  const reset = () => { setTitle(''); setRows([]); setError(''); setBusy(false); setPicking(false); };
+  const hasContent = title.trim().length > 0 || rows.length > 0;
+
+  const reset = () => {
+    setTitle(''); setRows([]); setDays([{ id: 0, label: '' }]); setActiveDayId(0); nextDayId.current = 1;
+    setError(''); setBusy(false); setPicking(false);
+  };
   const close = () => { onClose(); reset(); };
+  // Backdrop tap / picker-cancel used to discard silently — a coach who spent
+  // several minutes building an 8-exercise program could lose it all with one
+  // misplaced tap outside the sheet. Now it only closes free of charge when
+  // there's nothing to lose.
+  const requestClose = () => {
+    if (hasContent && !window.confirm('Discard this plan? Your changes will be lost.')) return;
+    close();
+  };
 
   useEffect(() => {
     if (!open) return;
     if (editingPlan) {
       setTitle(editingPlan.title);
-      setRows(editingPlan.exercises.map((e) => ({
-        name: e.name, sets: e.default_sets, reps: e.default_reps, weight: e.default_weight,
-        rest: e.rest_seconds ?? 90, note: e.note ?? '',
-      })));
+      // Bucket by day_label in first-appearance order — a plan with no days
+      // set (every day_label null) collapses back to the single-day case,
+      // so old plans built before this feature render exactly as before.
+      const dayIds = new Map<string, number>();
+      let counter = 0;
+      const nextRows: Row[] = editingPlan.exercises.map((e) => {
+        const label = e.day_label?.trim() || '';
+        if (!dayIds.has(label)) dayIds.set(label, counter++);
+        return {
+          name: e.name, sets: e.default_sets, reps: e.default_reps, weight: e.default_weight,
+          rest: e.rest_seconds ?? 90, note: e.note ?? '', dayId: dayIds.get(label)!,
+        };
+      });
+      const nextDays: Day[] = [...dayIds.entries()].map(([label, id]) => ({ id, label }));
+      setRows(nextRows);
+      setDays(nextDays.length ? nextDays : [{ id: 0, label: '' }]);
+      setActiveDayId(nextDays.length ? nextDays[nextDays.length - 1].id : 0);
+      nextDayId.current = counter;
     } else {
-      setTitle(''); setRows([]);
+      setTitle(''); setRows([]); setDays([{ id: 0, label: '' }]); setActiveDayId(0); nextDayId.current = 1;
     }
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -44,11 +81,41 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   const set = (i: number, k: 'sets' | 'reps' | 'weight' | 'rest', v: number) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
   const setNote = (i: number, v: string) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, note: v } : r));
   const removeRow = (i: number) => setRows((p) => p.filter((_, idx) => idx !== i));
+  // Reorder within the row's own day only — dragging past a day boundary via
+  // simple up/down arrows would silently reassign an exercise to a different
+  // day, which is confusing. Cross-day moves happen by removing + re-adding.
   const move = (i: number, dir: -1 | 1) => setRows((p) => {
-    const j = i + dir;
-    if (j < 0 || j >= p.length) return p;
-    const next = [...p]; [next[i], next[j]] = [next[j], next[i]]; return next;
+    const row = p[i];
+    const sameDay = p.map((r, idx) => ({ r, idx })).filter(({ r }) => r.dayId === row.dayId);
+    const posInDay = sameDay.findIndex(({ idx }) => idx === i);
+    const swapWith = sameDay[posInDay + dir];
+    if (!swapWith) return p;
+    const next = [...p];
+    [next[i], next[swapWith.idx]] = [next[swapWith.idx], next[i]];
+    return next;
   });
+
+  const addDay = () => {
+    const id = nextDayId.current++;
+    setDays((d) => {
+      // The very first day is unlabeled until a second one exists — label it
+      // "Day 1" retroactively the moment it's no longer the only day.
+      const withFirstLabeled = d.length === 1 && !d[0].label ? [{ ...d[0], label: 'Day 1' }] : d;
+      return [...withFirstLabeled, { id, label: `Day ${withFirstLabeled.length + 1}` }];
+    });
+    setActiveDayId(id);
+    haptics.tick();
+  };
+  const renameDay = (id: number, label: string) => setDays((d) => d.map((g) => g.id === id ? { ...g, label } : g));
+  const removeDay = (id: number) => {
+    if (days.length <= 1) return;
+    const dayRows = rows.filter((r) => r.dayId === id);
+    if (dayRows.length && !window.confirm(`Remove this day and its ${dayRows.length} exercise${dayRows.length > 1 ? 's' : ''}?`)) return;
+    setDays((d) => d.filter((g) => g.id !== id));
+    setRows((p) => p.filter((r) => r.dayId !== id));
+    if (activeDayId === id) setActiveDayId(days.find((g) => g.id !== id)!.id);
+  };
+
   // The trainee's last logged top set for an exercise — so a prescription
   // starts from what they actually did, not a blank guess.
   const lastSetFor = (name: string): { weight: number; reps: number } | null => {
@@ -65,16 +132,23 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   };
   const addExercise = (name: string, sets?: number, reps?: number) =>
     setRows((p) => {
-      if (p.some((r) => r.name.toLowerCase() === name.toLowerCase())) return p; // no dupes
+      // Only guard against re-adding the same exercise to the SAME day by
+      // accident — the identical lift on a different day (e.g. Squat on both
+      // Day 1 and Day 3) is completely normal programming, not a dupe.
+      if (p.some((r) => r.dayId === activeDayId && r.name.toLowerCase() === name.toLowerCase())) return p;
       const last = lastSetFor(name);
-      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90, note: '' }];
+      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90, note: '', dayId: activeDayId }];
     });
 
   const submit = async () => {
     setBusy(true); setError('');
-    const exercises: NewPlanExercise[] = rows
+    // Flatten in day order (not raw insertion order) so order_index — and
+    // therefore the prescribed order shown to the trainee — matches what's
+    // actually rendered, grouped by day.
+    const exercises: NewPlanExercise[] = days
+      .flatMap((d) => rows.filter((r) => r.dayId === d.id).map((r) => ({ ...r, day: d.label })))
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name, sets: r.sets, reps: r.reps, weight: r.weight, rest: r.rest, note: r.note }));
+      .map((r) => ({ name: r.name, sets: r.sets, reps: r.reps, weight: r.weight, rest: r.rest, note: r.note, day: r.day || undefined }));
     const res = editingPlan
       ? await updatePlan(editingPlan.id, { title, exercises })
       : await assignPlan(traineeId, { title, exercises });
@@ -84,13 +158,17 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     close();
   };
 
+  const activeDay = days.find((d) => d.id === activeDayId);
+  const showDayChrome = days.length > 1;
+  const canSubmit = title.trim().length > 0 && rows.length > 0;
+
   return (
     <AnimatePresence>
       {open && (
         <motion.div
           className="fixed inset-0 z-[70] flex items-end justify-center"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={close}
+          onClick={requestClose}
           style={{ background: 'rgba(3,5,9,0.94)' }}
         >
           <motion.div
@@ -100,9 +178,20 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
             onClick={(e) => e.stopPropagation()}
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', maxHeight: '90vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
-            <div className="px-6 pt-6 pb-3">
-              <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">{editingPlan ? 'Edit plan' : 'Assign a plan'}</h2>
-              <p className="text-[15px] text-[var(--text-secondary)] mt-1">For {traineeName}</p>
+            <div className="px-6 pt-6 pb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">{editingPlan ? 'Edit plan' : 'Assign a plan'}</h2>
+                <p className="text-[15px] text-[var(--text-secondary)] mt-1">For {traineeName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={requestClose}
+                aria-label="Close"
+                className="shrink-0 h-9 w-9 rounded-full flex items-center justify-center"
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+              >
+                <AppIcon name="Close" size="sm" />
+              </button>
             </div>
 
             <div className="px-6 overflow-y-auto flex-1">
@@ -110,49 +199,105 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 placeholder="Plan name — e.g. Push Day"
                 value={title}
                 onChange={(e) => { setTitle(e.target.value); setError(''); }}
-                className="w-full h-13 py-3.5 rounded-2xl px-4 text-[17px] font-semibold outline-none mb-4"
+                className="w-full h-13 py-3.5 rounded-2xl px-4 text-[17px] font-semibold outline-none mb-2"
                 style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
               />
 
-              {rows.length === 0 ? (
+              {/* Running summary — a coach can sanity-check the program size
+                  before committing, without counting rows by eye. */}
+              {rows.length > 0 && (
+                <p className="text-[12px] font-semibold mb-3" style={{ color: 'var(--text-muted)' }}>
+                  {rows.length} exercise{rows.length !== 1 ? 's' : ''}{showDayChrome ? ` · ${days.length} days` : ''}
+                </p>
+              )}
+
+              {rows.length === 0 && !showDayChrome ? (
                 <p className="text-[14px] text-[var(--text-muted)] text-center py-6 leading-snug">
                   No exercises yet.<br />Tap <span className="text-[var(--text-secondary)] font-medium">Add exercise</span> to search the library.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {rows.map((r, i) => (
-                    <div key={i} className="rounded-2xl p-3" style={{ background: 'var(--bg-elevated)' }}>
-                      <div className="flex items-center gap-1.5">
-                        <span className="shrink-0 text-[12px] font-bold w-5 text-center text-[var(--text-muted)]">{i + 1}</span>
-                        <p className="flex-1 text-[16px] font-semibold text-[var(--text-primary)] truncate">{r.name}</p>
-                        <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"
-                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--text-secondary)] disabled:opacity-25">
-                          <AppIcon name="ExpandDown" size="sm" /><span className="sr-only">up</span>
-                        </button>
-                        <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label="Move down"
-                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--text-secondary)] disabled:opacity-25 rotate-180">
-                          <AppIcon name="ExpandDown" size="sm" />
-                        </button>
-                        <button type="button" onClick={() => removeRow(i)} aria-label="Remove"
-                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
-                          <AppIcon name="Trash" size="sm" />
-                        </button>
+                <div className="space-y-4 mb-1">
+                  {days.map((day) => {
+                    const dayRows = rows.filter((r) => r.dayId === day.id);
+                    const isActive = day.id === activeDayId;
+                    return (
+                      <div key={day.id}>
+                        {showDayChrome && (
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setActiveDayId(day.id)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveDayId(day.id); }}
+                            className="flex items-center gap-2 mb-2 pb-1.5"
+                            style={{ borderBottom: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}` }}
+                          >
+                            <input
+                              value={day.label}
+                              onChange={(e) => renameDay(day.id, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onFocus={() => setActiveDayId(day.id)}
+                              placeholder="Day name"
+                              className="flex-1 min-w-0 bg-transparent text-[15px] font-bold outline-none"
+                              style={{ color: isActive ? 'var(--accent)' : 'var(--text-primary)' }}
+                            />
+                            <span className="text-[11px] font-semibold shrink-0" style={{ color: 'var(--text-muted)' }}>
+                              {dayRows.length} ex
+                            </span>
+                            {days.length > 1 && (
+                              <button type="button" onClick={(e) => { e.stopPropagation(); removeDay(day.id); }} aria-label="Remove day"
+                                className="h-6 w-6 rounded-md flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
+                                <AppIcon name="Trash" size="sm" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {dayRows.length === 0 ? (
+                          <p className="text-[13px] text-[var(--text-muted)] text-center py-4">No exercises in this day yet.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {dayRows.map((r) => {
+                              const i = rows.indexOf(r);
+                              const posInDay = dayRows.indexOf(r);
+                              return (
+                                <div key={i} className="rounded-2xl p-3" style={{ background: 'var(--bg-elevated)' }}>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="shrink-0 text-[12px] font-bold w-5 text-center text-[var(--text-muted)]">{posInDay + 1}</span>
+                                    <p className="flex-1 text-[16px] font-semibold text-[var(--text-primary)] truncate">{r.name}</p>
+                                    <button type="button" onClick={() => move(i, -1)} disabled={posInDay === 0} aria-label="Move up"
+                                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--text-secondary)] disabled:opacity-25">
+                                      <AppIcon name="ExpandDown" size="sm" /><span className="sr-only">up</span>
+                                    </button>
+                                    <button type="button" onClick={() => move(i, 1)} disabled={posInDay === dayRows.length - 1} aria-label="Move down"
+                                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--text-secondary)] disabled:opacity-25 rotate-180">
+                                      <AppIcon name="ExpandDown" size="sm" />
+                                    </button>
+                                    <button type="button" onClick={() => removeRow(i)} aria-label="Remove"
+                                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
+                                      <AppIcon name="Trash" size="sm" />
+                                    </button>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 mt-3">
+                                    <PrescribeTile label="Sets" value={r.sets} min={1} max={20} step={1} onChange={(v) => set(i, 'sets', v)} />
+                                    <PrescribeTile label="Reps" value={r.reps} min={1} max={100} step={1} onChange={(v) => set(i, 'reps', v)} />
+                                    <PrescribeTile label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
+                                    <PrescribeTile label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
+                                  </div>
+                                  <input
+                                    value={r.note}
+                                    onChange={(e) => setNote(i, e.target.value)}
+                                    placeholder="Coaching note — tempo, RPE, cue… (optional)"
+                                    className="w-full h-10 mt-2 rounded-xl px-3 text-[13px] outline-none"
+                                    style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mt-3">
-                        <PrescribeTile label="Sets" value={r.sets} min={1} max={20} step={1} onChange={(v) => set(i, 'sets', v)} />
-                        <PrescribeTile label="Reps" value={r.reps} min={1} max={100} step={1} onChange={(v) => set(i, 'reps', v)} />
-                        <PrescribeTile label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
-                        <PrescribeTile label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
-                      </div>
-                      <input
-                        value={r.note}
-                        onChange={(e) => setNote(i, e.target.value)}
-                        placeholder="Coaching note — tempo, RPE, cue… (optional)"
-                        className="w-full h-10 mt-2 rounded-xl px-3 text-[13px] outline-none"
-                        style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -162,18 +307,27 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                 className="w-full h-12 mt-3 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-1.5 text-[var(--text-secondary)]"
                 style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border)' }}
               >
-                <AppIcon name="Search" size="sm" /> Add exercise
+                <AppIcon name="Search" size="sm" /> Add exercise{showDayChrome && activeDay?.label ? ` to ${activeDay.label}` : ''}
               </button>
 
-              {error && <p className="text-[14px] mt-3" style={{ color: '#ff8080' }}>{error}</p>}
+              <button
+                type="button"
+                onClick={addDay}
+                className="w-full h-11 mt-2 rounded-2xl font-semibold text-[14px] flex items-center justify-center gap-1.5"
+                style={{ color: 'var(--accent)' }}
+              >
+                <AppIcon name="Plus" size="sm" /> Add day
+              </button>
+
+              {error && <p className="text-[14px] mt-2" style={{ color: '#ff8080' }}>{error}</p>}
             </div>
 
             <div className="px-6 pt-3 pb-6">
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || !canSubmit}
                 onClick={submit}
-                className="w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-40"
                 style={{ background: 'var(--accent)', color: '#000' }}
               >
                 {busy ? <AppIcon name="Spinner" size="md" /> : editingPlan ? 'Save changes' : 'Assign plan'}
@@ -200,7 +354,9 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
 };
 
 // Prescribe tile — same tactile −/value/+ language as the workout logger's
-// SetRow, so building a program feels like logging a set.
+// SetRow, so building a program feels like logging a set. The number in the
+// middle is a real input (not just a label) so a coach can type "225"
+// directly instead of tapping + up to two dozen times to get there.
 const PrescribeTile: React.FC<{ label: string; value: number; min: number; max: number; step: number; unit?: string; onChange: (v: number) => void }> = ({ label, value, min, max, step, unit, onChange }) => {
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
   const bump = (d: number) => { haptics.tick(); onChange(clamp(value + d * step)); };
@@ -213,8 +369,20 @@ const PrescribeTile: React.FC<{ label: string; value: number; min: number; max: 
         <span className="text-[22px] font-light leading-none select-none">−</span>
       </button>
       <div className="flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px]">
-        <div className="font-victory tabular-nums text-[26px] leading-none font-black text-[var(--text-primary)]">
-          {value}{unit && <span className="text-[12px] font-semibold text-[var(--text-muted)]"> {unit}</span>}
+        <div className="flex items-baseline gap-1">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (!Number.isNaN(n)) onChange(clamp(n));
+            }}
+            onFocus={(e) => e.target.select()}
+            className="font-victory tabular-nums text-[26px] leading-none font-black text-[var(--text-primary)] bg-transparent outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            style={{ width: `${Math.max(1.4, String(value).length)}ch` }}
+          />
+          {unit && <span className="text-[12px] font-semibold text-[var(--text-muted)]">{unit}</span>}
         </div>
         <div className="text-[9px] font-bold tracking-[0.16em] uppercase text-[var(--text-secondary)]">{label}</div>
       </div>
