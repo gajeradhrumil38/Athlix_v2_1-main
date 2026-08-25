@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { isToday, isTomorrow, format } from 'date-fns';
 import { AppIcon } from '../../config/icons';
-import { getMyAppointments, type TrainerAppointment } from '../../lib/appointments';
+import { getMyAppointments, formatApptTimeRange, type TrainerAppointment } from '../../lib/appointments';
 
-// Trainee-side "meet in N minutes" heads-up, so a scheduled session doesn't
-// require checking the calendar to notice. Lead time (how far ahead to
-// start showing it) is a per-viewer preference, not synced data — stored in
-// localStorage like the seen-plan/seen-appointment tracking elsewhere.
+// Trainee-side "what's next" card: surfaces the next scheduled appointment
+// (whenever one exists, not just in the final minutes) along with its
+// notes, so a trainee can see what's coming and what to expect without
+// digging into the calendar. Switches to an urgent "meet in N min" heads-up
+// once it's actually close. Lead time (how far ahead "close" means) is a
+// per-viewer preference, not synced data — stored in localStorage like the
+// seen-plan/seen-appointment tracking elsewhere.
 const LEAD_KEY = 'athlix:appt_reminder_lead_min';
 const DEFAULT_LEAD = 10;
 const LEAD_OPTIONS = [5, 10, 15, 30];
@@ -21,7 +26,14 @@ const readLead = (): number => {
 // chatter — this is a countdown, not a live feed.
 const CHECK_MS = 20_000;
 
+const formatWhen = (when: Date): string => {
+  if (isToday(when)) return `Today · ${format(when, 'h:mm a')}`;
+  if (isTomorrow(when)) return `Tomorrow · ${format(when, 'h:mm a')}`;
+  return format(when, 'EEE, MMM d · h:mm a');
+};
+
 export const UpcomingAppointmentBanner: React.FC = () => {
+  const navigate = useNavigate();
   const [appts, setAppts] = useState<TrainerAppointment[]>([]);
   const [leadMin, setLeadMin] = useState(readLead);
   const [editingLead, setEditingLead] = useState(false);
@@ -50,30 +62,46 @@ export const UpcomingAppointmentBanner: React.FC = () => {
   };
 
   const now = Date.now();
+  // Next appointment that hasn't happened yet — shows regardless of how far
+  // out it is; the "in N min" urgent treatment only kicks in once it's
+  // actually within the lead window.
   const upcoming = appts
     .map((a) => ({ a, msAway: new Date(a.scheduled_at).getTime() - now }))
     // Keeps showing for a minute after start (in case the trainee's a beat
     // late opening the app), rolls off once clearly past.
-    .filter(({ msAway }) => msAway > -60_000 && msAway <= leadMin * 60_000)
+    .filter(({ msAway }) => msAway > -60_000)
     .sort((x, y) => x.msAway - y.msAway)[0];
 
   if (!upcoming) return null;
 
+  const when = new Date(upcoming.a.scheduled_at);
+  const isImminent = upcoming.msAway <= leadMin * 60_000;
   const minsAway = Math.max(0, Math.round(upcoming.msAway / 60_000));
   const withName = upcoming.a.trainer_name || 'your trainer';
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'color-mix(in srgb, #4FC3F7 12%, var(--bg-elevated))', border: '1px solid color-mix(in srgb, #4FC3F7 35%, transparent)' }}>
       <div className="px-4 py-3 flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0" style={{ background: 'color-mix(in srgb, #4FC3F7 20%, transparent)', color: '#4FC3F7' }}>
-          <AppIcon name="History" size="sm" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>
-            {minsAway <= 0 ? `Meeting ${withName} now` : `Meet ${withName} in ${minsAway} min`}
-          </p>
-          <p className="text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>{upcoming.a.title}</p>
-        </div>
+        <button type="button" onClick={() => navigate('/calendar')} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0" style={{ background: 'color-mix(in srgb, #4FC3F7 20%, transparent)', color: '#4FC3F7' }}>
+            <AppIcon name="History" size="sm" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>
+              {isImminent
+                ? (minsAway <= 0 ? `Meeting ${withName} now` : `Meet ${withName} in ${minsAway} min`)
+                : formatWhen(when)}
+            </p>
+            <p className="text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>
+              {upcoming.a.title}{!isImminent ? ` · with ${withName}` : ''}
+            </p>
+            {upcoming.a.notes && (
+              <p className="text-[12px] mt-1 leading-snug line-clamp-2" style={{ color: 'var(--text-secondary)' }}>
+                {upcoming.a.notes}
+              </p>
+            )}
+          </div>
+        </button>
         <button
           type="button"
           onClick={() => setEditingLead((v) => !v)}
