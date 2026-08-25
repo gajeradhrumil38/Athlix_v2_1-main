@@ -5,6 +5,8 @@ import { AppIcon } from '../../config/icons';
 import { getMyAssignedPlans, groupByDay, type AssignedPlan } from '../../lib/assignedPlans';
 import { getExerciseMuscleProfile } from '../../lib/exerciseMuscles';
 import { muscleColor } from '../../lib/muscleColors';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 // App-wide popup: when the trainee's coach assigns a plan, this surfaces it with
 // its exercises and a one-tap "Start workout" that loads them straight into the
@@ -24,13 +26,14 @@ const markSeen = (id: string) => {
 const resolveMuscleGroup = (name: string, stored?: string | null): string =>
   stored || getExerciseMuscleProfile(name).primary[0] || 'Core';
 
-// How often to silently re-check for a newly-assigned plan while the app
-// is open. Combined with the focus/visibility listener below, this is what
-// makes the popup appear on its own — no manual reload needed.
+// Fallback poll interval — only matters while the realtime channel below is
+// disconnected/reconnecting. Live delivery is instant; this just guarantees
+// the popup can never be more than this far behind even without one.
 const POLL_MS = 30_000;
 
 export const AssignedPlanModal: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
 
   const load = useCallback(async () => {
@@ -44,12 +47,26 @@ export const AssignedPlanModal: React.FC = () => {
     const handler = () => load();
     window.addEventListener('athlix:refresh-invites', handler);
 
-    // A coach assigning a plan doesn't push anything to an already-open
-    // trainee session — this used to mean the popup only ever appeared
-    // after a manual hard refresh remounted the app. Poll quietly in the
-    // background, and refetch immediately whenever the tab regains focus
-    // (the common case: assigned while the trainee had the app open in the
-    // background, they switch back and it's just there).
+    // Live push: the instant a coach assigns a plan, Postgres broadcasts the
+    // insert over this channel and the popup appears with zero delay — no
+    // refresh, no waiting for a poll. postgres_changes respects the table's
+    // RLS (assigned_plans_trainee_select), so this only ever fires for rows
+    // where this user is the trainee.
+    const channel = user
+      ? supabase
+          .channel(`assigned-plans-${user.id}`)
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'assigned_plans', filter: `trainee_id=eq.${user.id}` },
+            () => load(),
+          )
+          .subscribe()
+      : null;
+
+    // Fallback for when the realtime connection is down/reconnecting
+    // (backgrounded mobile app, flaky network): poll quietly, and refetch
+    // immediately on tab focus/visibility so it's never more than a beat
+    // behind even without a live connection.
     const interval = window.setInterval(load, POLL_MS);
     const onVisible = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVisible);
@@ -57,11 +74,12 @@ export const AssignedPlanModal: React.FC = () => {
 
     return () => {
       window.removeEventListener('athlix:refresh-invites', handler);
+      if (channel) supabase.removeChannel(channel);
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', load);
     };
-  }, [load]);
+  }, [load, user]);
 
   const current = plans[0];
   if (!current) return null;
