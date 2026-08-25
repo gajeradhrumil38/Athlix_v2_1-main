@@ -9,6 +9,7 @@ import { AppIcon } from '../../config/icons';
 import { getSentLinks, type CoachLink } from '../../lib/coachLinks';
 import { createAppointment } from '../../lib/appointments';
 import { getAssignedPlansFor, type AssignedPlan } from '../../lib/assignedPlans';
+import { DialPicker } from '../log/DialPicker';
 
 // Trainer schedules a session with one of their trainees, from the
 // trainer's own personal calendar. Picking the trainee is step one (this
@@ -31,10 +32,11 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
   const [planId, setPlanId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [durationPickerOpen, setDurationPickerOpen] = useState(false);
 
   const reset = () => {
     setTraineeId(null); setTitle(''); setDate(''); setTime(''); setDurationMinutes('');
-    setNotes(''); setPlans([]); setPlanId(null); setError(''); setBusy(false);
+    setNotes(''); setPlans([]); setPlanId(null); setError(''); setBusy(false); setDurationPickerOpen(false);
   };
   const close = () => { onClose(); reset(); };
 
@@ -89,6 +91,7 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
   };
 
   return (
+    <>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -166,17 +169,16 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5 block">Duration (minutes, optional)</label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  placeholder="60"
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(e.target.value)}
-                  className="w-full h-12 rounded-xl px-3 text-[14px] font-semibold outline-none"
+                <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5 block">Duration (optional)</label>
+                <button
+                  type="button"
+                  onClick={() => setDurationPickerOpen(true)}
+                  className="w-full h-12 rounded-xl px-3 flex items-center gap-2 text-[14px] font-semibold"
                   style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-                />
+                >
+                  <AppIcon name="History" size="sm" />
+                  {durationMinutes ? `${durationMinutes} min` : 'No duration set'}
+                </button>
               </div>
 
               {/* Attach a plan — tells the trainee exactly what to do, instead
@@ -249,6 +251,17 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
         </motion.div>
       )}
     </AnimatePresence>
+    {open && durationPickerOpen && (
+      <DialPicker
+        title="Duration"
+        fieldKind="minutes"
+        inputType="calories_time"
+        initialValue={Number(durationMinutes) || 60}
+        onClose={() => setDurationPickerOpen(false)}
+        onConfirm={(v) => { setDurationMinutes(v ? String(v) : ''); setDurationPickerOpen(false); }}
+      />
+    )}
+    </>
   );
 };
 
@@ -291,48 +304,55 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
         {value ? format(selected, 'MMM d, yyyy') : 'Pick a date'}
       </button>
       {open && (
-        <div
-          className="absolute z-20 mt-2 left-0 rounded-2xl p-3"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', width: 260 }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-secondary)' }}>
-              <AppIcon name="Back" size="sm" />
-            </button>
-            <p className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
-            <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="h-7 w-7 rounded-lg flex items-center justify-center rotate-180" style={{ color: 'var(--text-secondary)' }}>
-              <AppIcon name="Back" size="sm" />
-            </button>
+        <>
+          <div
+            className="fixed inset-0 z-[75]"
+            style={{ background: 'rgba(3,5,9,0.75)' }}
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="absolute z-[76] mt-2 left-0 rounded-2xl p-3"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', width: 260 }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-secondary)' }}>
+                <AppIcon name="Back" size="sm" />
+              </button>
+              <p className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="h-7 w-7 rounded-lg flex items-center justify-center rotate-180" style={{ color: 'var(--text-secondary)' }}>
+                <AppIcon name="Back" size="sm" />
+              </button>
+            </div>
+            <div className="grid grid-cols-7 gap-0.5 mb-1">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                <span key={i} className="text-[10px] font-bold text-center py-1" style={{ color: 'var(--text-muted)' }}>{d}</span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-0.5">
+              {days.map((d) => {
+                const isSel = isSameDay(d, selected);
+                const inMonth = isSameMonth(d, month);
+                const isToday = dateFnsIsToday(d);
+                return (
+                  <button
+                    key={d.toISOString()}
+                    type="button"
+                    onClick={() => { onChange(format(d, 'yyyy-MM-dd')); setOpen(false); }}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-[12px] font-semibold"
+                    style={{
+                      background: isSel ? 'var(--accent)' : 'transparent',
+                      color: isSel ? '#000' : !inMonth ? 'var(--text-muted)' : isToday ? 'var(--accent)' : 'var(--text-primary)',
+                      opacity: inMonth ? 1 : 0.4,
+                      outline: isToday && !isSel ? '1px solid var(--accent)' : 'none',
+                    }}
+                  >
+                    {format(d, 'd')}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-7 gap-0.5 mb-1">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-              <span key={i} className="text-[10px] font-bold text-center py-1" style={{ color: 'var(--text-muted)' }}>{d}</span>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-0.5">
-            {days.map((d) => {
-              const isSel = isSameDay(d, selected);
-              const inMonth = isSameMonth(d, month);
-              const isToday = dateFnsIsToday(d);
-              return (
-                <button
-                  key={d.toISOString()}
-                  type="button"
-                  onClick={() => { onChange(format(d, 'yyyy-MM-dd')); setOpen(false); }}
-                  className="h-8 w-8 rounded-lg flex items-center justify-center text-[12px] font-semibold"
-                  style={{
-                    background: isSel ? 'var(--accent)' : 'transparent',
-                    color: isSel ? '#000' : !inMonth ? 'var(--text-muted)' : isToday ? 'var(--accent)' : 'var(--text-primary)',
-                    opacity: inMonth ? 1 : 0.4,
-                    outline: isToday && !isSel ? '1px solid var(--accent)' : 'none',
-                  }}
-                >
-                  {format(d, 'd')}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -366,50 +386,57 @@ const InlineTimePicker: React.FC<{ value: string; onChange: (v: string) => void 
         {value ? `${h12}:${String(m).padStart(2, '0')} ${isPM ? 'PM' : 'AM'}` : 'Pick a time'}
       </button>
       {open && (
-        <div
-          className="absolute z-20 mt-2 right-0 rounded-2xl p-3 flex gap-2"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', width: 220 }}
-        >
-          <div className="flex-1 max-h-[160px] overflow-y-auto space-y-0.5">
-            {HOURS_12.map((hh) => (
-              <button
-                key={hh}
-                type="button"
-                onClick={() => setParts(hh, m, isPM)}
-                className="w-full h-8 rounded-lg text-[13px] font-semibold"
-                style={hh === h12 ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
-              >
-                {hh}
-              </button>
-            ))}
+        <>
+          <div
+            className="fixed inset-0 z-[75]"
+            style={{ background: 'rgba(3,5,9,0.75)' }}
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="absolute z-[76] mt-2 right-0 rounded-2xl p-3 flex gap-2"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', width: 220 }}
+          >
+            <div className="flex-1 max-h-[160px] overflow-y-auto space-y-0.5">
+              {HOURS_12.map((hh) => (
+                <button
+                  key={hh}
+                  type="button"
+                  onClick={() => setParts(hh, m, isPM)}
+                  className="w-full h-8 rounded-lg text-[13px] font-semibold"
+                  style={hh === h12 ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
+                >
+                  {hh}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 max-h-[160px] overflow-y-auto space-y-0.5">
+              {MINUTES.map((mm) => (
+                <button
+                  key={mm}
+                  type="button"
+                  onClick={() => setParts(h12, mm, isPM)}
+                  className="w-full h-8 rounded-lg text-[13px] font-semibold"
+                  style={mm === m ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
+                >
+                  :{String(mm).padStart(2, '0')}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 flex flex-col gap-1">
+              {(['AM', 'PM'] as const).map((ap) => (
+                <button
+                  key={ap}
+                  type="button"
+                  onClick={() => setParts(h12, m, ap === 'PM')}
+                  className="flex-1 rounded-lg text-[12px] font-bold"
+                  style={(ap === 'PM') === isPM ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+                >
+                  {ap}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex-1 max-h-[160px] overflow-y-auto space-y-0.5">
-            {MINUTES.map((mm) => (
-              <button
-                key={mm}
-                type="button"
-                onClick={() => setParts(h12, mm, isPM)}
-                className="w-full h-8 rounded-lg text-[13px] font-semibold"
-                style={mm === m ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
-              >
-                :{String(mm).padStart(2, '0')}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1 flex flex-col gap-1">
-            {(['AM', 'PM'] as const).map((ap) => (
-              <button
-                key={ap}
-                type="button"
-                onClick={() => setParts(h12, m, ap === 'PM')}
-                className="flex-1 rounded-lg text-[12px] font-bold"
-                style={(ap === 'PM') === isPM ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-              >
-                {ap}
-              </button>
-            ))}
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

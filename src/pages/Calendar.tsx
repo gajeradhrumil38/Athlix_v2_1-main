@@ -53,7 +53,9 @@ import { muscleColor } from '../lib/muscleColors';
 import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
 import { ExerciseProgressSheet } from '../components/calendar/ExerciseProgressSheet';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
-import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, deleteAppointment, updateAppointment, type TrainerAppointment } from '../lib/appointments';
+import { PlanPreviewModal } from '../components/coach/PlanPreviewModal';
+import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, deleteAppointment, updateAppointment, formatApptTimeRange, type TrainerAppointment } from '../lib/appointments';
+import { getPlanById, type AssignedPlan } from '../lib/assignedPlans';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -279,8 +281,11 @@ const APPOINTMENT_BLUE = '#4FC3F7';
 // WorkoutCard's completed-record framing. role='trainee' when this was made
 // FOR the calendar's owner; role='trainer' when they created it themselves
 // (either on their own calendar, or a coach viewing a trainee's calendar).
-const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' | 'trainer' }; onChanged: () => void }> = ({ appt, onChanged }) => {
-  const navigate = useNavigate();
+const AppointmentCard: React.FC<{
+  appt: TrainerAppointment & { role: 'trainee' | 'trainer' };
+  onChanged: () => void;
+  onOpenPlan: (planId: string, role: 'trainee' | 'trainer') => void;
+}> = ({ appt, onChanged, onOpenPlan }) => {
   const [busy, setBusy] = useState(false);
   const when = new Date(appt.scheduled_at);
   const withName = appt.role === 'trainee' ? (appt.trainer_name || 'your trainer') : (appt.trainee_name || 'trainee');
@@ -319,28 +324,29 @@ const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' |
           <div className="flex items-center justify-between gap-2">
             <p className="text-[15px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{appt.title}</p>
             <p className="text-[13px] font-semibold shrink-0 tabular-nums" style={{ color: APPOINTMENT_BLUE }}>
-              {when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+              {formatApptTimeRange(when, appt.duration_minutes)}
             </p>
           </div>
-          <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {label}{appt.duration_minutes ? ` · ${appt.duration_minutes} min` : ''}
-          </p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>{label}</p>
           {appt.notes && <p className="text-[13px] mt-1.5 leading-snug" style={{ color: 'var(--text-secondary)' }}>{appt.notes}</p>}
           {appt.assigned_plan_id && (
             appt.role === 'trainee' ? (
               <button
                 type="button"
-                onClick={() => navigate('/my-coach')}
+                onClick={() => onOpenPlan(appt.assigned_plan_id!, appt.role)}
                 className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold"
                 style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}
               >
                 <ExternalLink className="h-3 w-3" /> {appt.assigned_plan_title || 'Plan attached'}
               </button>
             ) : (
-              <p className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+              <button
+                type="button"
+                onClick={() => onOpenPlan(appt.assigned_plan_id!, appt.role)}
+                className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold"
                 style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                 <Dumbbell className="h-3 w-3" /> {appt.assigned_plan_title || 'Plan attached'}
-              </p>
+              </button>
             )
           )}
           {appt.status === 'cancelled' && (
@@ -1136,6 +1142,18 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   // view of a trainee only ever fetches that trainee's received appointments.
   const [appointments, setAppointments] = useState<(TrainerAppointment & { role: 'trainee' | 'trainer' })[]>([]);
   const [showCreateAppt, setShowCreateAppt] = useState(false);
+  const [planPreview, setPlanPreview] = useState<{ id: string; role: 'trainee' | 'trainer' } | null>(null);
+  const [planPreviewData, setPlanPreviewData] = useState<AssignedPlan | null>(null);
+  const [planPreviewLoading, setPlanPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (!planPreview) return;
+    setPlanPreviewLoading(true);
+    setPlanPreviewData(null);
+    getPlanById(planPreview.id)
+      .then(setPlanPreviewData)
+      .finally(() => setPlanPreviewLoading(false));
+  }, [planPreview]);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [progressExercise, setProgressExercise] = useState<{ name: string; muscle?: string | null } | null>(null);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -1902,10 +1920,11 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
                       onClick={() => setShowCreateAppt(true)}
                       aria-label="Schedule an appointment"
                       title="Schedule an appointment"
-                      className="h-8 w-8 flex items-center justify-center rounded-full"
+                      className="h-8 pl-2.5 pr-3 flex items-center gap-1.5 rounded-full text-[12px] font-bold whitespace-nowrap"
                       style={{ background: 'var(--bg-elevated)', color: APPOINTMENT_BLUE, border: `1px solid color-mix(in srgb, ${APPOINTMENT_BLUE} 35%, transparent)` }}
                     >
-                      <Clock3 className="w-4 h-4" />
+                      <Clock3 className="w-3.5 h-3.5" />
+                      Appointment
                     </button>
                   )}
                   <Link
@@ -2125,7 +2144,12 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
               {getAppointmentsForDay(selectedDate).length > 0 && (
                 <div className="px-4 pt-3 space-y-2">
                   {getAppointmentsForDay(selectedDate).map((a) => (
-                    <AppointmentCard key={a.id} appt={a} onChanged={() => setRefreshKey((k) => k + 1)} />
+                    <AppointmentCard
+                      key={a.id}
+                      appt={a}
+                      onChanged={() => setRefreshKey((k) => k + 1)}
+                      onOpenPlan={(id, role) => setPlanPreview({ id, role })}
+                    />
                   ))}
                 </div>
               )}
@@ -2190,6 +2214,14 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
         open={showCreateAppt}
         onClose={() => setShowCreateAppt(false)}
         onCreated={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <PlanPreviewModal
+        open={!!planPreview}
+        plan={planPreviewData}
+        loading={planPreviewLoading}
+        role={planPreview?.role ?? 'trainee'}
+        onClose={() => setPlanPreview(null)}
       />
     </div>
   );

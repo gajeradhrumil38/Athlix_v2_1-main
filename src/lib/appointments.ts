@@ -23,6 +23,17 @@ export interface TrainerAppointment {
   created_at: string;
 }
 
+// "11:00 AM – 11:30 AM" when a duration is known, otherwise just the start
+// time — used anywhere an appointment's time shows so the trainee/trainer
+// both see the actual span, not just when it begins.
+export const formatApptTimeRange = (start: Date, durationMinutes: number | null): string => {
+  const startStr = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (!durationMinutes) return startStr;
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+  const endStr = end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${startStr} – ${endStr}`;
+};
+
 async function meId(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
   return data.user?.id ?? null;

@@ -17,6 +17,7 @@ import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { AppIcon } from '../config/icons';
 import { TrainingRecommendationCard } from '../components/home/TrainingRecommendationCard';
+import { UpcomingAppointmentBanner } from '../components/home/UpcomingAppointmentBanner';
 
 // --- Utility Functions ---
 const calculateStreak = (workouts: { date: string }[]) => {
@@ -926,6 +927,7 @@ export const Home: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-24 md:pb-0 font-sans">
       <div className="max-w-[480px] mx-auto pb-6 flex flex-col gap-2">
+        <UpcomingAppointmentBanner />
         {renderWidgets()}
       </div>
 

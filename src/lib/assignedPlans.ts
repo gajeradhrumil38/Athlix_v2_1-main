@@ -166,6 +166,15 @@ export async function getMyAssignedPlans(): Promise<AssignedPlan[]> {
   return shape(data ?? []);
 }
 
+// Either side of the plan (trainer or trainee) fetching one specific plan by
+// id — used to preview a plan referenced elsewhere (e.g. attached to an
+// appointment) without pulling the whole list. RLS scopes this to rows the
+// caller is actually party to.
+export async function getPlanById(id: string): Promise<AssignedPlan | null> {
+  const { data } = await supabase.from('assigned_plans').select(SELECT).eq('id', id).maybeSingle();
+  return data ? shape([data])[0] : null;
+}
+
 export async function archivePlan(id: string): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase.from('assigned_plans').update({ status: 'archived' }).eq('id', id);
   return error ? { ok: false, error: error.message } : { ok: true };

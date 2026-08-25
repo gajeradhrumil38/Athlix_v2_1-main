@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { AppIcon } from '../../config/icons';
-import { getMyAppointments, type TrainerAppointment } from '../../lib/appointments';
+import { getMyAppointments, formatApptTimeRange, type TrainerAppointment } from '../../lib/appointments';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -102,8 +102,7 @@ export const AppointmentModal: React.FC = () => {
             </p>
             <h2 className="text-[23px] font-bold text-[var(--text-primary)] leading-tight mt-1.5">{current.title}</h2>
             <p className="text-[15px] font-semibold mt-1.5" style={{ color: '#4FC3F7' }}>
-              {format(when, 'EEEE, MMM d')} · {format(when, 'h:mm a')}
-              {current.duration_minutes ? ` · ${current.duration_minutes} min` : ''}
+              {format(when, 'EEEE, MMM d')} · {formatApptTimeRange(when, current.duration_minutes)}
             </p>
             {current.notes && <p className="text-[14px] text-[var(--text-secondary)] mt-1.5 leading-snug">{current.notes}</p>}
           </div>
