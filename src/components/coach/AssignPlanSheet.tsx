@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
-import { ExercisePicker } from '../log/ExercisePicker';
+import { ExercisePicker, type Exercise } from '../log/ExercisePicker';
 import { assignPlan, updatePlan, type AssignedPlan, type NewPlanExercise } from '../../lib/assignedPlans';
 import type { TraineeWorkout } from '../../lib/coachData';
 
@@ -130,6 +130,32 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     }
     return null;
   };
+  // What the picker's "Recent" tab shows by default. It used to fall back to
+  // the COACH's own personal workout history (ExercisePicker reads whoever
+  // is logged in) — actively wrong in a coaching context. This builds the
+  // TRAINEE's actual recent exercises instead, most-recent-first, so the
+  // fastest path — "add more of what they've been doing" — works and shows
+  // the right person's data.
+  const recentExercises = useMemo<Exercise[]>(() => {
+    const ordered = [...traineeWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+    const seen = new Set<string>();
+    const out: Exercise[] = [];
+    for (const w of ordered) {
+      for (const e of w.exercises || []) {
+        const key = e.name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          id: `${e.name}-${w.id}`,
+          name: e.name,
+          muscleGroup: e.muscle_group || 'Other',
+          lastSession: { weight: e.weight, reps: e.reps, date: w.date, sets: e.sets, unit: (e.unit as 'kg' | 'lbs') || 'lbs' },
+        });
+      }
+    }
+    return out;
+  }, [traineeWorkouts]);
+
   const addExercise = (name: string, sets?: number, reps?: number) =>
     setRows((p) => {
       // Only guard against re-adding the same exercise to the SAME day by
@@ -339,9 +365,10 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
           {picking && (
             <div className="fixed inset-0 z-[80]" onClick={(e) => e.stopPropagation()}>
               <ExercisePicker
-                recentExercises={[]}
-                defaultTab="muscle"
+                recentExercises={recentExercises}
+                defaultTab="recent"
                 multiSelect
+                contextLabel={showDayChrome ? `Adding to ${activeDay?.label || 'this day'}` : undefined}
                 onSelect={(ex) => addExercise(ex.name, ex.defaultSets, ex.defaultReps)}
                 onClose={() => setPicking(false)}
               />

@@ -17,7 +17,7 @@ import {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface Exercise {
+export interface Exercise {
   id: string;
   name: string;
   muscleGroup: string;
@@ -61,6 +61,9 @@ interface ExercisePickerProps {
   multiSelect?: boolean;
   defaultTab?: 'recent' | 'muscle' | 'plans';
   weightUnit?: string;
+  // Shown under the header title — e.g. "Adding to Day 2" — so context isn't
+  // lost once this full-screen sheet covers whatever triggered it.
+  contextLabel?: string;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -202,6 +205,7 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
   multiSelect = false,
   defaultTab = 'recent',
   weightUnit = 'lbs',
+  contextLabel,
 }) => {
   const { user } = useAuth();
 
@@ -320,6 +324,16 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
     onClose();
   };
 
+  // Closing (via Back-to-Close, or the X) used to discard pending multi-select
+  // picks with zero warning — a coach who tapped through 6 exercises and then
+  // absent-mindedly hit the wrong corner button lost all of them. Only the
+  // "Add N Exercises" button should ever commit or lose a selection; every
+  // other exit now confirms first when there's something to lose.
+  const closeGuarded = () => {
+    if (selectedMap.size > 0 && !window.confirm(`Discard ${selectedMap.size} selected exercise${selectedMap.size > 1 ? 's' : ''}?`)) return;
+    onClose();
+  };
+
   const handleBack = () => {
     if (search.trim()) {
       setSearch('');
@@ -327,7 +341,7 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
       return;
     }
     if (selectedMuscle) { setSelectedMuscle(null); return; }
-    onClose();
+    closeGuarded();
   };
 
   const templateToExercises = (tmpl: Template): Exercise[] =>
@@ -383,12 +397,17 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
             {isNestedView ? 'Back' : 'Close'}
           </button>
 
-          <h2 className="text-[15px] font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-            Add Exercise
-          </h2>
+          <div className="flex flex-col items-center">
+            <h2 className="text-[15px] font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              Add Exercise
+            </h2>
+            {contextLabel && (
+              <span className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>{contextLabel}</span>
+            )}
+          </div>
 
           <button
-            onClick={onClose}
+            onClick={closeGuarded}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors"
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
             aria-label="Close"
@@ -734,6 +753,22 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
             className="shrink-0 px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))]"
             style={{ borderTop: '1px solid var(--border)', background: 'var(--bg-surface)' }}
           >
+            {/* Review strip — so a mis-tap can be undone right here instead of
+                scrolling back through (possibly several tabs of) results to
+                find that exact row again. */}
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-2.5 -mx-1 px-1">
+              {[...selectedMap.values()].map((ex) => (
+                <button
+                  key={ex.name}
+                  onClick={() => handleToggle(ex)}
+                  className="shrink-0 flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-[11px] font-semibold"
+                  style={{ background: 'rgba(200,255,0,0.1)', color: 'var(--accent)', border: '1px solid rgba(200,255,0,0.3)' }}
+                >
+                  {ex.name}
+                  <X className="w-3 h-3" />
+                </button>
+              ))}
+            </div>
             <button
               onClick={handleAddSelected}
               className="w-full py-4 rounded-xl text-[14px] font-bold text-black flex items-center justify-center gap-2 active:opacity-90 transition-opacity"
