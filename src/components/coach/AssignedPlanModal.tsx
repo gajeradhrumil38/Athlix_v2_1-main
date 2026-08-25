@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
 import { getMyAssignedPlans, groupByDay, type AssignedPlan } from '../../lib/assignedPlans';
+import { getExerciseMuscleProfile } from '../../lib/exerciseMuscles';
+import { muscleColor } from '../../lib/muscleColors';
 
 // App-wide popup: when the trainee's coach assigns a plan, this surfaces it with
 // its exercises and a one-tap "Start workout" that loads them straight into the
@@ -15,6 +17,17 @@ const readSeen = (): string[] => {
 const markSeen = (id: string) => {
   try { localStorage.setItem(SEEN_KEY, JSON.stringify([...new Set([...readSeen(), id])])); } catch { /* ignore */ }
 };
+
+// Prefer the muscle group actually stored on the exercise; fall back to
+// name-pattern inference so a color always shows, even on rows saved before
+// muscle_group was populated.
+const resolveMuscleGroup = (name: string, stored?: string | null): string =>
+  stored || getExerciseMuscleProfile(name).primary[0] || 'Core';
+
+// How often to silently re-check for a newly-assigned plan while the app
+// is open. Combined with the focus/visibility listener below, this is what
+// makes the popup appear on its own — no manual reload needed.
+const POLL_MS = 30_000;
 
 export const AssignedPlanModal: React.FC = () => {
   const navigate = useNavigate();
@@ -30,7 +43,24 @@ export const AssignedPlanModal: React.FC = () => {
     load();
     const handler = () => load();
     window.addEventListener('athlix:refresh-invites', handler);
-    return () => window.removeEventListener('athlix:refresh-invites', handler);
+
+    // A coach assigning a plan doesn't push anything to an already-open
+    // trainee session — this used to mean the popup only ever appeared
+    // after a manual hard refresh remounted the app. Poll quietly in the
+    // background, and refetch immediately whenever the tab regains focus
+    // (the common case: assigned while the trainee had the app open in the
+    // background, they switch back and it's just there).
+    const interval = window.setInterval(load, POLL_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', load);
+
+    return () => {
+      window.removeEventListener('athlix:refresh-invites', handler);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', load);
+    };
   }, [load]);
 
   const current = plans[0];
@@ -91,22 +121,37 @@ export const AssignedPlanModal: React.FC = () => {
             {current.notes && <p className="text-[14px] text-[var(--text-secondary)] mt-1.5 leading-snug">{current.notes}</p>}
           </div>
 
-          {/* Exercise preview */}
+          {/* Exercise preview — a colored dot per muscle group (per day for a
+              multi-day plan, its dominant group; per exercise otherwise) so
+              the trainee gets a sense of what's being trained at a glance,
+              not just a wall of names. */}
           {isMultiDay ? (
             <div className="mx-5 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
-              {dayGroups.map(([dayLabel, exercises], i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                  <p className="text-[15px] font-medium text-[var(--text-primary)] truncate pr-3">{dayLabel || `Day ${i + 1}`}</p>
-                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</p>
-                </div>
-              ))}
+              {dayGroups.map(([dayLabel, exercises], i) => {
+                const counts = new Map<string, number>();
+                for (const e of exercises) {
+                  const g = resolveMuscleGroup(e.name, e.muscle_group);
+                  counts.set(g, (counts.get(g) || 0) + 1);
+                }
+                const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+                return (
+                  <div key={i} className="flex items-center gap-2.5 px-4 py-3">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: dominant ? muscleColor(dominant) : 'var(--text-muted)' }} />
+                    <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate flex-1">{dayLabel || `Day ${i + 1}`}</p>
+                    <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</p>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="mx-5 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
               {current.exercises.slice(0, 5).map((e, i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                  <p className="text-[15px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
-                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">{e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}</p>
+                <div key={i} className="flex items-center gap-2.5 px-4 py-3">
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: muscleColor(resolveMuscleGroup(e.name, e.muscle_group)) }} />
+                  <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate flex-1">{e.name}</p>
+                  <p className="text-[13px] text-[var(--text-muted)] shrink-0 tabular-nums">
+                    {e.default_sets} sets × {e.default_reps} reps{e.default_weight ? ` @ ${e.default_weight} lb` : ''}
+                  </p>
                 </div>
               ))}
               {current.exercises.length > 5 && (
