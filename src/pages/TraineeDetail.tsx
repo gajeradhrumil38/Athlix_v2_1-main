@@ -10,6 +10,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
 import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
+import { LogForTraineeSheet } from '../components/coach/LogForTraineeSheet';
 import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
@@ -101,6 +102,7 @@ export const TraineeDetail: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
   const [assign, setAssign] = useState(false);
+  const [logForTrainee, setLogForTrainee] = useState(false);
   const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
@@ -222,15 +224,23 @@ export const TraineeDetail: React.FC = () => {
     if (id) setPlans(await getAssignedPlansFor(id));
   }, [id]);
 
+  // Pulled out of the mount effect so a coach-logged session (or anything
+  // else that changes the trainee's own data) can refresh the dashboard
+  // in place, without a full page reload.
+  const loadDash = React.useCallback(async () => {
+    if (!id) return;
+    const d = await getTraineeDashboard(id);
+    if (!d) setMissing(true); else { setDash(d); setNotes(d.link.coach_notes ?? ''); }
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
     (async () => {
-      const d = await getTraineeDashboard(id);
-      if (!d) setMissing(true); else { setDash(d); setNotes(d.link.coach_notes ?? ''); }
+      await loadDash();
       await loadPlans();
       setLoading(false);
     })();
-  }, [id, loadPlans]);
+  }, [id, loadDash, loadPlans]);
 
   if (loading) {
     return <div className="max-w-2xl mx-auto px-4 py-16 flex items-center justify-center gap-2 text-[var(--text-muted)]">
@@ -289,14 +299,28 @@ export const TraineeDetail: React.FC = () => {
           <h1 className="text-[26px] font-bold text-[var(--text-primary)] leading-none truncate">{dash.name}</h1>
           <p className="text-[14px] text-[var(--text-muted)] mt-1">Trainee overview</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setAssign(true)}
-          className="shrink-0 flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
-          style={{ background: 'var(--accent)', color: '#000' }}
-        >
-          <AppIcon name="Clipboard" size="sm" /> Assign
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          {dash.workouts.shared && (
+            <button
+              type="button"
+              onClick={() => setLogForTrainee(true)}
+              aria-label="Log a session for this trainee"
+              title="Log a session — record a completed workout"
+              className="h-11 w-11 flex items-center justify-center rounded-2xl"
+              style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+            >
+              <AppIcon name="Plus" size="sm" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setAssign(true)}
+            className="flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
+            style={{ background: 'var(--accent)', color: '#000' }}
+          >
+            <AppIcon name="Clipboard" size="sm" /> Assign
+          </button>
+        </div>
       </div>
 
       {/* Coaching triage banner — red flags first, or an all-clear */}
@@ -524,6 +548,15 @@ export const TraineeDetail: React.FC = () => {
         editingPlan={editingPlan}
         onClose={() => { setAssign(false); setEditingPlan(null); }}
         onAssigned={loadPlans}
+      />
+
+      <LogForTraineeSheet
+        open={logForTrainee}
+        traineeId={id!}
+        traineeName={dash.name}
+        traineeWorkouts={dash.workouts.shared ? dash.workouts.data : []}
+        onClose={() => setLogForTrainee(false)}
+        onLogged={loadDash}
       />
     </div>
   );

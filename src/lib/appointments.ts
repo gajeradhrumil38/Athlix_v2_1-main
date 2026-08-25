@@ -17,6 +17,8 @@ export interface TrainerAppointment {
   duration_minutes: number | null;
   status: AppointmentStatus;
   assigned_plan_id: string | null;
+  trainer_name: string | null;
+  trainee_name: string | null;
   created_at: string;
 }
 
@@ -25,15 +27,26 @@ async function meId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
-// Trainer creates an appointment for one of their trainees.
+async function myDisplayName(uid: string): Promise<string | null> {
+  const { data } = await supabase.from('profiles').select('trainer_display_name, full_name').eq('id', uid).maybeSingle();
+  return data?.trainer_display_name || data?.full_name || null;
+}
+
+// Trainer creates an appointment for one of their trainees. traineeName is
+// passed in by the caller (already has it from the roster picker) rather
+// than re-fetched, since coach_links already snapshots it for this exact
+// trainer-trainee pair.
 export async function createAppointment(
   traineeId: string,
+  traineeName: string | null,
   input: { title: string; notes?: string; scheduledAt: string; durationMinutes?: number; assignedPlanId?: string | null },
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const trainer = await meId();
   if (!trainer) return { ok: false, error: 'Not signed in.' };
   if (!input.title.trim()) return { ok: false, error: 'Give the appointment a title.' };
   if (!input.scheduledAt) return { ok: false, error: 'Pick a date and time.' };
+
+  const trainerName = await myDisplayName(trainer);
 
   const { data, error } = await supabase
     .from('trainer_appointments')
@@ -45,6 +58,8 @@ export async function createAppointment(
       scheduled_at: input.scheduledAt,
       duration_minutes: input.durationMinutes ?? null,
       assigned_plan_id: input.assignedPlanId ?? null,
+      trainer_name: trainerName,
+      trainee_name: traineeName,
     })
     .select('id')
     .single();

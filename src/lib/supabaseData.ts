@@ -1658,6 +1658,11 @@ export const saveWorkout = async (
     // Set when this workout was performed from a coach-assigned program — links
     // the logged sets back to the prescription for adherence / prescribed-vs-actual.
     source_plan_id?: string | null;
+    // Set when a COACH is logging this session on a trainee's behalf — the
+    // RPC attributes the workout to trainee_id (after verifying coach_can_see)
+    // instead of the caller. userId above is ignored in this case; the caller
+    // is the coach, not the workout's owner.
+    trainee_id?: string | null;
     exercises: Array<{
       name: string;
       muscle_group?: string;
@@ -1695,6 +1700,7 @@ export const saveWorkout = async (
     p_notes: input.notes || null,
     p_exercises: validExercises,
     p_source_plan_id: input.source_plan_id || null,
+    p_trainee_id: input.trainee_id || null,
   };
 
   const { data: workoutIdFromRpc, error: rpcError } = await supabase.rpc(

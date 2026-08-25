@@ -52,6 +52,8 @@ import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
 import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
 import { ExerciseProgressSheet } from '../components/calendar/ExerciseProgressSheet';
+import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
+import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, deleteAppointment, type TrainerAppointment } from '../lib/appointments';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -267,6 +269,62 @@ const CalValueBox: React.FC<{
         <span className="text-[20px] font-light leading-none select-none">+</span>
         <span className="text-[8px] font-semibold leading-none opacity-50 select-none">{stepLabel}</span>
       </button>
+    </div>
+  );
+};
+
+const APPOINTMENT_BLUE = '#4FC3F7';
+
+// A scheduled session — forward-looking ("what we'll do"), distinct from a
+// WorkoutCard's completed-record framing. role='trainee' when this was made
+// FOR the calendar's owner; role='trainer' when they created it themselves
+// (either on their own calendar, or a coach viewing a trainee's calendar).
+const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' | 'trainer' }; onChanged: () => void }> = ({ appt, onChanged }) => {
+  const [busy, setBusy] = useState(false);
+  const when = new Date(appt.scheduled_at);
+  const withName = appt.role === 'trainee' ? (appt.trainer_name || 'your trainer') : (appt.trainee_name || 'trainee');
+  const label = appt.role === 'trainee' ? `Appointment with ${withName}` : `Session with ${withName}`;
+
+  const remove = async () => {
+    if (!window.confirm('Cancel this appointment?')) return;
+    setBusy(true);
+    const res = await deleteAppointment(appt.id);
+    setBusy(false);
+    if (!res.ok) { toast.error(res.error || 'Could not cancel appointment.'); return; }
+    toast.success('Appointment cancelled');
+    onChanged();
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+      <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: APPOINTMENT_BLUE }} />
+      <div className="pl-4 pr-3 py-3 flex items-start gap-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0 mt-0.5"
+          style={{ background: 'color-mix(in srgb, ' + APPOINTMENT_BLUE + ' 14%, transparent)', color: APPOINTMENT_BLUE }}>
+          <Clock3 className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[15px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{appt.title}</p>
+            <p className="text-[13px] font-semibold shrink-0 tabular-nums" style={{ color: APPOINTMENT_BLUE }}>
+              {when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+            </p>
+          </div>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            {label}{appt.duration_minutes ? ` · ${appt.duration_minutes} min` : ''}
+          </p>
+          {appt.notes && <p className="text-[13px] mt-1.5 leading-snug" style={{ color: 'var(--text-secondary)' }}>{appt.notes}</p>}
+          {appt.status === 'cancelled' && (
+            <p className="text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#ff8080' }}>Cancelled</p>
+          )}
+        </div>
+        {appt.role === 'trainer' && appt.status === 'scheduled' && (
+          <button type="button" onClick={remove} disabled={busy} aria-label="Cancel appointment"
+            className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-40" style={{ color: '#ff8080' }}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -1029,6 +1087,13 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   const [viewMode, setViewMode]         = useState<ViewMode>('today');
   const [workouts, setWorkouts]         = useState<any[]>([]);
   const [loading, setLoading]           = useState(true);
+  // role: 'trainee' when this appointment was made FOR the calendar's owner
+  // (shown as "Appointment with <trainer>"); 'trainer' when the calendar's
+  // owner created it for one of their own trainees (shown as "Session with
+  // <trainee>"). Only relevant on one's own calendar — a coach's read-only
+  // view of a trainee only ever fetches that trainee's received appointments.
+  const [appointments, setAppointments] = useState<(TrainerAppointment & { role: 'trainee' | 'trainer' })[]>([]);
+  const [showCreateAppt, setShowCreateAppt] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [progressExercise, setProgressExercise] = useState<{ name: string; muscle?: string | null } | null>(null);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -1081,7 +1146,32 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
       })
       .catch(() => setWorkouts([]))
       .finally(() => { setLoading(false); doneProgress(); });
-  }, [effectiveUserId, anchor, viewMode, refreshKey, startProgress, doneProgress]);
+
+    const range = { startDate: start.toISOString(), endDate: end.toISOString() };
+    if (readOnly && userId) {
+      // Coach viewing one trainee's calendar — only the appointments this
+      // coach made for this trainee (RLS wouldn't return anyone else's).
+      getAppointmentsForTrainee(userId, range)
+        .then((rows) => setAppointments(rows.map((r) => ({ ...r, role: 'trainer' as const }))))
+        .catch(() => setAppointments([]));
+    } else if (!readOnly) {
+      // Own calendar: appointments made FOR me, plus (if I'm also a
+      // trainer) appointments I made for my own trainees — merged so both
+      // show up on the same calendar.
+      Promise.all([
+        getMyAppointments(range),
+        profile?.is_trainer ? getMyCreatedAppointments(range) : Promise.resolve([]),
+      ])
+        .then(([mine, created]) => setAppointments([
+          ...mine.map((r) => ({ ...r, role: 'trainee' as const })),
+          ...created.map((r) => ({ ...r, role: 'trainer' as const })),
+        ]))
+        .catch(() => setAppointments([]));
+    }
+  }, [effectiveUserId, anchor, viewMode, refreshKey, startProgress, doneProgress, readOnly, userId, profile?.is_trainer]);
+
+  const getAppointmentsForDay = (day: Date) =>
+    appointments.filter((a) => isSameDay(new Date(a.scheduled_at), day));
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
@@ -1764,6 +1854,18 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
 
               {!readOnly && (
                 <div className="flex items-center gap-1.5">
+                  {profile?.is_trainer && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateAppt(true)}
+                      aria-label="Schedule an appointment"
+                      title="Schedule an appointment"
+                      className="h-8 w-8 flex items-center justify-center rounded-full"
+                      style={{ background: 'var(--bg-elevated)', color: APPOINTMENT_BLUE, border: `1px solid color-mix(in srgb, ${APPOINTMENT_BLUE} 35%, transparent)` }}
+                    >
+                      <Clock3 className="w-4 h-4" />
+                    </button>
+                  )}
                   <Link
                     to={`/log?date=${format(selectedDate, 'yyyy-MM-dd')}`}
                     className="h-8 w-8 flex items-center justify-center rounded-full"
@@ -1975,6 +2077,17 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
                 )}
               </div>
 
+              {/* Appointments — scheduled sessions for this day, shown above
+                  logged workouts since they're forward-looking context
+                  ("what we'll do") rather than a completed record. */}
+              {getAppointmentsForDay(selectedDate).length > 0 && (
+                <div className="px-4 pt-3 space-y-2">
+                  {getAppointmentsForDay(selectedDate).map((a) => (
+                    <AppointmentCard key={a.id} appt={a} onChanged={() => setRefreshKey((k) => k + 1)} />
+                  ))}
+                </div>
+              )}
+
               {/* Workout list */}
               <div className="px-4 py-3 space-y-2">
                 {loading ? (
@@ -2030,6 +2143,12 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
           onClose={() => setProgressExercise(null)}
         />
       )}
+
+      <CreateAppointmentSheet
+        open={showCreateAppt}
+        onClose={() => setShowCreateAppt(false)}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 };
