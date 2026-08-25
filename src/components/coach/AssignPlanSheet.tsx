@@ -115,6 +115,20 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     setRows((p) => p.filter((r) => r.dayId !== id));
     if (activeDayId === id) setActiveDayId(days.find((g) => g.id !== id)!.id);
   };
+  // Most multi-day programs repeat structure (two similar Push days at
+  // different intensities, Upper/Lower alternating) — cloning a day's
+  // exercises into a new one is much faster than rebuilding it exercise by
+  // exercise. Copies prescriptions as-is; the coach tweaks from there.
+  const duplicateDay = (id: number) => {
+    const source = days.find((d) => d.id === id);
+    const sourceRows = rows.filter((r) => r.dayId === id);
+    if (!source || !sourceRows.length) return;
+    const newId = nextDayId.current++;
+    setDays((d) => [...d, { id: newId, label: `${source.label || 'Day 1'} copy` }]);
+    setRows((p) => [...p, ...sourceRows.map((r) => ({ ...r, dayId: newId }))]);
+    setActiveDayId(newId);
+    haptics.tick();
+  };
 
   // The trainee's last logged top set for an exercise — so a prescription
   // starts from what they actually did, not a blank guess.
@@ -269,6 +283,13 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                             <span className="text-[11px] font-semibold shrink-0" style={{ color: 'var(--text-muted)' }}>
                               {dayRows.length} ex
                             </span>
+                            {dayRows.length > 0 && (
+                              <button type="button" onClick={(e) => { e.stopPropagation(); duplicateDay(day.id); }} aria-label="Duplicate day"
+                                title="Duplicate this day"
+                                className="h-6 w-6 rounded-md flex items-center justify-center shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                                <AppIcon name="Duplicate" size="sm" />
+                              </button>
+                            )}
                             {days.length > 1 && (
                               <button type="button" onClick={(e) => { e.stopPropagation(); removeDay(day.id); }} aria-label="Remove day"
                                 className="h-6 w-6 rounded-md flex items-center justify-center shrink-0" style={{ color: '#ff8080' }}>
