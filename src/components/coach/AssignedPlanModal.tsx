@@ -100,6 +100,7 @@ export const AssignedPlanModal: React.FC = () => {
       name: e.name,
       sets: e.default_sets,
       reps: String(e.default_reps),
+      rest: e.rest_seconds ?? null,
     }));
     navigate('/log', { state: { recommendedExercises, suggestedTitle: current.title, sourcePlanId: current.id } });
   };

@@ -22,6 +22,7 @@ export const MyCoach: React.FC = () => {
       name: e.name,
       sets: e.default_sets,
       reps: String(e.default_reps),
+      rest: e.rest_seconds ?? null,
     }));
     const suggestedTitle = dayLabel ? `${plan.title} — ${dayLabel}` : plan.title;
     navigate('/log', { state: { recommendedExercises, suggestedTitle, sourcePlanId: plan.id } });

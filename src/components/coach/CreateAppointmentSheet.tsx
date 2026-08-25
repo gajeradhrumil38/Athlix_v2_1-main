@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -268,24 +268,17 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
 // ── Custom date/time pickers ────────────────────────────────────────────
 // Native <input type="date"/"time"> render as a plain, inconsistent browser
 // widget that clashes with the rest of the app's dark theme. These are
-// self-contained popovers matching the sheet's own visual language.
+// self-contained centered modals matching the sheet's own visual language.
 
-const usePopoverClose = (open: boolean, onClose: () => void) => {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
-  return ref;
-};
-
+// Centered modal rather than an anchored dropdown — a 6-row month grid
+// anchored below a button near the top of the sheet could overflow off the
+// bottom of the screen (cut off, with the fields below it only dimmed, not
+// covered). Centering guarantees it always fits the viewport and never
+// depends on where its trigger button happens to sit.
 const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : new Date();
   const [month, setMonth] = useState(selected);
-  const ref = usePopoverClose(open, () => setOpen(false));
 
   const days = useMemo(() => eachDayOfInterval({
     start: startOfWeek(startOfMonth(month)),
@@ -293,10 +286,10 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
   }), [month]);
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
         type="button"
-        onClick={() => { setMonth(selected); setOpen((v) => !v); }}
+        onClick={() => { setMonth(selected); setOpen(true); }}
         className="w-full h-12 rounded-xl px-3 flex items-center gap-2 text-[14px] font-semibold"
         style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
       >
@@ -304,22 +297,22 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
         {value ? format(selected, 'MMM d, yyyy') : 'Pick a date'}
       </button>
       {open && (
-        <>
+        <div
+          className="fixed inset-0 z-[400] flex items-center justify-center px-6"
+          style={{ background: 'rgba(3,5,9,0.85)' }}
+          onClick={() => setOpen(false)}
+        >
           <div
-            className="fixed inset-0 z-[75]"
-            style={{ background: 'rgba(3,5,9,0.75)' }}
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className="absolute z-[76] mt-2 left-0 rounded-2xl p-3"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', width: 260 }}
+            className="w-full max-w-[300px] max-h-[80vh] overflow-y-auto rounded-3xl p-4"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-2">
-              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="h-7 w-7 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-secondary)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}>
                 <AppIcon name="Back" size="sm" />
               </button>
-              <p className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
-              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="h-7 w-7 rounded-lg flex items-center justify-center rotate-180" style={{ color: 'var(--text-secondary)' }}>
+              <p className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="h-8 w-8 rounded-lg flex items-center justify-center rotate-180" style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}>
                 <AppIcon name="Back" size="sm" />
               </button>
             </div>
@@ -338,7 +331,7 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
                     key={d.toISOString()}
                     type="button"
                     onClick={() => { onChange(format(d, 'yyyy-MM-dd')); setOpen(false); }}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center text-[12px] font-semibold"
+                    className="h-9 w-9 rounded-lg flex items-center justify-center text-[13px] font-semibold"
                     style={{
                       background: isSel ? 'var(--accent)' : 'transparent',
                       color: isSel ? '#000' : !inMonth ? 'var(--text-muted)' : isToday ? 'var(--accent)' : 'var(--text-primary)',
@@ -352,9 +345,9 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
               })}
             </div>
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 };
 
@@ -363,7 +356,6 @@ const MINUTES = [0, 15, 30, 45];
 
 const InlineTimePicker: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
   const [open, setOpen] = useState(false);
-  const ref = usePopoverClose(open, () => setOpen(false));
 
   const [h24, m] = value ? value.split(':').map(Number) : [12, 0];
   const isPM = h24 >= 12;
@@ -375,10 +367,10 @@ const InlineTimePicker: React.FC<{ value: string; onChange: (v: string) => void 
   };
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
         className="w-full h-12 rounded-xl px-3 flex items-center gap-2 text-[14px] font-semibold"
         style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
       >
@@ -386,58 +378,71 @@ const InlineTimePicker: React.FC<{ value: string; onChange: (v: string) => void 
         {value ? `${h12}:${String(m).padStart(2, '0')} ${isPM ? 'PM' : 'AM'}` : 'Pick a time'}
       </button>
       {open && (
-        <>
+        <div
+          className="fixed inset-0 z-[400] flex items-center justify-center px-6"
+          style={{ background: 'rgba(3,5,9,0.85)' }}
+          onClick={() => setOpen(false)}
+        >
           <div
-            className="fixed inset-0 z-[75]"
-            style={{ background: 'rgba(3,5,9,0.75)' }}
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className="absolute z-[76] mt-2 right-0 rounded-2xl p-3 flex gap-2"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 16px 40px rgba(0,0,0,0.5)', width: 220 }}
+            className="w-full max-w-[300px] max-h-[80vh] rounded-3xl p-4"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex-1 max-h-[160px] overflow-y-auto space-y-0.5">
-              {HOURS_12.map((hh) => (
-                <button
-                  key={hh}
-                  type="button"
-                  onClick={() => setParts(hh, m, isPM)}
-                  className="w-full h-8 rounded-lg text-[13px] font-semibold"
-                  style={hh === h12 ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
-                >
-                  {hh}
-                </button>
-              ))}
+            <p className="text-[15px] font-bold text-center mb-3" style={{ color: 'var(--text-primary)' }}>
+              {h12}:{String(m).padStart(2, '0')} {isPM ? 'PM' : 'AM'}
+            </p>
+            <div className="flex gap-2">
+              <div className="flex-1 max-h-[200px] overflow-y-auto space-y-0.5">
+                {HOURS_12.map((hh) => (
+                  <button
+                    key={hh}
+                    type="button"
+                    onClick={() => setParts(hh, m, isPM)}
+                    className="w-full h-9 rounded-lg text-[14px] font-semibold"
+                    style={hh === h12 ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
+                  >
+                    {hh}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 max-h-[200px] overflow-y-auto space-y-0.5">
+                {MINUTES.map((mm) => (
+                  <button
+                    key={mm}
+                    type="button"
+                    onClick={() => setParts(h12, mm, isPM)}
+                    className="w-full h-9 rounded-lg text-[14px] font-semibold"
+                    style={mm === m ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
+                  >
+                    :{String(mm).padStart(2, '0')}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 flex flex-col gap-1">
+                {(['AM', 'PM'] as const).map((ap) => (
+                  <button
+                    key={ap}
+                    type="button"
+                    onClick={() => setParts(h12, m, ap === 'PM')}
+                    className="flex-1 rounded-lg text-[13px] font-bold"
+                    style={(ap === 'PM') === isPM ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+                  >
+                    {ap}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex-1 max-h-[160px] overflow-y-auto space-y-0.5">
-              {MINUTES.map((mm) => (
-                <button
-                  key={mm}
-                  type="button"
-                  onClick={() => setParts(h12, mm, isPM)}
-                  className="w-full h-8 rounded-lg text-[13px] font-semibold"
-                  style={mm === m ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
-                >
-                  :{String(mm).padStart(2, '0')}
-                </button>
-              ))}
-            </div>
-            <div className="flex-1 flex flex-col gap-1">
-              {(['AM', 'PM'] as const).map((ap) => (
-                <button
-                  key={ap}
-                  type="button"
-                  onClick={() => setParts(h12, m, ap === 'PM')}
-                  className="flex-1 rounded-lg text-[12px] font-bold"
-                  style={(ap === 'PM') === isPM ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-                >
-                  {ap}
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="w-full h-11 rounded-xl font-bold text-[14px] mt-3"
+              style={{ background: 'var(--accent)', color: '#000' }}
+            >
+              Done
+            </button>
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 };

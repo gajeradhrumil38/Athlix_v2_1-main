@@ -143,13 +143,23 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
   useEffect(() => { loadedPlanRef.current = loadedPlan; }, [loadedPlan]);
 
   // ── Rest timer ────────────────────────────────────────────────────────────
-  const REST_DURATION = Number(localStorage.getItem('athlix_default_rest_secs') || 90);
+  // Read fresh at call time (not a render-time const) so a mid-session change
+  // to the global default in Settings takes effect on the next rest, and so
+  // the value can't go stale from useCallback's frozen [] dependency array.
+  const getDefaultRestSeconds = () => Number(localStorage.getItem('athlix_default_rest_secs') || 90);
   const [restSecondsLeft, setRestSecondsLeft] = useState(0);
+  // The actual duration this rest period started with — may be the assigned
+  // plan's prescribed rest_seconds for this exercise, not the global default.
+  // Tracked separately so the progress bar's percentage is computed against
+  // what the timer actually started at, not always the global default.
+  const [restTotal, setRestTotal] = useState(90);
   const restIntervalRef = useRef<number | null>(null);
 
-  const startRestTimer = useCallback(() => {
+  const startRestTimer = useCallback((overrideSeconds?: number | null) => {
+    const duration = overrideSeconds && overrideSeconds > 0 ? overrideSeconds : getDefaultRestSeconds();
     if (restIntervalRef.current) window.clearInterval(restIntervalRef.current);
-    setRestSecondsLeft(REST_DURATION);
+    setRestTotal(duration);
+    setRestSecondsLeft(duration);
     restIntervalRef.current = window.setInterval(() => {
       setRestSecondsLeft((prev) => {
         if (prev <= 1) {
@@ -406,7 +416,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
 
       if (nextDone) {
         haptics.success();
-        startRestTimer();
+        startRestTimer(exercise.restSeconds);
         // Instant, zero-latency coach feedback: compare this set to last time.
         // SetFeedbackFlash listens and shows a flash for a beat/matched set.
         window.dispatchEvent(new CustomEvent('athlix:set-logged', {
@@ -1312,7 +1322,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                     <motion.div
                       className="h-full rounded-full"
                       style={{ background: 'var(--accent)' }}
-                      animate={{ width: `${(restSecondsLeft / REST_DURATION) * 100}%` }}
+                      animate={{ width: `${(restSecondsLeft / restTotal) * 100}%` }}
                       transition={{ duration: 0.9, ease: 'linear' }}
                     />
                   </div>

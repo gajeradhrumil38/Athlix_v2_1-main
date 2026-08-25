@@ -37,12 +37,17 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   const [error, setError] = useState('');
   const [picking, setPicking] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  // Remembers the most recently set rest time so the NEXT exercise added
+  // defaults to it instead of always resetting to 90s — a program is
+  // usually one rest interval repeated across most exercises, so this
+  // saves re-typing the same value over and over while building a plan.
+  const lastRestRef = useRef(90);
 
   const hasContent = title.trim().length > 0 || rows.length > 0;
 
   const reset = () => {
     setTitle(''); setRows([]); setDays([{ id: 0, label: '' }]); setActiveDayId(0); nextDayId.current = 1;
-    setError(''); setBusy(false); setPicking(false);
+    setError(''); setBusy(false); setPicking(false); lastRestRef.current = 90;
   };
   const close = () => { onClose(); reset(); };
   // Backdrop tap / picker-cancel used to discard silently — a coach who spent
@@ -76,14 +81,19 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
       setDays(nextDays.length ? nextDays : [{ id: 0, label: '' }]);
       setActiveDayId(nextDays.length ? nextDays[nextDays.length - 1].id : 0);
       nextDayId.current = counter;
+      lastRestRef.current = nextRows[nextRows.length - 1]?.rest ?? 90;
     } else {
       setTitle(''); setRows([]); setDays([{ id: 0, label: '' }]); setActiveDayId(0); nextDayId.current = 1;
+      lastRestRef.current = 90;
     }
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingPlan?.id]);
 
-  const set = (i: number, k: 'sets' | 'reps' | 'weight' | 'rest', v: number) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+  const set = (i: number, k: 'sets' | 'reps' | 'weight' | 'rest', v: number) => {
+    if (k === 'rest') lastRestRef.current = v;
+    setRows((p) => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
+  };
   const setNote = (i: number, v: string) => setRows((p) => p.map((r, idx) => idx === i ? { ...r, note: v } : r));
   const removeRow = (i: number) => setRows((p) => p.filter((_, idx) => idx !== i));
   // Reorder within the row's own day only — dragging past a day boundary via
@@ -182,7 +192,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
       // Day 1 and Day 3) is completely normal programming, not a dupe.
       if (p.some((r) => r.dayId === activeDayId && r.name.toLowerCase() === name.toLowerCase())) return p;
       const last = lastSetFor(name);
-      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: 90, note: '', dayId: activeDayId }];
+      return [...p, { name, sets: sets || 3, reps: last?.reps || reps || 10, weight: last?.weight || 0, rest: lastRestRef.current, note: '', dayId: activeDayId }];
     });
 
   // Bulk-add every exercise from a saved template into the active day at
@@ -193,7 +203,7 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
       const existing = new Set(p.filter((r) => r.dayId === activeDayId).map((r) => r.name.toLowerCase()));
       const additions = exercises
         .filter((ex) => !existing.has(ex.name.toLowerCase()))
-        .map((ex) => ({ name: ex.name, sets: ex.defaultSets || 3, reps: ex.defaultReps || 10, weight: ex.defaultWeight || 0, rest: 90, note: '', dayId: activeDayId }));
+        .map((ex) => ({ name: ex.name, sets: ex.defaultSets || 3, reps: ex.defaultReps || 10, weight: ex.defaultWeight || 0, rest: lastRestRef.current, note: '', dayId: activeDayId }));
       return [...p, ...additions];
     });
 

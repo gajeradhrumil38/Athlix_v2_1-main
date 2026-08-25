@@ -42,6 +42,8 @@ export interface ExerciseEntry {
   sets: Set[];
   /** true when user opts into tracking weight for a normally reps-only exercise */
   optionalWeight?: boolean;
+  /** Rest time prescribed by the assigned plan this exercise came from, if any — overrides the global default rest duration when set. */
+  restSeconds?: number | null;
   lastSession?: {
     date: string;
     sets: number;
@@ -69,7 +71,7 @@ const DRAFT_TTL = 8 * 60 * 60 * 1000;
 // Build workout entries from a Train Today recommendation: resolve each
 // exercise's muscle group from the catalog (fallback to the plan's primary
 // muscle), N empty sets, with the plan's target reps seeded as a hint.
-type PlanExercise = { name: string; sets: number; reps: string };
+type PlanExercise = { name: string; sets: number; reps: string; rest?: number | null };
 function planRepTarget(reps: string): number | null {
   const m = /(\d+)/.exec(reps || '');
   return m ? Number(m[1]) : null;
@@ -86,6 +88,7 @@ function buildEntriesFromPlan(exercises: PlanExercise[], planMuscles?: string[])
       name: ex.name,
       muscleGroup,
       exercise_db_id: asset?.id,
+      restSeconds: ex.rest ?? null,
       sets: Array.from({ length: nSets }, () => ({
         id: crypto.randomUUID(),
         weight: null,
