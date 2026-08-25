@@ -7,7 +7,7 @@ import {
 import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import { getSentLinks, type CoachLink } from '../../lib/coachLinks';
-import { createAppointment } from '../../lib/appointments';
+import { createAppointment, updateAppointment, type TrainerAppointment } from '../../lib/appointments';
 import { getAssignedPlansFor, type AssignedPlan } from '../../lib/assignedPlans';
 import { DialPicker } from '../log/DialPicker';
 
@@ -16,9 +16,14 @@ import { DialPicker } from '../log/DialPicker';
 // sheet owns the roster fetch); everything else — title, date/time,
 // optionally a plan to attach, and notes on what the session covers — is a
 // single flat form after that.
-interface Props { open: boolean; onClose: () => void; onCreated: () => void; }
+// editingAppointment turns this into an edit sheet (mirrors AssignPlanSheet's
+// editingPlan pattern): pre-filled from the appointment, saved via
+// updateAppointment() instead of createAppointment(). Which trainee it's
+// for isn't editable — reassigning an existing appointment to a different
+// person is an edge case rare enough that cancel-and-recreate is clearer.
+interface Props { open: boolean; editingAppointment?: TrainerAppointment | null; onClose: () => void; onCreated: () => void; }
 
-export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreated }) => {
+export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointment, onClose, onCreated }) => {
   const [roster, setRoster] = useState<CoachLink[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
   const [traineeId, setTraineeId] = useState<string | null>(null);
@@ -34,6 +39,8 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
   const [error, setError] = useState('');
   const [durationPickerOpen, setDurationPickerOpen] = useState(false);
 
+  const isEditing = !!editingAppointment;
+
   const reset = () => {
     setTraineeId(null); setTitle(''); setDate(''); setTime(''); setDurationMinutes('');
     setNotes(''); setPlans([]); setPlanId(null); setError(''); setBusy(false); setDurationPickerOpen(false);
@@ -46,28 +53,45 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
     getSentLinks()
       .then((links) => setRoster(links.filter((l) => l.status === 'accepted' && l.trainee_id)))
       .finally(() => setRosterLoading(false));
-    // Default to today, next half-hour — a reasonable starting point the
-    // coach can adjust rather than a blank/invalid date.
-    const now = new Date();
-    setDate(now.toISOString().slice(0, 10));
-    const mins = now.getMinutes() < 30 ? 30 : 0;
-    const hour = now.getMinutes() < 30 ? now.getHours() : now.getHours() + 1;
-    setTime(`${String(hour % 24).padStart(2, '0')}:${String(mins).padStart(2, '0')}`);
-  }, [open]);
+
+    if (editingAppointment) {
+      setTraineeId(editingAppointment.trainee_id);
+      setTitle(editingAppointment.title);
+      const when = new Date(editingAppointment.scheduled_at);
+      setDate(`${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`);
+      setTime(`${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`);
+      setDurationMinutes(editingAppointment.duration_minutes ? String(editingAppointment.duration_minutes) : '');
+      setNotes(editingAppointment.notes ?? '');
+      setPlanId(editingAppointment.assigned_plan_id);
+    } else {
+      // Default to today, next half-hour — a reasonable starting point the
+      // coach can adjust rather than a blank/invalid date.
+      const now = new Date();
+      setDate(now.toISOString().slice(0, 10));
+      const mins = now.getMinutes() < 30 ? 30 : 0;
+      const hour = now.getMinutes() < 30 ? now.getHours() : now.getHours() + 1;
+      setTime(`${String(hour % 24).padStart(2, '0')}:${String(mins).padStart(2, '0')}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingAppointment?.id]);
 
   // Load this trainee's active plans once picked, so the coach can attach
   // one — "which exercises should the trainee do" answered by pointing at
   // an existing prescription instead of re-describing it in free text.
   useEffect(() => {
-    setPlanId(null);
     if (!traineeId) { setPlans([]); return; }
     setPlansLoading(true);
     getAssignedPlansFor(traineeId)
       .then(setPlans)
       .finally(() => setPlansLoading(false));
+    // Editing pre-fills planId above; only clear it here for the create-flow
+    // trainee switch, not on the initial edit-mode load.
+    if (!editingAppointment) setPlanId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traineeId]);
 
   const selectedTrainee = roster.find((l) => l.trainee_id === traineeId);
+  const editingTraineeName = editingAppointment?.trainee_name || selectedTrainee?.trainee_name || 'this trainee';
 
   const submit = async () => {
     setError('');
@@ -77,15 +101,22 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
     const scheduledAt = new Date(`${date}T${time}`).toISOString();
     setBusy(true);
     const selectedPlan = plans.find((p) => p.id === planId);
-    const res = await createAppointment(traineeId, selectedTrainee?.trainee_name ?? null, {
-      title, notes: notes.trim() || undefined, scheduledAt,
-      durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
-      assignedPlanId: planId,
-      assignedPlanTitle: selectedPlan?.title ?? null,
-    });
+    const res = editingAppointment
+      ? await updateAppointment(editingAppointment.id, {
+          title, notes: notes.trim() || null, scheduledAt,
+          durationMinutes: durationMinutes ? Number(durationMinutes) : null,
+          assignedPlanId: planId,
+          assignedPlanTitle: selectedPlan?.title ?? null,
+        })
+      : await createAppointment(traineeId, selectedTrainee?.trainee_name ?? null, {
+          title, notes: notes.trim() || undefined, scheduledAt,
+          durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
+          assignedPlanId: planId,
+          assignedPlanTitle: selectedPlan?.title ?? null,
+        });
     setBusy(false);
-    if (!res.ok) { setError(res.error || 'Could not create appointment.'); return; }
-    toast.success('Appointment scheduled');
+    if (!res.ok) { setError(res.error || `Could not ${editingAppointment ? 'save' : 'create'} appointment.`); return; }
+    toast.success(editingAppointment ? 'Appointment updated' : 'Appointment scheduled');
     onCreated();
     close();
   };
@@ -109,8 +140,10 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
           >
             <div className="px-6 pt-6 pb-3 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">New appointment</h2>
-                <p className="text-[15px] text-[var(--text-secondary)] mt-1">Schedule a session with a trainee</p>
+                <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">{isEditing ? 'Edit appointment' : 'New appointment'}</h2>
+                <p className="text-[15px] text-[var(--text-secondary)] mt-1">
+                  {isEditing ? `With ${editingTraineeName}` : 'Schedule a session with a trainee'}
+                </p>
               </div>
               <button type="button" onClick={close} aria-label="Close"
                 className="shrink-0 h-9 w-9 rounded-full flex items-center justify-center"
@@ -120,34 +153,38 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
             </div>
 
             <div className="px-6 overflow-y-auto flex-1 space-y-4">
-              {/* Trainee picker */}
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5 block">Trainee</label>
-                {rosterLoading ? (
-                  <p className="text-[13px] text-[var(--text-muted)] py-2">Loading roster…</p>
-                ) : roster.length === 0 ? (
-                  <p className="text-[13px] text-[var(--text-muted)] py-2">No accepted trainees yet.</p>
-                ) : (
-                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
-                    {roster.map((l) => {
-                      const active = l.trainee_id === traineeId;
-                      return (
-                        <button
-                          key={l.id}
-                          type="button"
-                          onClick={() => setTraineeId(l.trainee_id)}
-                          className="shrink-0 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all"
-                          style={active
-                            ? { background: 'rgba(200,255,0,0.12)', color: 'var(--accent)', border: '1px solid rgba(200,255,0,0.35)' }
-                            : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid transparent' }}
-                        >
-                          {l.trainee_name || 'Trainee'}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              {/* Trainee picker — hidden in edit mode; reassigning an
+                  existing appointment to a different person isn't supported,
+                  the header already names who it's with. */}
+              {!isEditing && (
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-1.5 block">Trainee</label>
+                  {rosterLoading ? (
+                    <p className="text-[13px] text-[var(--text-muted)] py-2">Loading roster…</p>
+                  ) : roster.length === 0 ? (
+                    <p className="text-[13px] text-[var(--text-muted)] py-2">No accepted trainees yet.</p>
+                  ) : (
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+                      {roster.map((l) => {
+                        const active = l.trainee_id === traineeId;
+                        return (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => setTraineeId(l.trainee_id)}
+                            className="shrink-0 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all"
+                            style={active
+                              ? { background: 'rgba(200,255,0,0.12)', color: 'var(--accent)', border: '1px solid rgba(200,255,0,0.35)' }
+                              : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid transparent' }}
+                          >
+                            {l.trainee_name || 'Trainee'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <input
                 placeholder="Title — e.g. Upper body session"
@@ -244,7 +281,7 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, onClose, onCreat
                 className="w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-50"
                 style={{ background: 'var(--accent)', color: '#000' }}
               >
-                {busy ? <AppIcon name="Spinner" size="md" /> : 'Schedule appointment'}
+                {busy ? <AppIcon name="Spinner" size="md" /> : isEditing ? 'Save changes' : 'Schedule appointment'}
               </button>
             </div>
           </motion.div>

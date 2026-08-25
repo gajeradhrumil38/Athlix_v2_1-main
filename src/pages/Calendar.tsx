@@ -285,8 +285,11 @@ const AppointmentCard: React.FC<{
   appt: TrainerAppointment & { role: 'trainee' | 'trainer' };
   onChanged: () => void;
   onOpenPlan: (planId: string, role: 'trainee' | 'trainer') => void;
-}> = ({ appt, onChanged, onOpenPlan }) => {
+  onEdit: (appt: TrainerAppointment) => void;
+}> = ({ appt, onChanged, onOpenPlan, onEdit }) => {
   const [busy, setBusy] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
   const when = new Date(appt.scheduled_at);
   const withName = appt.role === 'trainee' ? (appt.trainer_name || 'your trainer') : (appt.trainee_name || 'trainee');
   const label = appt.role === 'trainee' ? `Appointment with ${withName}` : `Session with ${withName}`;
@@ -307,6 +310,15 @@ const AppointmentCard: React.FC<{
     setBusy(false);
     if (!res.ok) { toast.error(res.error || 'Could not update appointment.'); return; }
     toast.success('Marked as completed');
+    onChanged();
+  };
+
+  const saveNotes = async () => {
+    setBusy(true);
+    const res = await updateAppointment(appt.id, { reviewNotes: notesDraft });
+    setBusy(false);
+    if (!res.ok) { toast.error(res.error || 'Could not save notes.'); return; }
+    setEditingNotes(false);
     onChanged();
   };
 
@@ -353,13 +365,61 @@ const AppointmentCard: React.FC<{
             <p className="text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#ff8080' }}>Cancelled</p>
           )}
           {appt.status === 'completed' && (
-            <p className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#7cd992' }}>
-              <Check className="h-3 w-3" /> Completed
-            </p>
+            <div className="mt-1.5">
+              <p className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide" style={{ color: '#7cd992' }}>
+                <Check className="h-3 w-3" /> Completed
+              </p>
+
+              {/* Post-session notes: how it actually went, filled in after
+                  the fact — separate from `notes` (what we planned to do). */}
+              {editingNotes ? (
+                <div className="mt-2">
+                  <textarea
+                    autoFocus
+                    value={notesDraft}
+                    onChange={(e) => setNotesDraft(e.target.value)}
+                    placeholder="How did this session go? e.g. Hit a new squat PR, form held up well on the last set."
+                    rows={3}
+                    className="w-full rounded-xl px-3 py-2.5 text-[13px] outline-none resize-none"
+                    style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+                  />
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button type="button" onClick={saveNotes} disabled={busy}
+                      className="px-3 py-1.5 rounded-lg text-[12px] font-bold disabled:opacity-50"
+                      style={{ background: '#7cd992', color: '#000' }}>
+                      Save notes
+                    </button>
+                    <button type="button" onClick={() => setEditingNotes(false)} disabled={busy}
+                      className="px-3 py-1.5 rounded-lg text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : appt.review_notes ? (
+                <div className="mt-1.5">
+                  <p className="text-[13px] leading-snug" style={{ color: 'var(--text-secondary)' }}>{appt.review_notes}</p>
+                  {appt.role === 'trainer' && (
+                    <button type="button" onClick={() => { setNotesDraft(appt.review_notes || ''); setEditingNotes(true); }}
+                      className="text-[12px] font-semibold mt-1" style={{ color: '#7cd992' }}>
+                      Edit notes
+                    </button>
+                  )}
+                </div>
+              ) : appt.role === 'trainer' ? (
+                <button type="button" onClick={() => { setNotesDraft(''); setEditingNotes(true); }}
+                  className="text-[12px] font-semibold mt-1.5 inline-flex items-center gap-1" style={{ color: '#7cd992' }}>
+                  <Pencil className="h-3 w-3" /> Add notes
+                </button>
+              ) : null}
+            </div>
           )}
         </div>
         {appt.role === 'trainer' && appt.status === 'scheduled' && (
           <div className="flex items-center gap-1 shrink-0">
+            <button type="button" onClick={() => onEdit(appt)} disabled={busy} aria-label="Edit appointment"
+              className="h-7 w-7 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ color: 'var(--text-secondary)' }}>
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
             {isPast && (
               <button type="button" onClick={complete} disabled={busy} aria-label="Mark completed"
                 className="h-7 w-7 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ color: '#7cd992' }}>
@@ -1142,6 +1202,7 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   // view of a trainee only ever fetches that trainee's received appointments.
   const [appointments, setAppointments] = useState<(TrainerAppointment & { role: 'trainee' | 'trainer' })[]>([]);
   const [showCreateAppt, setShowCreateAppt] = useState(false);
+  const [editingAppt, setEditingAppt] = useState<TrainerAppointment | null>(null);
   const [planPreview, setPlanPreview] = useState<{ id: string; role: 'trainee' | 'trainer' } | null>(null);
   const [planPreviewData, setPlanPreviewData] = useState<AssignedPlan | null>(null);
   const [planPreviewLoading, setPlanPreviewLoading] = useState(false);
@@ -2153,6 +2214,7 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
                       appt={a}
                       onChanged={() => setRefreshKey((k) => k + 1)}
                       onOpenPlan={(id, role) => setPlanPreview({ id, role })}
+                      onEdit={(appt) => setEditingAppt(appt)}
                     />
                   ))}
                 </div>
@@ -2215,8 +2277,9 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
       )}
 
       <CreateAppointmentSheet
-        open={showCreateAppt}
-        onClose={() => setShowCreateAppt(false)}
+        open={showCreateAppt || !!editingAppt}
+        editingAppointment={editingAppt}
+        onClose={() => { setShowCreateAppt(false); setEditingAppt(null); }}
         onCreated={() => setRefreshKey((k) => k + 1)}
       />
 

@@ -20,6 +20,7 @@ export interface TrainerAppointment {
   assigned_plan_title: string | null;
   trainer_name: string | null;
   trainee_name: string | null;
+  review_notes: string | null;
   created_at: string;
 }
 
@@ -82,7 +83,10 @@ export async function createAppointment(
 
 export async function updateAppointment(
   id: string,
-  input: { title?: string; notes?: string | null; scheduledAt?: string; durationMinutes?: number | null; status?: AppointmentStatus; assignedPlanId?: string | null },
+  input: {
+    title?: string; notes?: string | null; scheduledAt?: string; durationMinutes?: number | null;
+    status?: AppointmentStatus; assignedPlanId?: string | null; assignedPlanTitle?: string | null; reviewNotes?: string | null;
+  },
 ): Promise<{ ok: boolean; error?: string }> {
   const patch: Record<string, any> = {};
   if (input.title !== undefined) patch.title = input.title.trim();
@@ -91,6 +95,8 @@ export async function updateAppointment(
   if (input.durationMinutes !== undefined) patch.duration_minutes = input.durationMinutes;
   if (input.status !== undefined) patch.status = input.status;
   if (input.assignedPlanId !== undefined) patch.assigned_plan_id = input.assignedPlanId;
+  if (input.assignedPlanTitle !== undefined) patch.assigned_plan_title = input.assignedPlanTitle;
+  if (input.reviewNotes !== undefined) patch.review_notes = input.reviewNotes?.trim() || null;
 
   const { error } = await supabase.from('trainer_appointments').update(patch).eq('id', id);
   return error ? { ok: false, error: error.message } : { ok: true };
