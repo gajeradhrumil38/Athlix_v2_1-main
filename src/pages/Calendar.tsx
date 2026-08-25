@@ -1168,6 +1168,9 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   // ── Long-press to log ────────────────────────────────────────────────────────
 
   const handleLongPressStart = (day: Date, e: React.PointerEvent) => {
+    // A coach viewing a trainee's calendar long-pressing a day used to route
+    // straight into the COACH's own logger — wrong person's log entirely.
+    if (readOnly) return;
     if (e.pointerType !== 'touch') return;
     longPressTimer.current = setTimeout(() => {
       try { navigator.vibrate?.(45); } catch { /* ignore */ }
@@ -1759,15 +1762,17 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
                 </AnimatePresence>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <Link
-                  to={`/log?date=${format(selectedDate, 'yyyy-MM-dd')}`}
-                  className="h-8 w-8 flex items-center justify-center rounded-full"
-                  style={{ background: 'var(--accent)', color: '#000' }}
-                >
-                  <Plus className="w-4 h-4" />
-                </Link>
-              </div>
+              {!readOnly && (
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    to={`/log?date=${format(selectedDate, 'yyyy-MM-dd')}`}
+                    className="h-8 w-8 flex items-center justify-center rounded-full"
+                    style={{ background: 'var(--accent)', color: '#000' }}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* View tabs */}
@@ -1991,15 +1996,15 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
                     </div>
                     <div>
                       <p className="text-[14px] font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {isSameDay(selectedDate, today) ? 'Nothing logged today' : 'No workouts this day'}
+                        {isSameDay(selectedDate, today) ? (readOnly ? 'Nothing logged yet' : 'Nothing logged today') : 'No workouts this day'}
                       </p>
                       <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                         {isSameDay(selectedDate, today)
-                          ? 'Start a session and it will appear here.'
+                          ? (readOnly ? 'Nothing logged for today yet.' : 'Start a session and it will appear here.')
                           : 'This was a rest day.'}
                       </p>
                     </div>
-                    {isSameDay(selectedDate, today) && (
+                    {!readOnly && isSameDay(selectedDate, today) && (
                       <Link
                         to={`/log?date=${format(selectedDate, 'yyyy-MM-dd')}`}
                         className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-bold text-black"
