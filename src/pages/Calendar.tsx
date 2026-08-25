@@ -280,6 +280,7 @@ const APPOINTMENT_BLUE = '#4FC3F7';
 // FOR the calendar's owner; role='trainer' when they created it themselves
 // (either on their own calendar, or a coach viewing a trainee's calendar).
 const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' | 'trainer' }; onChanged: () => void }> = ({ appt, onChanged }) => {
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const when = new Date(appt.scheduled_at);
   const withName = appt.role === 'trainee' ? (appt.trainer_name || 'your trainer') : (appt.trainee_name || 'trainee');
@@ -314,6 +315,23 @@ const AppointmentCard: React.FC<{ appt: TrainerAppointment & { role: 'trainee' |
             {label}{appt.duration_minutes ? ` · ${appt.duration_minutes} min` : ''}
           </p>
           {appt.notes && <p className="text-[13px] mt-1.5 leading-snug" style={{ color: 'var(--text-secondary)' }}>{appt.notes}</p>}
+          {appt.assigned_plan_id && (
+            appt.role === 'trainee' ? (
+              <button
+                type="button"
+                onClick={() => navigate('/my-coach')}
+                className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}
+              >
+                <ExternalLink className="h-3 w-3" /> {appt.assigned_plan_title || 'Plan attached'}
+              </button>
+            ) : (
+              <p className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                <Dumbbell className="h-3 w-3" /> {appt.assigned_plan_title || 'Plan attached'}
+              </p>
+            )
+          )}
           {appt.status === 'cancelled' && (
             <p className="text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#ff8080' }}>Cancelled</p>
           )}

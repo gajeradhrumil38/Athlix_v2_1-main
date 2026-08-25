@@ -17,6 +17,7 @@ export interface TrainerAppointment {
   duration_minutes: number | null;
   status: AppointmentStatus;
   assigned_plan_id: string | null;
+  assigned_plan_title: string | null;
   trainer_name: string | null;
   trainee_name: string | null;
   created_at: string;
@@ -39,7 +40,7 @@ async function myDisplayName(uid: string): Promise<string | null> {
 export async function createAppointment(
   traineeId: string,
   traineeName: string | null,
-  input: { title: string; notes?: string; scheduledAt: string; durationMinutes?: number; assignedPlanId?: string | null },
+  input: { title: string; notes?: string; scheduledAt: string; durationMinutes?: number; assignedPlanId?: string | null; assignedPlanTitle?: string | null },
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const trainer = await meId();
   if (!trainer) return { ok: false, error: 'Not signed in.' };
@@ -58,6 +59,7 @@ export async function createAppointment(
       scheduled_at: input.scheduledAt,
       duration_minutes: input.durationMinutes ?? null,
       assigned_plan_id: input.assignedPlanId ?? null,
+      assigned_plan_title: input.assignedPlanId ? (input.assignedPlanTitle ?? null) : null,
       trainer_name: trainerName,
       trainee_name: traineeName,
     })
