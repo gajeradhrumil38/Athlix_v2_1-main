@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { AppIcon } from '../config/icons';
 import { getMyAssignedPlans, groupByDay, type AssignedPlan, type AssignedPlanExercise } from '../lib/assignedPlans';
 
+const formatRest = (v: number) => `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
+
 // Trainee's view of what their coach assigned. Each plan can be started — it
 // loads straight into the logger, pre-filled, via the same route.state the
 // recommendation cards use. A plan split into named days (Push/Pull/Legs,
@@ -75,7 +77,7 @@ export const MyCoach: React.FC = () => {
                           <div className="flex items-center justify-between">
                             <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
                             <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
-                              {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${e.rest_seconds}s` : ''}
+                              {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${formatRest(e.rest_seconds)} rest` : ''}
                             </p>
                           </div>
                           {e.note && <p className="text-[13px] mt-1 leading-snug" style={{ color: 'var(--accent)' }}>{e.note}</p>}

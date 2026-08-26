@@ -54,7 +54,7 @@ import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
 import { ExerciseProgressSheet } from '../components/calendar/ExerciseProgressSheet';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
 import { PlanPreviewModal } from '../components/coach/PlanPreviewModal';
-import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, deleteAppointment, updateAppointment, formatApptTimeRange, type TrainerAppointment } from '../lib/appointments';
+import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, updateAppointment, formatApptTimeRange, type TrainerAppointment } from '../lib/appointments';
 import { getPlanById, type AssignedPlan } from '../lib/assignedPlans';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -294,10 +294,16 @@ const AppointmentCard: React.FC<{
   const withName = appt.role === 'trainee' ? (appt.trainer_name || 'your trainer') : (appt.trainee_name || 'trainee');
   const label = appt.role === 'trainee' ? `Appointment with ${withName}` : `Session with ${withName}`;
 
+  // Soft-cancel (status update), not a hard delete — a trainee who already
+  // saw this appointment (countdown banner, notification) would otherwise
+  // watch it silently vanish with zero explanation. Keeping the row lets
+  // the "Cancelled" badge below actually render (previously dead code:
+  // nothing ever set that status, since this used to delete the row
+  // outright) and lets the notifications feed surface the cancellation.
   const remove = async () => {
     if (!window.confirm('Cancel this appointment?')) return;
     setBusy(true);
-    const res = await deleteAppointment(appt.id);
+    const res = await updateAppointment(appt.id, { status: 'cancelled' });
     setBusy(false);
     if (!res.ok) { toast.error(res.error || 'Could not cancel appointment.'); return; }
     toast.success('Appointment cancelled');
