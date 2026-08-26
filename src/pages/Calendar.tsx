@@ -1942,39 +1942,46 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
 
                 <AnimatePresence>
                   {showMonthPicker && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      transition={{ duration: 0.15, ease: 'easeOut' }}
-                      className="absolute top-full left-0 mt-2 w-[220px] rounded-2xl shadow-xl z-50 p-3"
-                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                    <div
+                      className="fixed inset-0 z-[400] flex items-center justify-center px-4"
+                      style={{ background: 'rgba(3,5,9,1)' }}
+                      onClick={() => setShowMonthPicker(false)}
                     >
-                      <div className="flex items-center justify-between mb-2 px-1">
-                        <button onClick={() => setPickerYear((y) => y - 1)} className="h-7 w-7 flex items-center justify-center rounded-lg" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="text-[13px] font-bold" style={{ color: 'var(--text-primary)' }}>{pickerYear}</span>
-                        <button onClick={() => setPickerYear((y) => y + 1)} className="h-7 w-7 flex items-center justify-center rounded-lg" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1">
-                        {MONTHS.map((mn, idx) => {
-                          const isActive = anchor.getMonth() === idx && anchor.getFullYear() === pickerYear;
-                          return (
-                            <button
-                              key={mn}
-                              onClick={() => { const next = new Date(pickerYear, idx, 1); setAnchor(next); setSelectedDate(next); setShowMonthPicker(false); }}
-                              className="py-1.5 rounded-xl text-[12px] font-semibold transition-all"
-                              style={isActive ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-                            >
-                              {mn}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                        transition={{ duration: 0.15, ease: 'easeOut' }}
+                        className="w-full max-w-[340px] rounded-3xl p-5"
+                        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <button onClick={() => setPickerYear((y) => y - 1)} className="h-10 w-10 flex items-center justify-center rounded-lg" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="text-[17px] font-bold" style={{ color: 'var(--text-primary)' }}>{pickerYear}</span>
+                          <button onClick={() => setPickerYear((y) => y + 1)} className="h-10 w-10 flex items-center justify-center rounded-lg" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {MONTHS.map((mn, idx) => {
+                            const isActive = anchor.getMonth() === idx && anchor.getFullYear() === pickerYear;
+                            return (
+                              <button
+                                key={mn}
+                                onClick={() => { const next = new Date(pickerYear, idx, 1); setAnchor(next); setSelectedDate(next); setShowMonthPicker(false); }}
+                                className="py-3 rounded-xl text-[14px] font-semibold transition-all"
+                                style={isActive ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+                              >
+                                {mn}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    </div>
                   )}
                 </AnimatePresence>
               </div>
@@ -2064,12 +2071,6 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
           )}
         </div>
       </div>
-
-      {/* ── Backdrop to close month picker ── */}
-      {/* z-[19]: below the sticky header (z-20) so it doesn't block the picker inside it */}
-      {showMonthPicker && (
-        <div className="fixed inset-0 z-[19]" onClick={() => setShowMonthPicker(false)} />
-      )}
 
       {/* ── Body ── */}
       <div className="px-3 pt-4 space-y-4">
