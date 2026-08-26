@@ -159,6 +159,37 @@ const buildColumns = (
       ];
     }
 
+    case 'sets': {
+      const values = Array.from({ length: 20 }, (_, i) => i + 1);
+      const target = Math.max(1, Math.min(20, Math.round(initialValue) || 1));
+      return [
+        {
+          id: 'sets',
+          values,
+          format: (v) => String(v),
+          initialIndex: values.findIndex((v) => v === target),
+          unitLabel: 'SETS',
+        },
+      ];
+    }
+
+    // Rest between sets — a single wheel of every 15-second increment up to
+    // 10 minutes, formatted as M:SS instead of raw seconds so "1:30" reads
+    // naturally rather than "90".
+    case 'rest': {
+      const values = Array.from({ length: 41 }, (_, i) => i * 15);
+      const snapped = Math.max(0, Math.min(600, Math.round(initialValue / 15) * 15));
+      const initialIndex = Math.max(0, Math.min(values.length - 1, Math.round(snapped / 15)));
+      return [
+        {
+          id: 'rest',
+          values,
+          format: (v) => `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`,
+          initialIndex,
+        },
+      ];
+    }
+
     default:
       return [
         {
@@ -445,6 +476,7 @@ export const DialPicker: React.FC<DialPickerProps> = ({
       return `${whole}.${dec}`;
     }
     if (fieldKind === 'seconds') return String(liveValue).padStart(2, '0');
+    if (fieldKind === 'rest') return `${Math.floor(liveValue / 60)}:${String(liveValue % 60).padStart(2, '0')}`;
     return String(liveValue);
   })();
 

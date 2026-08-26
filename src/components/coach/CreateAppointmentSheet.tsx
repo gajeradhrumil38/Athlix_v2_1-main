@@ -335,30 +335,34 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-[400] flex items-center justify-center px-6"
-          style={{ background: 'rgba(3,5,9,0.85)' }}
+          className="fixed inset-0 z-[400] flex items-center justify-center px-4"
+          style={{ background: 'rgba(3,5,9,1)' }}
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-[300px] max-h-[80vh] overflow-y-auto rounded-3xl p-4"
+            className="w-full max-w-[400px] max-h-[85vh] overflow-y-auto rounded-3xl p-4"
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-3">
-              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}>
-                <AppIcon name="Back" size="sm" />
+            <div className="flex items-center justify-between mb-4">
+              <button type="button" onClick={() => setMonth((m) => subMonths(m, 1))} className="h-10 w-10 rounded-lg flex items-center justify-center" style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}>
+                <AppIcon name="Back" size="md" />
               </button>
-              <p className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
-              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="h-8 w-8 rounded-lg flex items-center justify-center rotate-180" style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}>
-                <AppIcon name="Back" size="sm" />
+              <p className="text-[17px] font-bold" style={{ color: 'var(--text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+              <button type="button" onClick={() => setMonth((m) => addMonths(m, 1))} className="h-10 w-10 rounded-lg flex items-center justify-center rotate-180" style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}>
+                <AppIcon name="Back" size="md" />
               </button>
             </div>
-            <div className="grid grid-cols-7 gap-0.5 mb-1">
+            {/* w-full aspect-square (not a fixed px size) — cells fill
+                whatever width the grid track actually has, so they scale
+                with the viewport instead of risking overflow on narrow
+                phones or wasted space on wide ones. */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                <span key={i} className="text-[10px] font-bold text-center py-1" style={{ color: 'var(--text-muted)' }}>{d}</span>
+                <span key={i} className="text-[11px] font-bold text-center py-1" style={{ color: 'var(--text-muted)' }}>{d}</span>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-0.5">
+            <div className="grid grid-cols-7 gap-1">
               {days.map((d) => {
                 const isSel = isSameDay(d, selected);
                 const inMonth = isSameMonth(d, month);
@@ -368,7 +372,7 @@ const InlineDatePicker: React.FC<{ value: string; onChange: (v: string) => void 
                     key={d.toISOString()}
                     type="button"
                     onClick={() => { onChange(format(d, 'yyyy-MM-dd')); setOpen(false); }}
-                    className="h-9 w-9 rounded-lg flex items-center justify-center text-[13px] font-semibold"
+                    className="w-full aspect-square rounded-lg flex items-center justify-center text-[15px] font-semibold"
                     style={{
                       background: isSel ? 'var(--accent)' : 'transparent',
                       color: isSel ? '#000' : !inMonth ? 'var(--text-muted)' : isToday ? 'var(--accent)' : 'var(--text-primary)',
@@ -416,52 +420,52 @@ const InlineTimePicker: React.FC<{ value: string; onChange: (v: string) => void 
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-[400] flex items-center justify-center px-6"
-          style={{ background: 'rgba(3,5,9,0.85)' }}
+          className="fixed inset-0 z-[400] flex items-center justify-center px-4"
+          style={{ background: 'rgba(3,5,9,1)' }}
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-[300px] max-h-[80vh] rounded-3xl p-4"
+            className="w-full max-w-[380px] max-h-[85vh] overflow-y-auto rounded-3xl p-4"
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-[15px] font-bold text-center mb-3" style={{ color: 'var(--text-primary)' }}>
+            <p className="text-[17px] font-bold text-center mb-3" style={{ color: 'var(--text-primary)' }}>
               {h12}:{String(m).padStart(2, '0')} {isPM ? 'PM' : 'AM'}
             </p>
             <div className="flex gap-2">
-              <div className="flex-1 max-h-[200px] overflow-y-auto space-y-0.5">
+              <div className="flex-1 max-h-[240px] overflow-y-auto space-y-1">
                 {HOURS_12.map((hh) => (
                   <button
                     key={hh}
                     type="button"
                     onClick={() => setParts(hh, m, isPM)}
-                    className="w-full h-9 rounded-lg text-[14px] font-semibold"
+                    className="w-full h-11 rounded-lg text-[16px] font-semibold"
                     style={hh === h12 ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
                   >
                     {hh}
                   </button>
                 ))}
               </div>
-              <div className="flex-1 max-h-[200px] overflow-y-auto space-y-0.5">
+              <div className="flex-1 max-h-[240px] overflow-y-auto space-y-1">
                 {MINUTES.map((mm) => (
                   <button
                     key={mm}
                     type="button"
                     onClick={() => setParts(h12, mm, isPM)}
-                    className="w-full h-9 rounded-lg text-[14px] font-semibold"
+                    className="w-full h-11 rounded-lg text-[16px] font-semibold"
                     style={mm === m ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}
                   >
                     :{String(mm).padStart(2, '0')}
                   </button>
                 ))}
               </div>
-              <div className="flex-1 flex flex-col gap-1">
+              <div className="flex-1 flex flex-col gap-1.5">
                 {(['AM', 'PM'] as const).map((ap) => (
                   <button
                     key={ap}
                     type="button"
                     onClick={() => setParts(h12, m, ap === 'PM')}
-                    className="flex-1 rounded-lg text-[13px] font-bold"
+                    className="flex-1 rounded-lg text-[14px] font-bold"
                     style={(ap === 'PM') === isPM ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
                   >
                     {ap}
@@ -472,7 +476,7 @@ const InlineTimePicker: React.FC<{ value: string; onChange: (v: string) => void 
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="w-full h-11 rounded-xl font-bold text-[14px] mt-3"
+              className="w-full h-12 rounded-xl font-bold text-[15px] mt-3"
               style={{ background: 'var(--accent)', color: '#000' }}
             >
               Done

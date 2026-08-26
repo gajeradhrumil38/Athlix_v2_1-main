@@ -17,7 +17,9 @@ export type DialFieldKind =
   | 'minutes'
   | 'seconds'
   | 'height'
-  | 'calories';
+  | 'calories'
+  | 'sets'
+  | 'rest';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exact-name lookup (fastest path — must be lowercase, spaces normalised)

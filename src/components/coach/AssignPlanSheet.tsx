@@ -4,10 +4,12 @@ import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
 import { ExercisePicker, type Exercise } from '../log/ExercisePicker';
+import { DialPicker } from '../log/DialPicker';
 import { assignPlan, updatePlan, type AssignedPlan, type NewPlanExercise } from '../../lib/assignedPlans';
 import { saveTemplate } from '../../lib/supabaseData';
 import { useAuth } from '../../contexts/AuthContext';
 import type { TraineeWorkout } from '../../lib/coachData';
+import type { DialFieldKind } from '../../lib/exerciseTypes';
 
 // Trainer builds a program: exercises picked (multi-select) from the SAME
 // searchable catalog the athlete uses, each prescribed with sets/reps/weight/
@@ -42,12 +44,16 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   // usually one rest interval repeated across most exercises, so this
   // saves re-typing the same value over and over while building a plan.
   const lastRestRef = useRef(90);
+  // Single shared dial state — same pattern as the real workout logger's
+  // dialPicker: only one wheel picker can meaningfully be open at a time,
+  // regardless of which row/field triggered it.
+  const [openDial, setOpenDial] = useState<{ rowIndex: number; field: 'sets' | 'reps' | 'weight' | 'rest'; fieldKind: DialFieldKind; label: string } | null>(null);
 
   const hasContent = title.trim().length > 0 || rows.length > 0;
 
   const reset = () => {
     setTitle(''); setRows([]); setDays([{ id: 0, label: '' }]); setActiveDayId(0); nextDayId.current = 1;
-    setError(''); setBusy(false); setPicking(false); lastRestRef.current = 90;
+    setError(''); setBusy(false); setPicking(false); lastRestRef.current = 90; setOpenDial(null);
   };
   const close = () => { onClose(); reset(); };
   // Backdrop tap / picker-cancel used to discard silently — a coach who spent
@@ -376,10 +382,18 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
                                     </button>
                                   </div>
                                   <div className="grid grid-cols-2 gap-2 mt-3">
-                                    <PrescribeTile label="Sets" value={r.sets} min={1} max={20} step={1} onChange={(v) => set(i, 'sets', v)} />
-                                    <PrescribeTile label="Reps" value={r.reps} min={1} max={100} step={1} onChange={(v) => set(i, 'reps', v)} />
-                                    <PrescribeTile label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb" onChange={(v) => set(i, 'weight', v)} />
-                                    <PrescribeTile label="Rest" value={r.rest} min={0} max={600} step={15} unit="s" onChange={(v) => set(i, 'rest', v)} />
+                                    <PrescribeTile label="Sets" value={r.sets} min={1} max={20} step={1}
+                                      onChange={(v) => set(i, 'sets', v)}
+                                      onOpenDial={() => setOpenDial({ rowIndex: i, field: 'sets', fieldKind: 'sets', label: 'Sets' })} />
+                                    <PrescribeTile label="Reps" value={r.reps} min={1} max={100} step={1}
+                                      onChange={(v) => set(i, 'reps', v)}
+                                      onOpenDial={() => setOpenDial({ rowIndex: i, field: 'reps', fieldKind: 'reps', label: 'Reps' })} />
+                                    <PrescribeTile label="Weight" value={r.weight} min={0} max={2000} step={5} unit="lb"
+                                      onChange={(v) => set(i, 'weight', v)}
+                                      onOpenDial={() => setOpenDial({ rowIndex: i, field: 'weight', fieldKind: 'weight', label: 'Weight' })} />
+                                    <PrescribeTile label="Rest" value={r.rest} min={0} max={600} step={15} formatValue={formatRest}
+                                      onChange={(v) => set(i, 'rest', v)}
+                                      onOpenDial={() => setOpenDial({ rowIndex: i, field: 'rest', fieldKind: 'rest', label: 'Rest' })} />
                                   </div>
                                   <input
                                     value={r.note}
@@ -458,19 +472,38 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
               />
             </div>
           )}
+
+          {openDial && rows[openDial.rowIndex] && (
+            <DialPicker
+              title={openDial.label}
+              fieldKind={openDial.fieldKind}
+              inputType="weight_reps"
+              initialValue={rows[openDial.rowIndex][openDial.field]}
+              weightUnit="lbs"
+              onClose={() => setOpenDial(null)}
+              onConfirm={(v) => { set(openDial.rowIndex, openDial.field, v); setOpenDial(null); }}
+            />
+          )}
         </motion.div>
       )}
     </AnimatePresence>
   );
 };
 
+const formatRest = (v: number) => `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
+
 // Prescribe tile — same tactile −/value/+ language as the workout logger's
-// SetRow, so building a program feels like logging a set. The number in the
-// middle is a real input (not just a label) so a coach can type "225"
-// directly instead of tapping + up to two dozen times to get there.
-const PrescribeTile: React.FC<{ label: string; value: number; min: number; max: number; step: number; unit?: string; onChange: (v: number) => void }> = ({ label, value, min, max, step, unit, onChange }) => {
+// SetRow: quick −/+ steppers for small nudges, and tapping the value itself
+// opens the same scroll-wheel DialPicker used everywhere else in the app
+// (weight/reps in the real logger, duration on appointments) instead of a
+// raw number input — one consistent way to set a number across the app.
+const PrescribeTile: React.FC<{
+  label: string; value: number; min: number; max: number; step: number; unit?: string;
+  formatValue?: (v: number) => string; onChange: (v: number) => void; onOpenDial: () => void;
+}> = ({ label, value, min, max, step, unit, formatValue, onChange, onOpenDial }) => {
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
   const bump = (d: number) => { haptics.tick(); onChange(clamp(value + d * step)); };
+  const display = formatValue ? formatValue(value) : String(value);
   return (
     <div className="relative flex h-[66px] w-full overflow-hidden rounded-xl border" style={{ background: 'var(--bg-base)', borderColor: 'var(--border)' }}>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
@@ -479,24 +512,14 @@ const PrescribeTile: React.FC<{ label: string; value: number; min: number; max: 
         style={{ color: 'var(--text-muted)', borderRight: '1px solid rgba(255,255,255,0.05)' }}>
         <span className="text-[22px] font-light leading-none select-none">−</span>
       </button>
-      <div className="flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px]">
+      <button type="button" onClick={onOpenDial} aria-label={`Set ${label}`}
+        className="flex flex-1 min-w-0 flex-col items-center justify-center gap-[2px]">
         <div className="flex items-baseline gap-1">
-          <input
-            type="number"
-            inputMode="decimal"
-            value={value}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              if (!Number.isNaN(n)) onChange(clamp(n));
-            }}
-            onFocus={(e) => e.target.select()}
-            className="font-victory tabular-nums text-[26px] leading-none font-black text-[var(--text-primary)] bg-transparent outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            style={{ width: `${Math.max(1.4, String(value).length)}ch` }}
-          />
+          <span className="font-victory tabular-nums text-[26px] leading-none font-black text-[var(--text-primary)]">{display}</span>
           {unit && <span className="text-[12px] font-semibold text-[var(--text-muted)]">{unit}</span>}
         </div>
         <div className="text-[9px] font-bold tracking-[0.16em] uppercase text-[var(--text-secondary)]">{label}</div>
-      </div>
+      </button>
       <button type="button" onClick={() => bump(1)} disabled={value >= max} aria-label={`Increase ${label}`}
         className="flex h-full w-[42px] shrink-0 items-center justify-center active:bg-white/[0.04] transition-colors disabled:opacity-30"
         style={{ color: 'var(--accent)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
