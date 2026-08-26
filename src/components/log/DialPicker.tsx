@@ -23,7 +23,13 @@ interface PickerColumn {
   unitLabel?: string;
 }
 
-const ITEM_HEIGHT = 44;
+// Row height for each wheel item. The selected digit renders at 32px/weight
+// 800 (below) — at the old 44px this left barely any gap between the glyph
+// and the selection-zone hairlines drawn right at the row's edges, reading
+// as cramped. Bumping this one shared constant fixes that everywhere it
+// matters (row height, selection-zone box, view height, scroll-snap
+// increments all derive from it) without touching font sizing.
+const ITEM_HEIGHT = 52;
 const VISIBLE_ROWS = 5;
 const VIEW_HEIGHT = ITEM_HEIGHT * VISIBLE_ROWS;
 const VIEW_PADDING = (VIEW_HEIGHT - ITEM_HEIGHT) / 2;
