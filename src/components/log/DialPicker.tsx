@@ -34,6 +34,16 @@ const THETA = 22;
 
 const clampIndex = (index: number, length: number) => Math.max(0, Math.min(length - 1, index));
 
+// Feature-detected once at module load. `scrollend` fires exactly once when
+// scrolling truly stops (drag release, momentum settling, or a smooth
+// scrollTo finishing) — a purpose-built signal rather than the
+// fixed-duration "no scroll events for N ms" guess below, which can misfire
+// on a fast fling (still moving past the timeout) or feel sluggish on a
+// slow one. Reached baseline support across major browsers including
+// Safari (16 partial, full as of 26.2 in Dec 2025), so this is now safe to
+// prefer — falls back to the timeout heuristic on anything older.
+const SUPPORTS_SCROLLEND = typeof window !== 'undefined' && 'onscrollend' in window;
+
 const buildColumns = (
   fieldKind: DialFieldKind,
   inputType: ExerciseInputType,
@@ -330,11 +340,29 @@ const WheelColumn: React.FC<WheelColumnProps> = ({ values, format, initialIndex,
       selectIndex(nextIndex, true);
     });
 
+    // scrollend (below) handles the "settle and snap" job on browsers that
+    // support it — this timeout is only the fallback for ones that don't.
+    if (SUPPORTS_SCROLLEND) return;
     if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = window.setTimeout(() => {
       if (!isProgrammaticRef.current) snapToNearest('smooth');
     }, SCROLL_SETTLE_MS);
   }, [values.length, selectIndex, snapToNearest]);
+
+  // Native scrollend, attached directly (not via a React onScrollEnd prop —
+  // not part of React's synthetic event registry) — fires once scrolling
+  // has genuinely stopped, whether from a drag release, momentum coming to
+  // rest, or a smooth scrollTo finishing.
+  useEffect(() => {
+    if (!SUPPORTS_SCROLLEND) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const onScrollEndNative = () => {
+      if (!isProgrammaticRef.current) snapToNearest('smooth');
+    };
+    node.addEventListener('scrollend', onScrollEndNative);
+    return () => node.removeEventListener('scrollend', onScrollEndNative);
+  }, [snapToNearest]);
 
   return (
     // Outer wrapper: perspective is fixed here so the vanishing point stays
@@ -361,7 +389,13 @@ const WheelColumn: React.FC<WheelColumnProps> = ({ values, format, initialIndex,
           paddingTop: VIEW_PADDING,
           paddingBottom: VIEW_PADDING,
           touchAction: 'pan-y',
-          overscrollBehavior: 'contain',
+          // 'none', not 'contain' — 'contain' only stops the scroll from
+          // chaining to a parent, it doesn't stop the wheel's own elastic
+          // rubber-band bounce past its top/bottom edge (reliable on iOS
+          // Safari 16+, the vast majority of real devices). That native
+          // bounce was letting the drag visually run past index 0 / the
+          // last value before the JS clamp below caught up and fought it.
+          overscrollBehavior: 'none',
         }}
       >
         {values.map((value, index) => {
