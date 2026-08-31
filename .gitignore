@@ -23,3 +23,7 @@ supabase/.temp/
 # Python bytecode cache (ui-ux-pro-max skill scripts)
 __pycache__/
 *.pyc
+
+# Personal data exports staged for the recommendation-model dataset work —
+# never belongs in the repo (real workout history, body weight, etc.)
+/DATA from WEB/
