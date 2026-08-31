@@ -4,11 +4,12 @@ import toast from 'react-hot-toast';
 import {
   Moon, Scale, Activity, LogOut, LayoutDashboard,
   ChevronRight, Trash2, Dumbbell, User, Save, Loader2, CheckCircle, XCircle, Sparkles, Eye, EyeOff,
-  Timer, Pencil, Check, X,
+  Timer, Pencil, Check, X, Download,
 } from 'lucide-react';
 import { HapticPicker } from '../components/shared/HapticPicker';
 import { Link, useNavigate } from 'react-router-dom';
 import { convertWeight, type WeightUnit } from '../lib/units';
+import { exportAllUserData } from '../lib/dataExport';
 import { whoopService } from '../features/whoop/services/whoopService';
 import { useAiCoachKey } from '../hooks/useAiCoachKey';
 import { aiCoachFetch } from '../lib/aiCoachFetch';
@@ -473,6 +474,22 @@ export const Settings: React.FC = () => {
   const removeGeminiKey = async () => {
     await removeAiCoachKey();
     setGeminiKeyInput('');
+  };
+
+  /* ── Export data ──────────────────────────────── */
+  const [exporting, setExporting] = useState(false);
+  const handleExportData = async () => {
+    if (!user || exporting) return;
+    setExporting(true);
+    try {
+      const { files } = await exportAllUserData(user.id);
+      if (files.length === 0) toast('Nothing to export yet — log a workout first.');
+      else toast.success(`Exported ${files.length} file${files.length === 1 ? '' : 's'}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not export your data.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   /* ── Delete account ──────────────────────────── */
@@ -1075,6 +1092,18 @@ export const Settings: React.FC = () => {
             subtitle={user?.email}
           />
         </Row>
+        <button type="button" onClick={handleExportData} disabled={exporting} className="w-full block group disabled:opacity-60">
+          <Row className="hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer">
+            <RowLabel
+              icon={<Download className="w-4 h-4" />}
+              title="Export My Data"
+              subtitle="Workouts, PRs, body weight & WHOOP as CSV"
+            />
+            {exporting
+              ? <Loader2 className="w-4 h-4 animate-spin text-[var(--text-muted)] shrink-0" />
+              : <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors shrink-0" />}
+          </Row>
+        </button>
         <div className="px-5 py-4 space-y-2.5">
           <button
             onClick={signOut}
