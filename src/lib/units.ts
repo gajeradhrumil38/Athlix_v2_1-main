@@ -15,7 +15,16 @@ export const convertWeight = (
   value: number,
   fromUnit: WeightUnit,
   toUnit: WeightUnit,
-  step = toUnit === 'kg' ? 0.5 : 1,
+  // Fine-grained by default (matches the step already used explicitly at
+  // most call sites) — NOT the plate/dial increment (0.5kg / 1lb). That
+  // coarse a default silently drifted values on every conversion: e.g. a
+  // genuine 70lbs, converted to kg and rounded to the nearest 0.5 (32.0kg),
+  // then converted back and rounded to the nearest 1 (71lbs) — a real user
+  // report. No call site in this codebase actually wants snap-to-plate
+  // behavior as a side effect of unit conversion; that belongs to the
+  // dial/stepper input controls themselves, which don't call this at all.
+  // Pass an explicit coarser step only where snapping is the deliberate UX.
+  step = 0.1,
 ) => {
   if (!Number.isFinite(value)) return 0;
   if (fromUnit === toUnit) return roundToStep(value, step);
