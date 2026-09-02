@@ -57,7 +57,11 @@ export default function OnboardingPage() {
   const [sport, setSport] = useState<Sport | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
-  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
+  // 'lbs' to match the actual backend default (profiles.unit_preference
+  // defaults to 'lbs' at signup, set by the handle_new_user trigger) -
+  // this was 'kg', silently contradicting the real default the rest of
+  // the app already uses.
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('lbs');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +96,22 @@ export default function OnboardingPage() {
       setSaving(false);
       setError('Unable to save preferences. Please try again.');
       return;
+    }
+    // The line above only writes to auth user metadata - nothing else in
+    // the app reads that back. The actual weight unit used everywhere
+    // (logging, history, conversions) is profiles.unit_preference, so a
+    // choice made here needs to land there too or it's silently discarded
+    // and the profile just keeps its signup-time default.
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData.user) {
+      const { error: profileError } = await (supabase.from('profiles') as any)
+        .update({ unit_preference: weightUnit, body_weight_unit: weightUnit })
+        .eq('id', userData.user.id);
+      if (profileError) {
+        setSaving(false);
+        setError('Unable to save preferences. Please try again.');
+        return;
+      }
     }
     await redirectToDashboardWithBridge();
   };
