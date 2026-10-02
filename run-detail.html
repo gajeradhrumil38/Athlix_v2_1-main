@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Athlix — Run Detail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  /* ── Athlix tokens (subset used by this screen) ───────────────── */
+  :root {
+    --bg-base: #0a0c10;
+    --bg-elevated: #1a2030;
+    --bg-hover: #1e2638;
+    --border: #1e2638;
+    --accent: #C8FF00;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255,255,255,0.45);
+    --text-muted: rgba(255,255,255,0.26);
+    --tracking-label: 0.16em;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-display: 'Bebas Neue', 'Inter', sans-serif;
+    /* Brand numeral face — point src at your local VictoryStrikerSans.otf */
+    --font-victory: 'VictoryStriker', 'Inter', system-ui, sans-serif;
+  }
+  @font-face {
+    font-family: 'VictoryStriker';
+    src: url('./assets/fonts/VictoryStrikerSans.otf') format('opentype');
+    font-display: swap;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #05070a; display: flex; justify-content: center; padding: 24px; }
+  a { color: var(--accent); }
+  a:hover { color: #b0e000; }
+
+  .screen { width: 390px; min-height: 844px; background: var(--bg-base); font-family: var(--font-sans);
+            display: flex; flex-direction: column; padding: 20px 24px 28px; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; }
+  .icon-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-elevated); border: none;
+              display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .icon-btn:hover { background: var(--bg-hover); }
+  .header-title { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .header-date { font-family: var(--font-display); font-size: 20px; letter-spacing: .04em; color: var(--accent); }
+  .header-sub  { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+  /* Hero distance */
+  .hero { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 40px 0 8px; }
+  .hero b { font-family: var(--font-victory); font-size: 108px; font-weight: 400; line-height: 1.05;
+            color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .hero i { font-family: var(--font-sans); font-size: 22px; font-weight: 700; font-style: normal;
+            letter-spacing: var(--tracking-label); color: var(--accent); }
+
+  /* Stat stack */
+  .stats { display: flex; flex-direction: column; gap: 28px; }
+  .stat  { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .stat-label { font-size: 11px; font-weight: 700; letter-spacing: var(--tracking-label); color: var(--text-secondary); }
+  .stat-row   { display: flex; align-items: center; gap: 6px; line-height: 1.15; }
+  .stat-value { font-family: var(--font-victory); font-size: 40px; font-weight: 400;
+                color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .stat-value.accent { font-size: 46px; color: var(--accent); }
+  .stat-unit  { font-size: 15px; font-weight: 500; color: var(--text-secondary); }
+
+  /* Splits — centered timeline, thin connector between rows */
+  .splits { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .split-item { display: flex; flex-direction: column; align-items: center; }
+  .split-row  { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .split-index { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+  .split-dash  { color: var(--text-muted); }
+  .split-time  { font-family: var(--font-victory); font-size: 26px; font-weight: 400; line-height: 1;
+                 color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .split-connector { width: 1px; height: 16px; background: var(--border); opacity: .6; }
+
+  .footer { text-align: center; padding-top: 24px; }
+  .footer span { font-size: 11px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="screen">
+
+  <div class="header">
+    <button class="icon-btn" aria-label="Back">
+      <i data-lucide="chevron-left" style="width:20px;height:20px;color:var(--text-primary);stroke-width:2.5px"></i>
+    </button>
+    <div class="header-title">
+      <span class="header-date">MON, JUL 27</span>
+      <span class="header-sub">6:55 PM · Outdoor</span>
+    </div>
+    <button class="icon-btn" aria-label="Share">
+      <i data-lucide="share-2" style="width:17px;height:17px;color:var(--text-primary);stroke-width:2px"></i>
+    </button>
+  </div>
+
+  <div class="hero">
+    <b>1.82</b><i>KM</i>
+  </div>
+
+  <div class="stats">
+
+    <div class="stat">
+      <span class="stat-label">PACE</span>
+      <span class="stat-row">
+        <span class="stat-value accent">5:03</span>
+        <span class="stat-unit">/km</span>
+      </span>
+    </div>
+
+    <div class="stat">
+      <span class="stat-label">TIME</span>
+      <span class="stat-row">
+        <span class="stat-value">9:11</span>
+        <span class="stat-unit">elapsed</span>
+      </span>
+    </div>
+
+    <div class="stat">
+      <span class="stat-label">CALORIES</span>
+      <span class="stat-row">
+        <span class="stat-value">118</span>
+        <span class="stat-unit">kcal</span>
+      </span>
+    </div>
+
+    <div class="splits">
+      <span class="stat-label">SPLITS · /KM</span>
+      <div class="split-item">
+        <div class="split-row">
+          <span class="split-index">1</span>
+          <span class="split-dash">—</span>
+          <span class="split-time">4:22</span>
+        </div>
+        <div class="split-connector"></div>
+      </div>
+      <div class="split-item">
+        <div class="split-row">
+          <span class="split-index">2</span>
+          <span class="split-dash">—</span>
+          <span class="split-time">5:03</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>© 2026 Athlix · Map © OpenStreetMap &amp; CARTO</span>
+  </div>
+
+</div>
+
+<script>lucide.createIcons();</script>
+
+</body>
+</html>

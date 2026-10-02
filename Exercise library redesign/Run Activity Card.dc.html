@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/radius.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/base.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/styles.css">
+  <script src="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="./image-slot.js"></script>
+  <style>
+    @keyframes ring-glow { 0%,100% { box-shadow: 0 0 10px rgba(200,255,0,.30); } 50% { box-shadow: 0 0 16px rgba(200,255,0,.42); } }
+  </style>
+</helmet>
+
+<div style="width: 661px; background: var(--bg-base); padding: 24px; font-family: var(--font-sans); display: flex; justify-content: center; box-sizing: border-box; height: 291px">
+  <div style="width: 405px; max-width: 400px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 20px; box-sizing: border-box; position: relative; overflow: hidden; height: 224px">
+    <sc-if value="{{ showMapTrace }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;top:0;right:0;bottom:0;width:150px;overflow:hidden;-webkit-mask-image:linear-gradient(to left, black 55%, transparent);mask-image:linear-gradient(to left, black 55%, transparent)">
+        <image-slot id="run-map-trace-bg-v2" shape="rect" placeholder="Map" style="width:100%;height:100%"></image-slot>
+        <div style="position:absolute;inset:0;background:linear-gradient(to left, rgba(10,12,16,0.3), rgba(10,12,16,0.75));pointer-events:none"></div>
+      </div>
+      <div style="position: absolute; top: 0; right: 0; bottom: 0; width: 150px; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0.95">
+        
+      <svg viewBox="0 0 88 88" width="52" height="52" style="display: block; width: 76px; height: 154px; opacity: 0.69">
+          <path d="M 30 16 L 30 46 L 58 46 L 62 66" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"></path>
+          <circle cx="30" cy="16" r="3.5" fill="var(--accent)"></circle>
+          
+          <circle cx="62" cy="66" r="3.5" fill="var(--accent)"></circle><circle cx="58" cy="46" r="3.5" fill="var(--accent)"></circle>
+        </svg></div>
+    </sc-if>
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span style="font-family:var(--font-display);font-size:22px;letter-spacing:0.02em;color:var(--text-primary);line-height:1">MON, JUL 27</span>
+          <span style="font-size:var(--text-13);font-weight:var(--fw-medium);color:var(--text-secondary);line-height:1">6:55 PM</span>
+          <i data-lucide="cloud" style="width:15px;height:15px;color:var(--text-secondary);stroke-width:2px"></i>
+        </div>
+        <span style="font-size:var(--text-13);font-weight:var(--fw-medium);color:var(--text-secondary)">{{ activityType }}</span>
+      </div>
+      <i data-lucide="chevron-right" style="width:20px;height:20px;color:var(--text-secondary);stroke-width:2px;margin-top:2px"></i>
+    </div>
+
+    <div style="height:1px;background:var(--border-subtle);margin:16px 0"></div>
+
+    
+
+    <div style="display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 20px; padding-top: 0px; padding-bottom: 0px; margin-top: -20px; margin-bottom: -20px">
+
+      <div style="width:112px;height:112px;border-radius:50%;border:5px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-direction:column;animation:ring-glow 2.8s ease-in-out infinite">
+        
+        <span style="font-family: var(--font-victory); font-size: 30px; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; margin-top: 8px; margin-bottom: 8px">{{ distanceKm }}</span><span style="font-family:var(--font-sans);font-size:10px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--accent);margin-top:2px">KM</span>
+      </div><div style="display:grid;grid-template-columns:1fr 1fr;row-gap:20px;column-gap:16px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">TIME</span>
+          <span style="font-family:var(--font-victory);font-size:24px;color:var(--text-primary);line-height:1;font-variant-numeric:tabular-nums">{{ time }}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">PACE</span>
+          <span style="display:flex;align-items:baseline;gap:4px">
+            <span style="font-family:var(--font-victory);font-size:24px;color:var(--text-primary);line-height:1;font-variant-numeric:tabular-nums">{{ pace }}</span>
+            <span style="font-size:12px;color:var(--text-secondary);font-weight:var(--fw-medium)">/km</span>
+          </span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">CAL</span>
+          <span style="display:flex;align-items:baseline;gap:4px">
+            <span style="font-family:var(--font-victory);font-size:24px;color:var(--text-primary);line-height:1;font-variant-numeric:tabular-nums">{{ calories }}</span>
+            
+          </span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">SPLITS</span>
+          <span style="font-family:var(--font-victory);font-size:24px;color:var(--text-primary);line-height:1;font-variant-numeric:tabular-nums">{{ splits }}</span>
+        </div>
+      </div>
+
+      
+
+      <div style="width:150px;height:1px"></div>
+
+    </div><div style="height:1px;background:var(--border-subtle);margin:16px 0"></div>
+
+    <div style="display:flex;justify-content:flex-end">
+      <button onClick="{{ onDelete }}" style="display:flex;align-items:center;gap:8px;background:transparent;border:none;padding:4px 0;cursor:pointer" style-hover="opacity:0.75">
+        <i data-lucide="trash-2" style="width:17px;height:17px;color:var(--text-secondary);stroke-width:2px"></i>
+        <span style="font-size:14px;font-weight:var(--fw-medium);color:var(--text-secondary)">Delete</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:420,&quot;height&quot;:420},&quot;activityType&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Outdoor&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;distanceKm&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;1.82&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;time&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;9:11&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pace&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;5:03&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;calories&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;118&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;splits&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;1&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showMapTrace&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;onDelete&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    if (window.lucide) window.lucide.createIcons();
+  }
+  componentDidUpdate() {
+    if (window.lucide) window.lucide.createIcons();
+  }
+  renderVals() {
+    return {
+      activityType: this.props.activityType ?? 'Outdoor',
+      distanceKm: this.props.distanceKm ?? '1.82',
+      time: this.props.time ?? '9:11',
+      pace: this.props.pace ?? '5:03',
+      calories: this.props.calories ?? '118',
+      splits: this.props.splits ?? '1',
+      showMapTrace: this.props.showMapTrace ?? true,
+      onDelete: () => { if (this.props.onDelete) this.props.onDelete(); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+/* ════════════════════════════════════════════════════════════════════
+   ATHLIX — BASE RESET
+   Dark canvas, Inter body, iOS press physics, lime focus ring,
+   thin scrollbars. Mirrors the app's @layer base.
+   ════════════════════════════════════════════════════════════════════ */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-15);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+/* Tap targets: quick shrink on press (iOS feel) */
+:where(button, [type='button'], [type='submit'], [type='reset']) {
+  border-radius: var(--radius-md);
+  transition: transform var(--t-fast), opacity var(--t-fast), box-shadow var(--t-base);
+}
+:where(button:not(:disabled), [type='button']:not(:disabled),
+       [type='submit']:not(:disabled), [type='reset']:not(:disabled)):active {
+  transform: scale(var(--press-scale));
+}
+
+/* Default control geometry */
+:where(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  min-height: var(--control-height);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset);
+}
+
+/* Lime focus ring */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Accent selection on form controls */
+input[type='checkbox'], input[type='radio'] { accent-color: var(--accent); }
+
+/* Thin scrollbars */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 99px; }
+* { scrollbar-width: thin; scrollbar-color: #333 transparent; }
+
+/* Utilities */
+.font-victory { font-family: var(--font-victory); }
+.tabular { font-variant-numeric: tabular-nums; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

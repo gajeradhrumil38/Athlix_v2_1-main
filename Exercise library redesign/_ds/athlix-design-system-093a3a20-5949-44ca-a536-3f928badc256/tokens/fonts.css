@@ -1,0 +1,15 @@
+/* ─── Athlix webfonts ───────────────────────────────────────────────
+   Body / UI:  Inter           (Google Fonts)
+   Marketing:  Bebas Neue       (Google Fonts — login wordmark)
+   Display:    VictoryStriker   (local OTF — big stat numerals)
+─────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=DM+Sans:wght@400;500;600;700;800&family=Bebas+Neue&display=swap');
+
+@font-face {
+  font-family: 'VictoryStriker';
+  src: url('../assets/fonts/VictoryStrikerSans.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}

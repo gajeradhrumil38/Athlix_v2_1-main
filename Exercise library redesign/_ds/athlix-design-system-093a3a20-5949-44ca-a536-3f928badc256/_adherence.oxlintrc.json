@@ -1,0 +1,353 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/core/**",
+              "components/fitness/**",
+              "ui_kits/app/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:VictoryStriker|Inter|DM Sans|Bebas Neue))/i]",
+        "message": "Font not provided by the design system. Available: VictoryStriker, Inter, DM Sans, Bebas Neue."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|tone|solid|uppercase|key|ref|className|style|children)$/]",
+        "message": "<Badge> doesn't accept that prop. Declared props: children, tone, solid, uppercase."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:accent|chest|back|legs|shoulders|core|biceps|gold|green|red|purple|neutral)$/]",
+        "message": "<Badge> tone must be one of 'accent' | 'chest' | 'back' | 'legs' | 'shoulders' | 'core' | 'biceps' | 'gold' | 'green' | 'red' | 'purple' | 'neutral'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|variant|size|fullWidth|disabled|icon|iconRight|glowColor|key|ref|className|style|children)$/]",
+        "message": "<Button> doesn't accept that prop. Declared props: children, variant, size, fullWidth, disabled, icon, iconRight, glowColor."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:primary|secondary|ghost|outline|danger)$/]",
+        "message": "<Button> variant must be one of 'primary' | 'secondary' | 'ghost' | 'outline' | 'danger'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<Button> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='glowColor'] > Literal[value!=/^(?:blue|accent|subtle)$/]",
+        "message": "<Button> glowColor must be one of 'blue' | 'accent' | 'subtle'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Card'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|title|action|glass|padding|key|ref|className|style|children)$/]",
+        "message": "<Card> doesn't accept that prop. Declared props: children, title, action, glass, padding."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Input'] > JSXAttribute > JSXIdentifier[name!=/^(?:label|hint|error|icon|key|ref|className|style|children)$/]",
+        "message": "<Input> doesn't accept that prop. Declared props: label, hint, error, icon."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ProgressBar'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|max|height|glow|color|track|style|key|ref|className|style|children)$/]",
+        "message": "<ProgressBar> doesn't accept that prop. Declared props: value, max, height, glow, color, track, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='SegmentOption'] > JSXAttribute > JSXIdentifier[name!=/^(?:label|value|key|ref|className|style|children)$/]",
+        "message": "<SegmentOption> doesn't accept that prop. Declared props: label, value."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatRing'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|max|size|stroke|color|label|subLabel|display|key|ref|className|style|children)$/]",
+        "message": "<StatRing> doesn't accept that prop. Declared props: value, max, size, stroke, color, label, subLabel, display."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='StatTile'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|label|unit|icon|delta|accent|style|key|ref|className|style|children)$/]",
+        "message": "<StatTile> doesn't accept that prop. Declared props: value, label, unit, icon, delta, accent, style."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Toggle'] > JSXAttribute > JSXIdentifier[name!=/^(?:checked|onChange|disabled|style|key|ref|className|style|children)$/]",
+        "message": "<Toggle> doesn't accept that prop. Declared props: checked, onChange, disabled, style."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "Badge": {
+        "replaces": []
+      },
+      "Button": {
+        "replaces": []
+      },
+      "Card": {
+        "replaces": []
+      },
+      "Input": {
+        "replaces": []
+      },
+      "ProgressBar": {
+        "replaces": []
+      },
+      "SegmentOption": {
+        "replaces": []
+      },
+      "StatRing": {
+        "replaces": []
+      },
+      "StatTile": {
+        "replaces": []
+      },
+      "Toggle": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--accent",
+      "--accent-dim",
+      "--accent-glow",
+      "--accent-hover",
+      "--ai-gradient",
+      "--ai-gradient-from",
+      "--ai-gradient-to",
+      "--app-max-width",
+      "--back",
+      "--bg-base",
+      "--bg-elevated",
+      "--bg-hover",
+      "--bg-surface",
+      "--biceps",
+      "--blur-head",
+      "--blur-nav",
+      "--border",
+      "--border-subtle",
+      "--cardio",
+      "--chest",
+      "--control-height",
+      "--core",
+      "--ease-ios",
+      "--font-display",
+      "--font-dm",
+      "--font-sans",
+      "--font-victory",
+      "--forearms",
+      "--fw-black",
+      "--fw-bold",
+      "--fw-medium",
+      "--fw-regular",
+      "--fw-semibold",
+      "--glow-accent",
+      "--glow-fab",
+      "--glow-segment",
+      "--glow-text",
+      "--glutes",
+      "--green",
+      "--heart-rate",
+      "--leading-body",
+      "--leading-none",
+      "--leading-tight",
+      "--legs",
+      "--on-accent",
+      "--pr-gold",
+      "--press-scale",
+      "--purple",
+      "--radius-2xl",
+      "--radius-3xl",
+      "--radius-4xl",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--radius-xl",
+      "--radius-xs",
+      "--red",
+      "--ring-recovery",
+      "--ring-strain",
+      "--ring-volume",
+      "--shadow-inset",
+      "--shadow-lg",
+      "--shadow-surface",
+      "--shoulders",
+      "--sidebar-width",
+      "--space-1",
+      "--space-10",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--t-base",
+      "--t-fast",
+      "--t-slow",
+      "--tabbar-height",
+      "--tap-min",
+      "--text-10",
+      "--text-11",
+      "--text-12",
+      "--text-13",
+      "--text-14",
+      "--text-15",
+      "--text-18",
+      "--text-22",
+      "--text-24",
+      "--text-34",
+      "--text-52",
+      "--text-72",
+      "--text-9",
+      "--text-muted",
+      "--text-primary",
+      "--text-secondary",
+      "--tracking-label",
+      "--tracking-logo",
+      "--tracking-normal",
+      "--tracking-tight",
+      "--tracking-wide",
+      "--triceps",
+      "--yellow"
+    ],
+    "tokenKinds": {
+      "--bg-base": "color",
+      "--bg-surface": "color",
+      "--bg-elevated": "color",
+      "--bg-hover": "color",
+      "--border": "color",
+      "--border-subtle": "color",
+      "--text-primary": "font",
+      "--text-secondary": "font",
+      "--text-muted": "font",
+      "--accent": "color",
+      "--accent-hover": "color",
+      "--accent-dim": "color",
+      "--accent-glow": "color",
+      "--on-accent": "color",
+      "--ring-volume": "color",
+      "--ring-recovery": "color",
+      "--ring-strain": "color",
+      "--chest": "color",
+      "--back": "color",
+      "--legs": "color",
+      "--shoulders": "color",
+      "--core": "color",
+      "--biceps": "color",
+      "--triceps": "color",
+      "--cardio": "color",
+      "--glutes": "color",
+      "--forearms": "color",
+      "--green": "color",
+      "--yellow": "color",
+      "--red": "color",
+      "--pr-gold": "color",
+      "--purple": "color",
+      "--heart-rate": "color",
+      "--ai-gradient-from": "color",
+      "--ai-gradient-to": "color",
+      "--ai-gradient": "other",
+      "--font-sans": "font",
+      "--font-dm": "font",
+      "--font-victory": "font",
+      "--font-display": "font",
+      "--text-9": "font",
+      "--text-10": "font",
+      "--text-11": "font",
+      "--text-12": "font",
+      "--text-13": "font",
+      "--text-14": "font",
+      "--text-15": "font",
+      "--text-18": "font",
+      "--text-22": "font",
+      "--text-24": "font",
+      "--text-34": "font",
+      "--text-52": "font",
+      "--text-72": "font",
+      "--fw-regular": "font",
+      "--fw-medium": "font",
+      "--fw-semibold": "font",
+      "--fw-bold": "font",
+      "--fw-black": "font",
+      "--tracking-tight": "font",
+      "--tracking-normal": "font",
+      "--tracking-wide": "font",
+      "--tracking-label": "font",
+      "--tracking-logo": "font",
+      "--leading-none": "font",
+      "--leading-tight": "font",
+      "--leading-body": "font",
+      "--radius-xs": "radius",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-xl": "radius",
+      "--radius-2xl": "radius",
+      "--radius-3xl": "radius",
+      "--radius-4xl": "radius",
+      "--radius-pill": "radius",
+      "--space-1": "spacing",
+      "--space-2": "spacing",
+      "--space-3": "spacing",
+      "--space-4": "spacing",
+      "--space-5": "spacing",
+      "--space-6": "spacing",
+      "--space-8": "spacing",
+      "--space-10": "spacing",
+      "--space-12": "spacing",
+      "--control-height": "spacing",
+      "--press-scale": "other",
+      "--tap-min": "spacing",
+      "--app-max-width": "spacing",
+      "--sidebar-width": "spacing",
+      "--tabbar-height": "spacing",
+      "--shadow-surface": "shadow",
+      "--shadow-lg": "shadow",
+      "--shadow-inset": "shadow",
+      "--glow-accent": "color",
+      "--glow-fab": "color",
+      "--glow-text": "font",
+      "--glow-segment": "shadow",
+      "--blur-nav": "other",
+      "--blur-head": "other",
+      "--ease-ios": "other",
+      "--t-fast": "color",
+      "--t-base": "color",
+      "--t-slow": "color"
+    },
+    "fontFamilies": [
+      "Bebas Neue",
+      "DM Sans",
+      "Inter",
+      "VictoryStriker"
+    ]
+  }
+}

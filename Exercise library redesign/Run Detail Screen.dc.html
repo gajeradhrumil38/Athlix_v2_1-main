@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/radius.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/tokens/base.css">
+  <link rel="stylesheet" href="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/styles.css">
+  <script src="_ds/athlix-design-system-093a3a20-5949-44ca-a536-3f928badc256/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</helmet>
+
+<div style="width:390px;min-height:844px;background:var(--bg-base);position:relative;overflow:hidden;font-family:var(--font-sans)">
+
+  <div style="position:relative;z-index:1;display:flex;flex-direction:column;min-height:844px;box-sizing:border-box;padding:20px 24px 28px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <button onClick="{{ onBack }}" style="width:40px;height:40px;border-radius:50%;background:var(--bg-elevated);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--bg-hover)">
+        <i data-lucide="chevron-left" style="width:20px;height:20px;color:var(--text-primary);stroke-width:2.5px"></i>
+      </button>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+        <span style="font-family:var(--font-display);font-size:20px;letter-spacing:0.04em;color:var(--accent)">{{ dateLabel }}</span>
+        <span style="font-size:var(--text-13);font-weight:var(--fw-medium);color:var(--text-secondary)">{{ timeLabel }} · {{ activityType }}</span>
+      </div>
+      <button style="width:40px;height:40px;border-radius:50%;background:var(--bg-elevated);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:var(--bg-hover)">
+        <i data-lucide="share-2" style="width:17px;height:17px;color:var(--text-primary);stroke-width:2px"></i>
+      </button>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px 0 8px;gap:14px">
+      <div style="width:52px;height:52px;display:flex;align-items:center;justify-content:center">
+        
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding-top: 7px; padding-left: 13px; padding-right: 13px; margin-left: 4px; margin-right: -36px">
+        <span style="font-family:var(--font-victory);font-size:108px;line-height:1.05;color:var(--text-primary);font-variant-numeric:tabular-nums">{{ distanceKm }}</span><span style="font-family: var(--font-sans); font-size: 22px; font-weight: var(--fw-bold); letter-spacing: var(--tracking-label); color: var(--accent); width: 41px; height: 38px; margin-top: 0px; margin-bottom: -91px">KM</span>
+        
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:28px">
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 16px">
+        <span style="font-size:11px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">PACE</span><span style="display: flex; align-items: center; gap: 6px; line-height: 1.15; margin-left: 32px; margin-right: 0px; margin-top: 0px; margin-bottom: 0px">
+          <span style="font-family: var(--font-victory); font-size: 46px; color: var(--accent); font-variant-numeric: tabular-nums; margin-right: -28px">{{ pace }}</span>
+          <span style="font-size: 15px; color: var(--text-secondary); font-weight: var(--fw-medium); margin-top: 25px; margin-left: 28px">/km</span>
+        </span>
+        
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <span style="font-size:11px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">TIME</span>
+        <span style="display:flex;align-items:center;gap:6px;line-height:1.15;padding-top:4px">
+          <span style="font-family:var(--font-victory);font-size:40px;color:var(--text-primary);font-variant-numeric:tabular-nums">{{ time }}</span>
+          
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <span style="font-size:11px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">CALORIES</span>
+        <span style="display: flex; align-items: center; gap: 6px; line-height: 1.15; padding-top: 4px; text-align: center; flex-direction: column">
+          
+          <span style="font-family:var(--font-victory);font-size:40px;color:var(--text-primary);font-variant-numeric:tabular-nums">{{ calories }}</span><span style="font-size:15px;color:var(--text-secondary);font-weight:var(--fw-medium)">kcal</span>
+        </span>
+      </div>
+
+      
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+        <span style="font-size:11px;font-weight:var(--fw-bold);letter-spacing:var(--tracking-label);color:var(--text-secondary)">SPLITS<br></span>
+        <sc-for list="{{ splitsList }}" as="split" hint-placeholder-count="2">
+          <div style="display: flex; flex-direction: column; align-items: center; padding-right: 36px">
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+              <span style="font-size:14px;color:var(--text-secondary);font-weight:var(--fw-medium)">{{ split.index }}</span>
+              <span style="color:var(--text-muted)">—</span>
+              <span style="font-family:var(--font-victory);font-size:26px;color:var(--text-primary);line-height:1;font-variant-numeric:tabular-nums">{{ split.time }}</span>
+            </div>
+            <sc-if value="{{ split.hasConnector }}" hint-placeholder-val="{{ false }}">
+              <div style="width:1px;height:16px;background:var(--border);opacity:0.6"></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+    </div>
+
+    <div style="text-align:center;padding-top:24px">
+      <span style="font-size:11px;color:var(--text-muted)">© {{ year }} Athlix · Map © OpenStreetMap &amp; CARTO</span>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;dateLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;MON, JUL 27&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;timeLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;6:55 PM&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;activityType&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Outdoor&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;distanceKm&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;1.82&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pace&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;5:03&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;time&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;9:11&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;calories&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;118&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;effort&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:3,&quot;min&quot;:0,&quot;max&quot;:5,&quot;step&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;onBack&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    if (window.lucide) window.lucide.createIcons();
+  }
+  componentDidUpdate() {
+    if (window.lucide) window.lucide.createIcons();
+  }
+  renderVals() {
+    const effort = this.props.effort ?? 3;
+    const heights = [10, 14, 18, 22, 26];
+    return {
+      dateLabel: this.props.dateLabel ?? 'MON, JUL 27',
+      timeLabel: this.props.timeLabel ?? '6:55 PM',
+      activityType: this.props.activityType ?? 'Outdoor',
+      distanceKm: this.props.distanceKm ?? '1.82',
+      pace: this.props.pace ?? '5:03',
+      time: this.props.time ?? '9:11',
+      calories: this.props.calories ?? '118',
+      effort: effort,
+      effortBars: heights.map((h, i) => ({ h, color: i < effort ? 'var(--accent)' : 'var(--bg-hover)' })),
+      splitsList: (this.props.splits ?? [{ index: 1, time: '4:22' }, { index: 2, time: '5:03' }]).map((s, i, arr) => ({ ...s, hasConnector: i < arr.length - 1 })),
+      year: new Date().getFullYear(),
+      onBack: () => { if (this.props.onBack) this.props.onBack(); }
+    };
+  }
+}
+</script>
+</body>
+</html>

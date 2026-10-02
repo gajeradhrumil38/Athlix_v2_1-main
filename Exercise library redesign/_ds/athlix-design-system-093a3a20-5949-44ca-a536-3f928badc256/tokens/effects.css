@@ -1,0 +1,49 @@
+/* ════════════════════════════════════════════════════════════════════
+   ATHLIX — EFFECTS: shadows, glows, transitions, keyframes
+   Lime glow is the signature. Soft dark shadows. Quick iOS easing.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Shadows ───────────────────────────────────────────────────── */
+  --shadow-surface: 0 8px 24px rgba(3, 8, 18, 0.30);   /* cards, sheets   */
+  --shadow-lg:      0 12px 30px rgba(0, 0, 0, 0.40);   /* modals, popups  */
+  --shadow-inset:   inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* ── Lime glows — the brand signature ──────────────────────────── */
+  --glow-accent:    0 0 10px var(--accent-glow);       /* rings, bars     */
+  --glow-fab:       0 4px 20px var(--accent-glow);     /* floating button */
+  --glow-text:      0 0 12px rgba(200, 255, 0, 0.5);   /* lime text       */
+  --glow-segment:   0 8px 16px rgba(200, 255, 0, 0.2); /* active segment  */
+
+  /* ── Blur / glass ──────────────────────────────────────────────── */
+  --blur-nav:   blur(24px); /* @kind other */ /* bottom nav / floating bars */
+  --blur-head:  blur(20px); /* @kind other */ /* sticky headers */
+
+  /* ── Transitions ───────────────────────────────────────────────── */
+  --ease-ios:    cubic-bezier(0.4, 0, 0.2, 1); /* @kind other */
+  --t-fast:      0.12s var(--ease-ios);
+  --t-base:      0.18s var(--ease-ios);
+  --t-slow:      0.25s var(--ease-ios);
+}
+
+/* ── Keyframes (lifted from src/index.css) ─────────────────────────── */
+@keyframes cardEnter   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp     { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer     { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes pulseRing   { 0% { box-shadow: 0 0 0 0 rgba(200,255,0,0.60); } 70% { box-shadow: 0 0 0 10px rgba(200,255,0,0); } 100% { box-shadow: 0 0 0 0 rgba(200,255,0,0); } }
+@keyframes accentPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+/* ── Animation utility classes ─────────────────────────────────────── */
+.ax-card-enter { animation: cardEnter 0.4s var(--ease-ios) forwards; }
+.ax-fade-in    { animation: fadeIn 0.3s var(--ease-ios) forwards; }
+.ax-slide-up   { animation: slideUp 0.4s var(--ease-ios) forwards; }
+.ax-pulse-ring { animation: pulseRing 2s infinite; }
+
+/* Skeleton shimmer loader */
+.ax-skeleton {
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-elevated) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-lg);
+}

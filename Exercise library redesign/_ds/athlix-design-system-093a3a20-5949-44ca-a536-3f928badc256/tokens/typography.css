@@ -1,0 +1,47 @@
+/* ════════════════════════════════════════════════════════════════════
+   ATHLIX — TYPOGRAPHY
+   Inter for everything UI. VictoryStriker for hero numerals.
+   Bebas Neue for the marketing wordmark. Tight, uppercase micro-labels.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Families ──────────────────────────────────────────────────── */
+  --font-sans:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-dm:      'DM Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-victory: 'VictoryStriker', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bebas Neue', 'Arial Black', sans-serif;
+
+  /* ── Type scale (px) — mobile-first product UI runs small & dense ── */
+  --text-9:   9px;    /* micro eyebrow / tags            */
+  --text-10:  10px;   /* tab labels, badges             */
+  --text-11:  11px;   /* meta, captions                 */
+  --text-12:  12px;   /* secondary body                 */
+  --text-13:  13px;   /* controls, list rows            */
+  --text-14:  14px;   /* body / nav                     */
+  --text-15:  15px;   /* base body                      */
+  --text-18:  18px;   /* card titles                    */
+  --text-22:  22px;   /* section heads, logo (sidebar)  */
+  --text-24:  24px;   /* page titles                    */
+  --text-34:  34px;   /* hero numerals (VictoryStriker) */
+  --text-52:  52px;   /* wordmark (mobile)              */
+  --text-72:  72px;   /* wordmark (desktop)             */
+
+  /* ── Weights ───────────────────────────────────────────────────── */
+  --fw-regular:  400; /* @kind font */
+  --fw-medium:   500; /* @kind font */
+  --fw-semibold: 600; /* @kind font */
+  --fw-bold:     700; /* @kind font */
+  --fw-black:    800; /* @kind font */
+
+  /* ── Tracking ──────────────────────────────────────────────────── */
+  --tracking-tight:  -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.08em;
+  --tracking-label:  0.16em;   /* uppercase micro-labels  */
+  --tracking-logo:   0.10em;   /* ATHLIX wordmark         */
+
+  /* ── Line heights ──────────────────────────────────────────────── */
+  --leading-none:  1;
+  --leading-tight: 1.2;
+  --leading-body:  1.6;
+}

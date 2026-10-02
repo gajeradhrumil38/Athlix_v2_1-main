@@ -1,0 +1,39 @@
+/* ════════════════════════════════════════════════════════════════════
+   ATHLIX — RADIUS & SPACING
+   Responsive radii via clamp() (smaller on phones, capped on desktop).
+   iOS-inspired control geometry.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Radius — responsive, clamp(mobile-min, vw-scale, desktop-max) ── */
+  --radius-xs:   clamp(4px,  0.8vw, 6px);    /* badges, dots          */
+  --radius-sm:   clamp(6px,  1.2vw, 9px);    /* tags, chips           */
+  --radius-md:   clamp(9px,  1.8vw, 12px);   /* buttons, inputs       */
+  --radius-lg:   clamp(12px, 2.2vw, 16px);   /* cards                 */
+  --radius-xl:   clamp(14px, 2.8vw, 18px);   /* prominent cards       */
+  --radius-2xl:  clamp(16px, 3.2vw, 20px);   /* modals                */
+  --radius-3xl:  clamp(18px, 3.8vw, 24px);   /* bottom sheets         */
+  --radius-4xl:  clamp(20px, 4.5vw, 28px);   /* large bottom sheets   */
+  --radius-pill: 9999px;
+
+  /* ── Spacing scale (px) ────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Control physics ───────────────────────────────────────────── */
+  --control-height: 48px;        /* inputs, primary buttons          */
+  --press-scale:    0.97; /* @kind other */ /* active/tap shrink */
+  --tap-min:        44px;        /* min touch target                 */
+
+  /* ── Layout ────────────────────────────────────────────────────── */
+  --app-max-width:  480px;       /* mobile content column            */
+  --sidebar-width:  240px;       /* desktop nav rail                 */
+  --tabbar-height:  64px;        /* mobile bottom nav                */
+}

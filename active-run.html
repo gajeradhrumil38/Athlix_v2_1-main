@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Athlix — Active Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  /* ── Athlix tokens (subset used by this screen) ───────────────── */
+  :root {
+    --bg-base: #0d0f14;
+    --accent: #C8FF00;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255,255,255,0.38);
+    --font-sans: 'Inter', system-ui, sans-serif;
+    /* Brand numeral face. Replace the src with your local copy of
+       VictoryStrikerSans.otf; falls back to condensed system faces. */
+    --font-victory: 'VictoryStriker', 'Inter', system-ui, sans-serif;
+  }
+  @font-face {
+    font-family: 'VictoryStriker';
+    src: url('./assets/fonts/VictoryStrikerSans.otf') format('opentype');
+    font-display: swap;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #05070a; display: flex; justify-content: center; padding: 24px; }
+  a { color: var(--accent); }
+  a:hover { color: #b0e000; }
+  @keyframes live-dot { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+  .screen { width: 390px; height: 844px; position: relative; overflow: hidden;
+            background: var(--bg-base); font-family: var(--font-sans); }
+
+  /* Background: lime haze + route trace + legibility scrim */
+  .bg-haze  { position: absolute; inset: 0;
+              background: radial-gradient(120% 70% at 50% 18%, rgba(200,255,0,0.05), rgba(13,15,20,0) 60%); }
+  .bg-route { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: .5; }
+  .bg-scrim { position: absolute; inset: 0;
+              background: linear-gradient(to bottom, rgba(13,15,20,0.86) 0%, rgba(13,15,20,0.42) 34%,
+                                          rgba(13,15,20,0.82) 66%, rgba(13,15,20,0.97) 100%); }
+
+  .content { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; padding: 0 16px; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; padding-top: 18px; }
+  .glass-btn { width: 40px; height: 40px; border-radius: 999px; background: rgba(255,255,255,0.06);
+               border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center;
+               justify-content: center; cursor: pointer; backdrop-filter: blur(20px); }
+  .glass-btn:hover { background: rgba(255,255,255,0.12); }
+  .glass-pill { display: flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 12px;
+                background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+                backdrop-filter: blur(20px); }
+  .status-text { font-size: 10px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+                 white-space: nowrap; color: #fff; }
+  .live-dot { width: 8px; height: 8px; border-radius: 999px; background: #ef4444;
+              animation: live-dot 1.4s ease-in-out infinite; }
+  .pause-bars { display: none; gap: 3px; }
+  .pause-bars span { width: 3px; height: 11px; border-radius: 2px; background: var(--accent); }
+  .gps-pill { display: flex; align-items: center; gap: 5px; border-radius: 999px; padding: 7px 11px;
+              background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+              backdrop-filter: blur(20px); }
+  .gps-pill span { font-size: 9px; font-weight: 900; letter-spacing: .18em; color: var(--accent); }
+
+  /* Metrics band: TIME/ELEV · ring · PACE/CAL */
+  .metrics { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 4px 18px; }
+  .stat-col { display: flex; flex-direction: column; gap: 22px; flex: 1; min-width: 0; }
+  .stat-col.left  { align-items: flex-start; }
+  .stat-col.right { align-items: flex-end; }
+  .stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; align-items: flex-start; }
+  .stat-label { font-size: 10px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase;
+                color: var(--text-secondary); }
+  .stat-row { display: flex; align-items: baseline; gap: 5px; }
+  .stat-value { font-family: var(--font-victory); font-size: 28px; line-height: 1;
+                color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-unit { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.32); white-space: nowrap; }
+
+  /* Goal ring */
+  .ring { position: relative; width: 138px; height: 138px; flex-shrink: 0; }
+  .ring svg { display: block; transform: rotate(-90deg); }
+  .ring .track { stroke: rgba(255,255,255,0.08); }
+  .ring .fill  { stroke: var(--accent); filter: drop-shadow(0 0 8px rgba(200,255,0,0.35));
+                 transition: stroke-dashoffset 1s ease-out; }
+  .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column;
+                 align-items: center; justify-content: center; gap: 6px; }
+  .ring-dist { display: flex; align-items: baseline; gap: 4px; }
+  .ring-dist b { font-family: var(--font-victory); font-size: 40px; line-height: .84; font-weight: 400;
+                 color: #fff; font-variant-numeric: tabular-nums; }
+  .ring-dist i { font-family: var(--font-victory); font-size: 13px; font-style: normal;
+                 letter-spacing: .14em; line-height: 1; color: #fff; }
+  .ring-goal { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .ring-goal span { font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+                    color: var(--text-secondary); }
+  .ring-goal b { font-family: var(--font-victory); font-size: 13px; font-weight: 400; line-height: 1;
+                 color: var(--accent); }
+
+  /* Split ticker */
+  .ticker { display: flex; align-items: center; justify-content: center; gap: 6px; padding-bottom: 14px; }
+  .ticker span { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.4); letter-spacing: .04em; }
+
+  /* Controls */
+  .controls { display: flex; align-items: center; gap: 12px; padding-bottom: 28px; }
+  .btn-pause { flex: 1; height: 60px; border-radius: 999px; display: flex; align-items: center;
+               justify-content: center; gap: 10px; cursor: pointer; color: #fff;
+               background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.16);
+               transition: all .2s cubic-bezier(.4,0,.2,1); }
+  .btn-pause:active { transform: scale(0.96); }
+  .btn-pause span { font-family: var(--font-victory); font-size: 15px; letter-spacing: .18em; text-transform: uppercase; }
+  .btn-stop { width: 60px; height: 60px; border-radius: 999px; flex-shrink: 0; display: flex;
+              align-items: center; justify-content: center; cursor: pointer;
+              background: rgba(239,68,68,0.16); border: 1.5px solid rgba(239,68,68,0.4);
+              transition: all .2s cubic-bezier(.4,0,.2,1); }
+  .btn-stop:hover  { background: rgba(239,68,68,0.26); }
+  .btn-stop:active { transform: scale(0.95); }
+
+  /* Paused state — toggled by adding .is-paused to .screen */
+  .is-paused .pause-bars { display: flex; }
+  .is-paused .live-dot   { display: none; }
+  .is-paused .status-text{ color: var(--accent); }
+  .is-paused .btn-pause  { height: 62px; background: var(--accent); border: none; color: #000; }
+  .is-paused .btn-stop   { width: 52px; height: 52px; }
+</style>
+</head>
+<body>
+
+<div class="screen" id="screen">
+  <div class="bg-haze"></div>
+  <div class="bg-route">
+    <svg viewBox="0 0 390 500" width="390" height="500" style="filter:blur(0.4px)">
+      <path d="M 96 90 C 150 120, 120 190, 178 214 C 240 240, 292 214, 300 272 C 308 332, 214 350, 178 396 C 150 432, 176 452, 214 462"
+            fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"></path>
+    </svg>
+  </div>
+  <div class="bg-scrim"></div>
+
+  <div class="content">
+
+    <div class="header">
+      <button class="glass-btn" aria-label="Back">
+        <i data-lucide="chevron-left" style="width:20px;height:20px;color:rgba(255,255,255,0.7);stroke-width:2px"></i>
+      </button>
+
+      <div class="glass-pill">
+        <span class="pause-bars"><span></span><span></span></span>
+        <span class="live-dot"></span>
+        <span class="status-text" id="statusText">Recording</span>
+      </div>
+
+      <div class="gps-pill">
+        <i data-lucide="map-pin" style="width:11px;height:11px;color:var(--accent);stroke-width:2.5px"></i>
+        <span>GPS</span>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div class="metrics">
+
+      <div class="stat-col left">
+        <div class="stat">
+          <span class="stat-label">Time</span>
+          <span class="stat-row"><span class="stat-value">17:54</span><span class="stat-unit">elapsed</span></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Elev</span>
+          <span class="stat-row"><span class="stat-value">34</span><span class="stat-unit">m gain</span></span>
+        </div>
+      </div>
+
+      <div class="ring">
+        <svg viewBox="0 0 138 138" width="138" height="138">
+          <circle class="track" cx="69" cy="69" r="62" fill="none" stroke-width="7"></circle>
+          <circle class="fill"  cx="69" cy="69" r="62" fill="none" stroke-width="7" stroke-linecap="round"
+                  stroke-dasharray="389.6" stroke-dashoffset="123.1" id="ringFill"></circle>
+        </svg>
+        <div class="ring-center">
+          <span class="ring-dist"><b>3.42</b><i>KM</i></span>
+          <span class="ring-goal"><span>Goal</span><b>5 KM</b></span>
+        </div>
+      </div>
+
+      <div class="stat-col right">
+        <div class="stat">
+          <span class="stat-label">Pace</span>
+          <span class="stat-row"><span class="stat-value accent">5:14</span><span class="stat-unit">/km</span></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Cal</span>
+          <span class="stat-row"><span class="stat-value">222</span><span class="stat-unit">kcal</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ticker">
+      <i data-lucide="timer" style="width:13px;height:13px;color:rgba(255,255,255,0.32);stroke-width:2px"></i>
+      <span>Last split 5:02 · 3 km logged</span>
+    </div>
+
+    <div class="controls">
+      <button class="btn-pause" id="pauseBtn">
+        <i data-lucide="pause" id="pauseIcon" style="width:20px;height:20px;fill:currentColor;stroke-width:2px"></i>
+        <span id="pauseLabel">Pause</span>
+      </button>
+      <button class="btn-stop" aria-label="Stop run">
+        <i data-lucide="square" style="width:22px;height:22px;color:#ff6b6b;fill:#ff6b6b;stroke-width:2px"></i>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  // Ring fill helper: circumference 2πr with r = 62 → 389.6
+  const C = 389.6;
+  function setRingProgress(pct) {                      // pct: 0..1
+    document.getElementById('ringFill').setAttribute('stroke-dashoffset', C * (1 - Math.min(1, Math.max(0, pct))));
+  }
+  setRingProgress(3.42 / 5);
+
+  // Pause / resume
+  const screen = document.getElementById('screen');
+  document.getElementById('pauseBtn').addEventListener('click', () => {
+    const paused = screen.classList.toggle('is-paused');
+    document.getElementById('statusText').textContent = paused ? 'Paused' : 'Recording';
+    document.getElementById('pauseLabel').textContent = paused ? 'Resume' : 'Pause';
+    const icon = document.createElement('i');
+    icon.setAttribute('data-lucide', paused ? 'play' : 'pause');
+    icon.setAttribute('style', 'width:20px;height:20px;fill:currentColor;stroke-width:2px');
+    icon.id = 'pauseIcon';
+    document.getElementById('pauseIcon').replaceWith(icon);
+    lucide.createIcons();
+  });
+</script>
+
+</body>
+</html>

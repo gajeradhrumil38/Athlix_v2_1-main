@@ -1,0 +1,61 @@
+/* ════════════════════════════════════════════════════════════════════
+   ATHLIX — COLOUR SYSTEM
+   Source of truth: src/theme/colors.ts (applied at runtime in the app).
+   Lime-on-blue-black. Dark scheme only.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Backgrounds — darkest (root) → lightest (raised) ──────────── */
+  --bg-base:        #0a0c10;   /* app / page background          */
+  --bg-surface:     #121720;   /* cards, sheets, panels          */
+  --bg-elevated:    #1a2030;   /* inputs, inner cards, rows      */
+  --bg-hover:       #1e2638;   /* hover / tapped state           */
+
+  /* ── Borders ───────────────────────────────────────────────────── */
+  --border:         #1e2638;   /* default 1px border             */
+  --border-subtle:  #121720;   /* hairline dividers inside cards */
+
+  /* ── Text ──────────────────────────────────────────────────────── */
+  --text-primary:   #e8edf3;   /* headings, numbers              */
+  --text-secondary: #8692a4;   /* subheads, meta labels          */
+  --text-muted:     #3a4a60;   /* placeholders, disabled, quiet  */
+
+  /* ── Accent — lime. Change one value to re-brand. ──────────────── */
+  --accent:         #C8FF00;
+  --accent-hover:   #b0e000;
+  --accent-dim:     rgba(200, 255, 0, 0.12);   /* tinted fills behind accent */
+  --accent-glow:    rgba(200, 255, 0, 0.30);   /* FAB / ring glow            */
+  --on-accent:      #000000;                   /* text on lime               */
+
+  /* ── Metric rings (Home & Progress hero) ───────────────────────── */
+  --ring-volume:    #4FC3F7;   /* blue   */
+  --ring-recovery:  #FFD54F;   /* yellow */
+  --ring-strain:    #C8FF00;   /* lime   */
+
+  /* ── Muscle groups — workout cards, calendar bars, muscle map ──── */
+  --chest:      #F09595;   /* pink-red    */
+  --back:       #5DCAA5;   /* sage green  */
+  --legs:       #EF9F27;   /* orange      */
+  --shoulders:  #AFA9EC;   /* lavender    */
+  --core:       #ff7a59;   /* coral       */
+  --biceps:     #85B7EB;   /* steel blue  */
+  --triceps:    #AFA9EC;   /* lavender    */
+  --cardio:     #ff7a59;   /* coral       */
+  --glutes:     #F4B96A;   /* amber       */
+  --forearms:   #98D4E8;   /* sky         */
+
+  /* ── Status / semantic ─────────────────────────────────────────── */
+  --green:    #4ade80;   /* success, active            */
+  --yellow:   #FFD54F;   /* warnings, recovery         */
+  --red:      #f87171;   /* errors, destructive        */
+  --pr-gold:  #FAC775;   /* personal-record badge      */
+  --purple:   #a78bfa;   /* AI coach, weekly summary   */
+
+  /* ── Special UI ────────────────────────────────────────────────── */
+  --heart-rate:        #19CCF0;   /* live HR display        */
+  --ai-gradient-from:  #7c3aed;   /* AI Coach icon — purple */
+  --ai-gradient-to:    #2563eb;   /* AI Coach icon — blue   */
+  --ai-gradient: linear-gradient(135deg, #7c3aed, #2563eb); /* @kind other */
+}
