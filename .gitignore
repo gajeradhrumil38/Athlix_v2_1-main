@@ -27,3 +27,16 @@ __pycache__/
 # Personal data exports staged for the recommendation-model dataset work —
 # never belongs in the repo (real workout history, body weight, etc.)
 /DATA from WEB/
+
+# Local design mockups, graphics sources, and editor/agent config —
+# not used by the app build
+/.vscode/
+/Graphics work/
+/Exercise library redesign/
+/Exercise library redesign.zip
+/Dashboard Cards - Standalone.html
+/Run Detail Screen (Standalone).html
+/active-run.html
+/calm-gauge-v2.html
+/run-detail.html
+/Lix_AI.json
