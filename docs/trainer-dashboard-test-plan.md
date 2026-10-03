@@ -103,16 +103,22 @@ Before testing, apply migration `supabase/migrations/20261002000000_harden_coach
 
 ## 6. Log a session for a trainee
 
+The coach's **+ Log** button opens the same full-screen logger the athlete uses, at `/coach/trainee/<id>/log`.
+
 | ID | Steps | Expected |
 |---|---|---|
-| LOG-1 | The + button is visible only when Workouts is shared | Hidden otherwise. |
-| LOG-2 **[FIX]** | Log Bench 3×5 @ 135 lb | T's calendar and logger show **135 lb**. Before the fix it was saved as **135 kg**, because no unit was sent and the database defaulted to kg. |
-| LOG-3 **[FIX]** | Open the sheet after 5 PM local time (US time zones) | Date defaults to **today**, not tomorrow, and the max date is today. |
-| LOG-4 **[FIX]** | Force a future date (dev tools) → Log | Error "Can't log a session in the future." |
-| LOG-5 | Pick a past date | Saved on that date. It appears in A's Recent sessions and T's Calendar. |
-| LOG-6 | Empty title | Saved as "Workout". |
-| LOG-7 | T turns Workouts off, then A tries to log | Rejected with "Not authorized to log for this trainee". |
-| LOG-8 | A coach-logged heavier set beats T's PR | T's PR updates. |
+| LOG-1 | The **+ Log** button (lime outline, next to Assign) | Visible only when the trainee shares Workouts. |
+| LOG-2 | Tap + Log | Start chooser: Repeat last session (title · date · N exercises), one card per assigned plan day, Start blank. No app header or nav. |
+| LOG-3 | Repeat last session | The logger opens with every set of the trainee's last session filled in. The title bar reads "Logging for <name>". |
+| LOG-4 | Start blank → pick an exercise | The picker's Recent tab shows the **trainee's** exercises. Sets prefill from the trainee's last time, not the coach's. |
+| LOG-5 | Fill sets without ticking any → Review & save | The review lists every set with a value. Save → toast "Saved to <name>'s log", and it appears in the coach's Recent sessions and the trainee's Calendar in **lb**. |
+| LOG-6 | Tick only some sets → Review & save | Only ticked sets are listed and saved. |
+| LOG-7 | Change the date in the logger to a past day | Saved on that day. A future date → "Can't log a session in the future." |
+| LOG-8 | Leave mid-entry, then tap + Log again | "Resume unsaved session" appears first; the trash icon discards it after a confirm. |
+| LOG-9 | Rename an exercise inside the coach logger | Renames it in this session only; the coach's own history is untouched. |
+| LOG-10 | Start from a plan day → save | The session is linked to the plan and day: the coach's plan card and the trainee's Home card both count that day as done. |
+| LOG-11 | The trainee turns Workouts off, then the coach opens the log URL | "<name> isn't sharing workouts with you". |
+| LOG-12 | A coach-logged heavier set beats the trainee's PR | The trainee's PR updates. |
 
 ## 7. Appointments (coach side, Calendar)
 
