@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('./aiCoachFetch', () => ({ aiCoachFetch: vi.fn() }));
 vi.mock('../hooks/useAiCoachKey', () => ({ DEFAULT_MODEL: 'm' }));
-import { buildTraineeContext } from './traineeAi';
+import { briefRequest, buildTraineeContext } from './traineeAi';
 import type { TraineeDashboard } from './coachData';
 
 const NOW = new Date('2026-10-03T12:00:00Z').getTime();
@@ -39,5 +39,17 @@ describe('buildTraineeContext', () => {
     const ctx = buildTraineeContext(base({ recovery: { shared: true, data: 62 }, coachNotes: 'Bad left knee' }), NOW);
     expect(ctx).toContain('recovery 62%');
     expect(ctx).toContain("Coach's own notes: Bad left knee");
+  });
+});
+
+describe('briefRequest', () => {
+  it('passes the app signals through and asks for three bullets', () => {
+    const r = briefRequest('Sam', ['Bench flat for 3 sessions.'], '2026-09-28');
+    expect(r).toContain('exactly 3');
+    expect(r).toContain('- Bench flat for 3 sessions.');
+    expect(r).toContain('2026-09-28');
+  });
+  it('says when there are no signals', () => {
+    expect(briefRequest('Sam', [], null)).toContain('no warning signals');
   });
 });

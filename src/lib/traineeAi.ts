@@ -6,7 +6,9 @@ import type { TraineeDashboard } from './coachData';
 // — unlike the personal AI Coach, which reads the signed-in user's own data
 // and can log things to their account.
 
-export interface AiTurn { role: 'user' | 'model'; text: string }
+// `display` is what the card shows for a user turn when the text sent to the
+// model carries extra grounding (e.g. a chip's underlying fact).
+export interface AiTurn { role: 'user' | 'model'; text: string; display?: string }
 
 const DAY = 86_400_000;
 
@@ -103,4 +105,36 @@ export async function askTraineeAi(dash: TraineeDashboard, history: AiTurn[], si
   const text = parts.filter((p) => !p.thought).map((p) => p.text ?? '').join('').trim().replace(/\*\*/g, '');
   if (!text) throw new TraineeAiError('EMPTY', 'No answer came back.');
   return text;
+}
+
+// The daily brief: the app's own signals in, three bullets + a chart out.
+export function briefRequest(firstName: string, facts: string[], lastVisit: string | null): string {
+  return [
+    `Write today's brief on ${firstName} for the coach: exactly 3 "- " bullets.`,
+    '1) what changed recently' + (lastVisit ? ` (the coach last looked on ${lastVisit} — focus on what's new since then)` : '') + ', 2) consistency, 3) the one thing the coach should do next.',
+    facts.length ? `Signals the app already found (trust these, explain them):\n${facts.map((f) => `- ${f}`).join('\n')}` : 'The app found no warning signals.',
+    'End with the single most useful chart tag.',
+  ].join('\n');
+}
+
+const BRIEF_KEY = (key: string) => `athlix:coach-brief:${key}`;
+const VISIT_KEY = (key: string) => `athlix:coach-visit:${key}`;
+const today = () => new Date().toISOString().slice(0, 10);
+
+export function readCachedBrief(key: string): string | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRIEF_KEY(key)) || 'null');
+    return v?.date === today() && typeof v.text === 'string' ? v.text : null;
+  } catch { return null; }
+}
+export function cacheBrief(key: string, text: string) {
+  try { localStorage.setItem(BRIEF_KEY(key), JSON.stringify({ date: today(), text })); } catch { /* ignore */ }
+}
+// Returns the previous visit date (if any) and records today's.
+export function markVisit(key: string): string | null {
+  try {
+    const prev = localStorage.getItem(VISIT_KEY(key));
+    if (prev !== today()) localStorage.setItem(VISIT_KEY(key), today());
+    return prev && prev !== today() ? prev : null;
+  } catch { return null; }
 }

@@ -549,7 +549,7 @@ export const TraineeDetail: React.FC = () => {
           stats: shared ? <WeeklyStats workouts={dash.workouts.data} /> : <NotShared label="This week" />,
           gauge: shared ? <GaugeRing value={weekSessions} goal={GOAL} /> : <NotShared label="Weekly goal" />,
           trend: shared ? (
-            <WidgetCard title="This week vs last" tone={IDENTITY.consistency}>
+            <WidgetCard title="This week vs last" tone={IDENTITY.consistency} ask="How does this week compare to last?">
               <div className="grid grid-cols-2 gap-2">
                 <TrendStat label="Sessions" now={weekSessions} delta={pctDelta(weekSessions, lastSessions)} />
                 <TrendStat label="Volume" now={thisVol} unit="lb" delta={pctDelta(thisVol, lastVol)} />
@@ -557,7 +557,7 @@ export const TraineeDetail: React.FC = () => {
             </WidgetCard>
           ) : <NotShared label="This week vs last" />,
           focus: shared ? (
-            <WidgetCard title="Focus next" meta="last 7 days" tone={anyTrained ? muscleColor(focusPick.r) : undefined}>
+            <WidgetCard title="Focus next" meta="last 7 days" ask="What should we focus on next?" tone={anyTrained ? muscleColor(focusPick.r) : undefined}>
               {anyTrained ? (
                 <>
                   <p className="text-[24px] font-bold text-[var(--text-primary)] leading-none">{focusPick.r}</p>
@@ -570,7 +570,7 @@ export const TraineeDetail: React.FC = () => {
             const sum = regionSummary(muscle.radar);
             const tone = sum.dominant ? muscleColor(sum.dominant.r) : undefined;
             return (
-              <WidgetCard title="Muscle load" tone={tone} meta={PERIOD_LABEL[radarPeriod]}>
+              <WidgetCard title="Muscle load" tone={tone} meta={PERIOD_LABEL[radarPeriod]} ask="Is the muscle balance right?">
                 <div className="mb-3"><PeriodToggle value={radarPeriod} onChange={setRadarPeriod} /></div>
                 {sum.dominant ? (
                   <div className="flex items-end justify-between gap-3 mb-3">
@@ -597,7 +597,7 @@ export const TraineeDetail: React.FC = () => {
             const tone = sum.dominant ? muscleColor(sum.dominant.r) : undefined;
             const hit = Object.values(muscle.map).filter((m) => (m.sets || 0) > 0).length;
             return (
-              <WidgetCard title="Trained muscles" tone={tone} meta={PERIOD_LABEL[mapPeriod]}>
+              <WidgetCard title="Trained muscles" tone={tone} meta={PERIOD_LABEL[mapPeriod]} ask="Which muscles are being neglected?">
                 <div className="flex items-end justify-between gap-3 mb-2">
                   <div>
                     <BigNumber value={hit} unit={`/ ${TOTAL_MUSCLES} muscles`} unitColor={tone} />
@@ -629,7 +629,7 @@ export const TraineeDetail: React.FC = () => {
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
-          ai: <AskAiCard dash={{ ...dash, coachNotes: notes }} />,
+          ai: <AskAiCard dash={{ ...dash, coachNotes: notes }} plans={plans} />,
           notes: (
             <WidgetCard title="Coach notes" icon="Edit"
               right={<span className="text-[11px] font-semibold" style={{ color: notesSaved ? TONE.good : 'var(--text-secondary)' }}>{notesSaved ? 'Saved ✓' : 'Private · saves automatically'}</span>}>
@@ -855,7 +855,7 @@ const GaugeRing: React.FC<{ value: number; goal: number }> = ({ value, goal }) =
   const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, value / goal));
   const left = Math.max(0, goal - value);
   return (
-    <WidgetCard title="Weekly goal" tone={IDENTITY.consistency} meta={`${goal} sessions`}>
+    <WidgetCard title="Weekly goal" tone={IDENTITY.consistency} meta={`${goal} sessions`} ask="Will they hit the weekly goal?">
       <div className="flex items-center gap-4">
         <div className="relative shrink-0" style={{ width: 112, height: 112 }}>
           <svg width={112} height={112} viewBox="0 0 132 132" className="-rotate-90">
@@ -974,7 +974,7 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
   }, [workouts]);
 
   return (
-    <WidgetCard title="Recent sessions" meta="2 weeks" flush>
+    <WidgetCard title="Recent sessions" meta="2 weeks" flush ask="Summarise the last two weeks of sessions">
       {recent.length === 0 ? (
         <div className="px-4 pb-4"><EmptyState icon="History" text="No sessions in the last 2 weeks." /></div>
       ) : (
@@ -1163,7 +1163,7 @@ const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
     };
   }, [workouts]);
   return (
-    <WidgetCard title="This week" tone={IDENTITY.consistency} meta="last 7 days">
+    <WidgetCard title="This week" tone={IDENTITY.consistency} meta="last 7 days" ask="How was this week?">
       <div className="grid grid-cols-3 gap-2">
         {([['Sessions', stat.sessions], ['Sets', stat.sets], ['Exercises', stat.exercises]] as const).map(([label, v]) => (
           <div key={label} className="rounded-xl px-3 py-3" style={tile()}>
@@ -1202,7 +1202,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
   const avg = Math.round(weeks.reduce((a, b) => a + b, 0) / weeks.length);
 
   return (
-    <WidgetCard title="Training volume" tone={IDENTITY.load} meta="8 weeks">
+    <WidgetCard title="Training volume" tone={IDENTITY.load} meta="8 weeks" ask="Explain the volume trend">
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
           <BigNumber value={thisWk.toLocaleString()} unit="lb" unitColor={IDENTITY.load} />
@@ -1228,7 +1228,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
 /* ── PRs ─────────────────────────────────────────────────── */
 // One compact row per lift — name + muscle on the left, best set on the right.
 const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best_reps: number; unit: string }[] }> = ({ prs }) => (
-  <WidgetCard title="Personal records" tone={IDENTITY.records} icon="Trophy" meta={prs.length ? String(prs.length) : undefined} flush>
+  <WidgetCard title="Personal records" tone={IDENTITY.records} icon="Trophy" meta={prs.length ? String(prs.length) : undefined} flush ask="Which lifts are progressing and which are stuck?">
     {!prs.length ? (
       <div className="px-4 pb-4"><EmptyState icon="Trophy" text="No personal records yet." /></div>
     ) : (
@@ -1266,7 +1266,7 @@ const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: str
   const delta = Math.round((latest - first) * 10) / 10;
 
   return (
-    <WidgetCard title="Body weight" tone={IDENTITY.weight} meta={`since ${fmtShort(weights[0].date)}`}>
+    <WidgetCard title="Body weight" tone={IDENTITY.weight} meta={`since ${fmtShort(weights[0].date)}`} ask="What is the body weight trend telling us?">
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
           <BigNumber value={latest.toFixed(1)} unit="lb" unitColor={IDENTITY.weight} />

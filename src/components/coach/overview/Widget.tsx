@@ -37,6 +37,11 @@ export const tile = (tint?: string): React.CSSProperties => ({
 export const glow = (tone?: string): React.CSSProperties =>
   tone ? { backgroundImage: `radial-gradient(130% 90% at 0% 0%, color-mix(in srgb, ${tone} 11%, transparent), transparent 55%)` } : {};
 
+// Any card can hand a question to the Ask AI card on the same page.
+export const ASK_TRAINEE_AI_EVENT = 'athlix:ask-trainee-ai';
+export const askTraineeAiAbout = (question: string) =>
+  window.dispatchEvent(new CustomEvent(ASK_TRAINEE_AI_EVENT, { detail: { question } }));
+
 interface WidgetCardProps {
   title: string;
   // Identity colour for the title/icon. Omit for neutral cards (notes, lists).
@@ -46,13 +51,15 @@ interface WidgetCardProps {
   meta?: string;
   // Controls on the right of the header (kept clear of the drag handle).
   right?: React.ReactNode;
+  // A question for Ask AI — shows a small sparkle button in the header.
+  ask?: string;
   // Lists that run edge to edge (rows with their own padding).
   flush?: boolean;
   className?: string;
   children: React.ReactNode;
 }
 
-export const WidgetCard: React.FC<WidgetCardProps> = ({ title, tone, icon, meta, right, flush = false, className = '', children }) => (
+export const WidgetCard: React.FC<WidgetCardProps> = ({ title, tone, icon, meta, right, ask, flush = false, className = '', children }) => (
   <section className={`glass-card overflow-hidden ${flush ? '' : 'p-4'} ${className}`} style={glow(tone)}>
     {/* pr-9 keeps the header clear of the Overview's drag handle (top-right). */}
     <header className={`flex items-center justify-between gap-2 pr-9 ${flush ? 'px-4 pt-4 pb-3' : 'mb-3'}`}>
@@ -61,7 +68,18 @@ export const WidgetCard: React.FC<WidgetCardProps> = ({ title, tone, icon, meta,
         <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] truncate" style={{ color: tone ?? 'var(--text-secondary)' }}>{title}</h3>
         {meta && <span className="text-[11px] text-[var(--text-secondary)] opacity-70 truncate">· {meta}</span>}
       </div>
-      {right && <div className="shrink-0">{right}</div>}
+      {(right || ask) && (
+        <div className="shrink-0 flex items-center gap-1.5">
+          {right}
+          {ask && (
+            <button type="button" onClick={() => askTraineeAiAbout(ask)} aria-label={`Ask AI: ${ask}`} title="Ask AI about this"
+              className="h-7 w-7 rounded-full flex items-center justify-center transition-opacity opacity-70 hover:opacity-100"
+              style={{ color: 'var(--purple)', background: 'color-mix(in srgb, var(--purple) 10%, transparent)' }}>
+              <AppIcon name="AICoach" size="sm" />
+            </button>
+          )}
+        </div>
+      )}
     </header>
     {children}
   </section>
