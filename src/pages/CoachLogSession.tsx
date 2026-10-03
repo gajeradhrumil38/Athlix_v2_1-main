@@ -27,7 +27,7 @@ const draftKey = (traineeId: string) => `athlix:coach-log-draft:${traineeId}`;
 const muscleFor = (name: string, stored?: string | null) =>
   stored || getExerciseMuscleProfile(name).primary[0] || 'Core';
 
-type Draft = { workout: WorkoutState; sourcePlanId: string | null };
+type Draft = { workout: WorkoutState; sourcePlanId: string | null; sourcePlanDay?: string | null };
 
 const readDraft = (traineeId: string): Draft | null => {
   try {
@@ -108,6 +108,7 @@ export const CoachLogSession: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [workout, setWorkout] = useState<WorkoutState | null>(null);
   const [sourcePlanId, setSourcePlanId] = useState<string | null>(null);
+  const [sourcePlanDay, setSourcePlanDay] = useState<string | null>(null);
   const [openPicker, setOpenPicker] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,8 +125,8 @@ export const CoachLogSession: React.FC = () => {
 
   // Survive an accidental back/refresh mid-entry.
   useEffect(() => {
-    if (workout) writeDraft(id, { workout, sourcePlanId });
-  }, [id, workout, sourcePlanId]);
+    if (workout) writeDraft(id, { workout, sourcePlanId, sourcePlanDay });
+  }, [id, workout, sourcePlanId, sourcePlanDay]);
 
   const workouts = useMemo(() => (dash?.workouts.shared ? dash.workouts.data : []), [dash]);
   const last = workouts[0];
@@ -157,8 +158,9 @@ export const CoachLogSession: React.FC = () => {
     return out;
   }, [workouts]);
 
-  const start = (exercises: ExerciseEntry[], title = '', planId: string | null = null, pickFirst = false) => {
+  const start = (exercises: ExerciseEntry[], title = '', planId: string | null = null, pickFirst = false, planDay: string | null = null) => {
     setSourcePlanId(planId);
+    setSourcePlanDay(planId ? planDay : null);
     setWorkout(newWorkout(exercises, title));
     setOpenPicker(pickFirst);
   };
@@ -194,6 +196,7 @@ export const CoachLogSession: React.FC = () => {
         duration_minutes: Math.max(1, Math.round(seconds / 60)),
         notes: workout.notes || null,
         source_plan_id: sourcePlanId,
+        source_plan_day: sourcePlanDay,
         trainee_id: id,
         exercises: items.map(({ exercise, sets }) => {
           const type = resolveEffectiveInputType(exercise.name, overrides);
@@ -321,6 +324,7 @@ export const CoachLogSession: React.FC = () => {
       key: `${p.id}-${i}`,
       plan: p,
       label: all.length > 1 ? `${p.title} — ${label || `Day ${i + 1}`}` : p.title,
+      day: all.length > 1 ? label : '',
       exs,
     })),
   );
@@ -346,7 +350,7 @@ export const CoachLogSession: React.FC = () => {
               title="Resume unsaved session"
               sub={`${draft.workout.exercises.length} exercise${draft.workout.exercises.length === 1 ? '' : 's'} in progress`}
               accent
-              onClick={() => { setSourcePlanId(draft.sourcePlanId); setWorkout(draft.workout); }}
+              onClick={() => { setSourcePlanId(draft.sourcePlanId); setSourcePlanDay(draft.sourcePlanDay ?? null); setWorkout(draft.workout); }}
               onDismiss={discardDraft}
             />
           )}
@@ -356,7 +360,7 @@ export const CoachLogSession: React.FC = () => {
               title="Repeat last session"
               sub={`${lastTitle || 'Workout'} · ${format(new Date(`${last.date}T00:00:00`), 'EEE, MMM d')} · ${lastCount} exercise${lastCount === 1 ? '' : 's'}`}
               accent={!draft}
-              onClick={() => start(entriesFromWorkout(last), isWorkoutUnnamed(last) ? '' : last.title, last.source_plan_id)}
+              onClick={() => start(entriesFromWorkout(last), isWorkoutUnnamed(last) ? '' : last.title, last.source_plan_id, false, last.source_plan_day ?? null)}
             />
           )}
           {planDays.map((d) => (
@@ -365,7 +369,7 @@ export const CoachLogSession: React.FC = () => {
               icon="Clipboard"
               title={d.label}
               sub={`Assigned plan · ${d.exs.length} exercise${d.exs.length === 1 ? '' : 's'} as prescribed`}
-              onClick={() => start(entriesFromPlan(d.exs), d.label, d.plan.id)}
+              onClick={() => start(entriesFromPlan(d.exs), d.label, d.plan.id, false, d.day)}
             />
           ))}
           <StartCard

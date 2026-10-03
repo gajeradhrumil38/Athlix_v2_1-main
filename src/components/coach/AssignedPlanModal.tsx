@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
-import { getMyAssignedPlans, groupByDay, type AssignedPlan } from '../../lib/assignedPlans';
+import { getMyAssignedPlans, groupByDay, planStartState, type AssignedPlan } from '../../lib/assignedPlans';
 import { getExerciseMuscleProfile } from '../../lib/exerciseMuscles';
 import { muscleColor } from '../../lib/muscleColors';
 import { supabase } from '../../lib/supabase';
@@ -96,14 +96,7 @@ export const AssignedPlanModal: React.FC = () => {
     markSeen(current.id);
     setPlans((p) => p.slice(1));
     if (isMultiDay) { navigate('/my-coach'); return; }
-    const recommendedExercises = current.exercises.map((e) => ({
-      name: e.name,
-      sets: e.default_sets,
-      reps: String(e.default_reps),
-      rest: e.rest_seconds ?? null,
-      weight: e.default_weight || null,
-    }));
-    navigate('/log', { state: { recommendedExercises, suggestedTitle: current.title, sourcePlanId: current.id } });
+    navigate('/log', { state: planStartState(current, dayGroups[0]?.[0] ?? '') });
   };
 
   return (

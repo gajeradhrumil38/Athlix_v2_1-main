@@ -13,6 +13,8 @@ export interface Section<T> { shared: boolean; data: T; }
 export interface TraineeWorkout {
   id: string; date: string; title: string; duration_minutes: number | null; muscle_groups: string[] | null;
   source_plan_id: string | null;
+  source_plan_day?: string | null;
+  created_at?: string | null;
   exercises: { name: string; muscle_group: string | null; sets: number; reps: number; weight: number; unit: string; order_index?: number | null; exercise_db_id?: string | null }[];
 }
 export interface TraineePR { exercise_name: string; best_weight: number; best_reps: number; achieved_date: string; unit: string; }

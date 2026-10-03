@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
-import { groupByDay, type AssignedPlan } from '../../lib/assignedPlans';
+import { groupByDay, planStartState, type AssignedPlan } from '../../lib/assignedPlans';
 import { getExerciseMuscleProfile } from '../../lib/exerciseMuscles';
 import { muscleColor } from '../../lib/muscleColors';
 
@@ -33,14 +33,7 @@ export const PlanPreviewModal: React.FC<Props> = ({ open, plan, loading, role, o
     if (!plan) return;
     onClose();
     if (isMultiDay) { navigate('/my-coach'); return; }
-    const recommendedExercises = plan.exercises.map((e) => ({
-      name: e.name,
-      sets: e.default_sets,
-      reps: String(e.default_reps),
-      rest: e.rest_seconds ?? null,
-      weight: e.default_weight || null,
-    }));
-    navigate('/log', { state: { recommendedExercises, suggestedTitle: plan.title, sourcePlanId: plan.id } });
+    navigate('/log', { state: planStartState(plan, dayGroups[0]?.[0] ?? '') });
   };
 
   return (

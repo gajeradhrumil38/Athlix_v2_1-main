@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppIcon } from '../config/icons';
-import { getMyAssignedPlans, groupByDay, type AssignedPlan, type AssignedPlanExercise } from '../lib/assignedPlans';
+import { getMyAssignedPlans, groupByDay, planStartState, type AssignedPlan } from '../lib/assignedPlans';
 
 const formatRest = (v: number) => `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
 
@@ -19,16 +19,8 @@ export const MyCoach: React.FC = () => {
     (async () => { setPlans(await getMyAssignedPlans()); setLoading(false); })();
   }, []);
 
-  const start = (plan: AssignedPlan, exercises: AssignedPlanExercise[], dayLabel?: string) => {
-    const recommendedExercises = exercises.map((e) => ({
-      name: e.name,
-      sets: e.default_sets,
-      reps: String(e.default_reps),
-      rest: e.rest_seconds ?? null,
-      weight: e.default_weight || null,
-    }));
-    const suggestedTitle = dayLabel ? `${plan.title} — ${dayLabel}` : plan.title;
-    navigate('/log', { state: { recommendedExercises, suggestedTitle, sourcePlanId: plan.id } });
+  const start = (plan: AssignedPlan, dayLabel: string) => {
+    navigate('/log', { state: planStartState(plan, dayLabel) });
   };
 
   return (
@@ -88,7 +80,7 @@ export const MyCoach: React.FC = () => {
                     <div className="p-4">
                       <button
                         type="button"
-                        onClick={() => start(p, exercises, isMultiDay ? (dayLabel || `Day ${gi + 1}`) : undefined)}
+                        onClick={() => start(p, dayLabel)}
                         className="w-full h-13 py-3.5 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2"
                         style={{ background: 'var(--accent)', color: '#000' }}
                       >
