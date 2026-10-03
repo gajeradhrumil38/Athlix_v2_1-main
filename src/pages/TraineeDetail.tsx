@@ -29,6 +29,7 @@ import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
 import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard, tile } from '../components/coach/overview/Widget';
 import { palette } from '../theme/colors';
 import { settleColumns } from '../lib/masonry';
+import { weekStrip } from '../lib/coachToday';
 import { AskAiCard, type AiCardActions } from '../components/coach/overview/AskAiCard';
 import { PackageCard } from '../components/coach/overview/PackageCard';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
@@ -51,9 +52,9 @@ const resolveMuscleGroup = (name: string, stored?: string | null): string =>
 // the old design re-ran the guess on every render and could silently
 // relocate a card the coach had just placed.
 const OVERVIEW_COLUMNS_KEY = 'athlix:coach-overview-columns-v2';
-const DEFAULT_OVERVIEW_ORDER = ['session', 'ai', 'package', 'stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
+const DEFAULT_OVERVIEW_ORDER = ['session', 'ai', 'package', 'week', 'muscles', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
 // Rough card heights, used only to seed an initial balanced split.
-const CARD_WEIGHT: Record<string, number> = { session: 3, ai: 1.8, package: 1.8, stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
+const CARD_WEIGHT: Record<string, number> = { session: 3, ai: 1.8, package: 1.8, week: 2.2, muscles: 4, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
 function distributeMasonry(ids: string[], cols: number): string[][] {
   const columns: string[][] = Array.from({ length: cols }, () => []);
   const heights = new Array(cols).fill(0);
@@ -71,9 +72,17 @@ function distributeMasonry(ids: string[], cols: number): string[][] {
 // widget a coach acts on first, so when it's new to a saved layout it goes to
 // the top of the first column instead (still draggable like any other card).
 const TOP_WIDGETS = new Set(['session']);
+// Cards merged into one: a saved layout keeps the merged card where the
+// first of its old cards was.
+const MERGED_INTO: Record<string, string> = { stats: 'week', trend: 'week', gauge: 'week', focus: 'muscles', radar: 'muscles', map: 'muscles' };
 function reconcileColumns(saved: string[][], availableIds: string[]): string[][] {
   const known = new Set(availableIds);
-  const columns = saved.map((col) => col.filter((id) => known.has(id)));
+  const seen = new Set<string>();
+  const columns = saved.map((col) => col.map((id) => MERGED_INTO[id] ?? id).filter((id) => {
+    if (!known.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }));
   const placed = new Set(columns.flat());
   const missing = availableIds.filter((id) => !placed.has(id));
   const heights = columns.map((col) => col.reduce((s, id) => s + (CARD_WEIGHT[id] ?? 1.5), 0));
@@ -298,30 +307,17 @@ export const TraineeDetail: React.FC = () => {
       return next;
     });
   };
-  // Radar is "this week" (matches its label + the sets normalization, so it
-  // isn't pinned to the edge by months of cumulative sets); the anatomical map
-  // uses a 4-week window like the athlete's own Home.
-  // Each muscle card has its own Today / Week / Month switch, and says which
-  // window it shows — the radar used to be "this week" while the map silently
-  // covered 4 weeks. "Focus next" always reads the last 7 days.
-  const [mapPeriod, setMapPeriod] = useState<MusclePeriod>('week');
-  const [radarPeriod, setRadarPeriod] = useState<MusclePeriod>('week');
+  // One Day / Week / Month switch drives the whole Muscles card (balance radar
+  // and body map), so the two views always describe the same window.
+  const [musclePeriod, setMusclePeriod] = useState<MusclePeriod>('week');
+  const [muscleTab, setMuscleTab] = useState<'balance' | 'body'>('balance');
   const muscle = useMemo(() => {
     const all = dash?.workouts.shared ? dash.workouts.data : [];
     const now = Date.now();
-    const pick = (p: MusclePeriod) => all.filter((w) => inPeriod(w.date, p, now));
-    const mapList = pick(mapPeriod);
-    const radarList = pick(radarPeriod);
-    const mapViz = buildMuscleViz(mapList);
-    return {
-      map: mapViz.map,
-      mapRegions: mapViz.radar,
-      radar: buildMuscleViz(radarList).radar,
-      radarSets: setsIn(radarList),
-      radarSessions: new Set(radarList.map((w) => w.date)).size,
-      focus: buildMuscleViz(pick('week')).radar,
-    };
-  }, [dash, mapPeriod, radarPeriod]);
+    const list = all.filter((w) => inPeriod(w.date, musclePeriod, now));
+    const viz = buildMuscleViz(list);
+    return { map: viz.map, radar: viz.radar, sets: setsIn(list), sessions: new Set(list.map((w) => w.date)).size };
+  }, [dash, musclePeriod]);
 
   const loadPlans = React.useCallback(async () => {
     if (id) setPlans(await getAssignedPlansFor(id));
@@ -565,12 +561,8 @@ export const TraineeDetail: React.FC = () => {
         const lastWk = ws.filter((w) => inWindow(w, now - 14 * DAY, now - 7 * DAY));
         const thisVol = Math.round(volOf(thisWk)); const lastVol = Math.round(volOf(lastWk));
         const lastSessions = new Set(lastWk.map((w) => w.date)).size;
-        const pctDelta = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : a > 0 ? 100 : 0);
-
-        // Least-trained muscle group this week → suggest a focus.
-        const regionSets = REGIONS.map((r) => ({ r, sets: Math.round(muscle.focus[r]?.sets || 0) }));
-        const anyTrained = regionSets.some((x) => x.sets > 0);
-        const focusPick = [...regionSets].sort((a, b) => a.sets - b.sets)[0];
+        const setsOf = (list: TraineeWorkout[]) => list.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0), 0), 0);
+        const weekDates = [...new Set(thisWk.map((w) => w.date))];
 
         // Each card is a draggable widget. Drag the ⠿ handle to rearrange;
         // order persists per coach. Masonry columns pack tightly — no dead space.
@@ -578,37 +570,37 @@ export const TraineeDetail: React.FC = () => {
           session: shared
             ? <CoachSessionCard key={id} traineeId={id!} dash={dash} plans={plans} onSaved={() => { void loadDash(); }} menuInset />
             : <NotShared label="Sessions" />,
-          stats: shared ? <WeeklyStats workouts={dash.workouts.data} /> : <NotShared label="This week" />,
-          gauge: shared ? <GaugeRing value={weekSessions} goal={GOAL} /> : <NotShared label="Weekly goal" />,
-          trend: shared ? (
-            <WidgetCard title="This week vs last" tone={IDENTITY.consistency} ask="How does this week compare to last?">
-              <div className="grid grid-cols-2 gap-2">
-                <TrendStat label="Sessions" now={weekSessions} delta={pctDelta(weekSessions, lastSessions)} />
-                <TrendStat label="Volume" now={thisVol} unit="lb" delta={pctDelta(thisVol, lastVol)} />
-              </div>
-            </WidgetCard>
-          ) : <NotShared label="This week vs last" />,
-          focus: shared ? (
-            <WidgetCard title="Focus next" meta="last 7 days" ask="What should we focus on next?" tone={anyTrained ? muscleColor(focusPick.r) : undefined}>
-              {anyTrained ? (
-                <>
-                  <p className="text-[24px] font-bold text-[var(--text-primary)] leading-none">{focusPick.r}</p>
-                  <p className="text-[13px] text-[var(--text-secondary)] mt-1.5 leading-snug">Least trained ({focusPick.sets} set{focusPick.sets === 1 ? '' : 's'}) — worth programming next.</p>
-                </>
-              ) : <EmptyState text="No training logged this week yet." />}
-            </WidgetCard>
-          ) : <NotShared label="Focus next" />,
-          radar: shared ? (() => {
+          week: shared ? (
+            <WeekCard goal={GOAL} sessions={weekSessions} lastSessions={lastSessions} sets={setsOf(thisWk)} lastSets={setsOf(lastWk)}
+              volume={thisVol} lastVolume={lastVol} dates={weekDates} />
+          ) : <NotShared label="This week" />,
+          muscles: shared ? (() => {
             const sum = regionSummary(muscle.radar);
             const tone = sum.dominant ? muscleColor(sum.dominant.r) : undefined;
+            // Focus next: an untrained region first, else the least trained.
+            const focus = sum.untrained[0] ?? sum.least?.r ?? null;
+            const focusSets = focus ? Math.round(muscle.radar[focus]?.sets || 0) : 0;
+            const hit = Object.values(muscle.map).filter((m) => (m.sets || 0) > 0).length;
+            const span = musclePeriod === 'today' ? 'today' : `in the ${PERIOD_LABEL[musclePeriod]}`;
             return (
-              <WidgetCard title="Muscle load" tone={tone} meta={PERIOD_LABEL[radarPeriod]} ask="Is the muscle balance right?">
-                <div className="mb-3"><PeriodToggle value={radarPeriod} onChange={setRadarPeriod} /></div>
+              <WidgetCard title="Muscles" tone={tone} meta={PERIOD_LABEL[musclePeriod]} ask="Is the muscle balance right, and what should we focus on next?">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <PeriodToggle value={musclePeriod} onChange={setMusclePeriod} />
+                  <div role="tablist" aria-label="Muscle view" className="flex p-0.5 rounded-full" style={tile()}>
+                    {(['balance', 'body'] as const).map((t) => (
+                      <button key={t} type="button" role="tab" aria-selected={muscleTab === t} onClick={() => setMuscleTab(t)}
+                        className="px-3 h-7 rounded-full text-[11px] font-bold transition-colors"
+                        style={muscleTab === t ? { background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', color: 'var(--text-primary)' } : { color: 'var(--text-secondary)' }}>
+                        {t === 'balance' ? 'Balance' : 'Body'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {sum.dominant ? (
                   <div className="flex items-end justify-between gap-3 mb-3">
                     <div>
-                      <BigNumber value={muscle.radarSets} unit="sets" unitColor={tone} />
-                      <StatLabel>{muscle.radarSessions} session{muscle.radarSessions === 1 ? '' : 's'} · {sum.dominant.r}-led</StatLabel>
+                      <BigNumber value={muscle.sets} unit="sets" unitColor={tone} />
+                      <StatLabel>{muscle.sessions} session{muscle.sessions === 1 ? '' : 's'} · {hit}/{TOTAL_MUSCLES} muscles · {sum.dominant.r}-led</StatLabel>
                     </div>
                     <div className="text-right text-[12px] leading-relaxed text-[var(--text-secondary)]">
                       <p>Most <span className="font-bold" style={{ color: muscleColor(sum.dominant.r) }}>{sum.dominant.r} {sum.dominant.sets}</span></p>
@@ -616,47 +608,29 @@ export const TraineeDetail: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-[13px] text-[var(--text-secondary)] mb-3">No training {radarPeriod === 'today' ? 'today' : `in the ${PERIOD_LABEL[radarPeriod]}`} yet.</p>
+                  <p className="text-[13px] text-[var(--text-secondary)] mb-3">No training {span} yet.</p>
+                )}
+                {sum.dominant && focus && (
+                  <div className="mb-3 flex items-center gap-2.5 rounded-2xl px-3 py-2.5" style={tile(muscleColor(focus))}>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: muscleColor(focus) }} />
+                    <p className="text-[13px] text-[var(--text-secondary)] leading-snug">
+                      Focus next: <span className="font-bold" style={{ color: muscleColor(focus) }}>{focus}</span> — {focusSets ? `only ${focusSets} set${focusSets === 1 ? '' : 's'}` : 'not trained'} {span}.
+                    </p>
+                  </div>
                 )}
                 <PlotGrid accent={tone ?? palette.accent}>
-                  <MuscleRadar muscleData={muscle.radar} showTitle={false} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
-                </PlotGrid>
-              </WidgetCard>
-            );
-          })() : <NotShared label="Muscle load" />,
-          map: shared ? (() => {
-            const sum = regionSummary(muscle.mapRegions);
-            const tone = sum.dominant ? muscleColor(sum.dominant.r) : undefined;
-            const hit = Object.values(muscle.map).filter((m) => (m.sets || 0) > 0).length;
-            return (
-              <WidgetCard title="Trained muscles" tone={tone} meta={PERIOD_LABEL[mapPeriod]} ask="Which muscles are being neglected?">
-                <div className="flex items-end justify-between gap-3 mb-2">
-                  <div>
-                    <BigNumber value={hit} unit={`/ ${TOTAL_MUSCLES} muscles`} unitColor={tone} />
-                    <StatLabel>{hit ? `Worked ${mapPeriod === 'today' ? 'today' : `in the ${PERIOD_LABEL[mapPeriod]}`}` : 'Nothing logged in this period'}</StatLabel>
-                  </div>
-                  {sum.dominant && (
-                    <span className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-full"
-                      style={{ background: `color-mix(in srgb, ${muscleColor(sum.dominant.r)} 14%, transparent)`, color: muscleColor(sum.dominant.r) }}>
-                      Most: {sum.dominant.r}
-                    </span>
+                  {muscleTab === 'balance' ? (
+                    <MuscleRadar muscleData={muscle.radar} showTitle={false} periodLabel={PERIOD_LABEL[musclePeriod]} scale={PERIOD_SCALE[musclePeriod]} />
+                  ) : (
+                    <div className="px-1 pb-1">
+                      <MuscleMap bare muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} unit="lbs" gender={dash.sex} />
+                    </div>
                   )}
-                </div>
-                {sum.untrained.length > 0 && hit > 0 && (
-                  <p className="text-[12px] text-[var(--text-secondary)] mb-2.5 leading-snug">
-                    Not trained yet: <span className="font-semibold text-[var(--text-primary)]">{sum.untrained.slice(0, 4).join(', ')}{sum.untrained.length > 4 ? '…' : ''}</span>
-                  </p>
-                )}
-                <PlotGrid accent={tone ?? palette.accent}>
-                  <div className="px-1 pb-1">
-                    <MuscleMap bare muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} unit="lbs" gender={dash.sex}
-                      controls={<PeriodToggle value={mapPeriod} onChange={setMapPeriod} />} />
-                  </div>
                 </PlotGrid>
-                <p className="text-[11px] text-[var(--text-secondary)] mt-2">Brighter = more volume · switch Front / Back to see the other side</p>
+                {muscleTab === 'body' && <p className="text-[11px] text-[var(--text-secondary)] mt-2">Brighter = more volume · Front / Back shows the other side</p>}
               </WidgetCard>
             );
-          })() : <NotShared label="Trained muscles" />,
+          })() : <NotShared label="Muscles" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
@@ -747,13 +721,7 @@ export const TraineeDetail: React.FC = () => {
               {dash.workouts.shared ? <ExerciseHistory workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
             </Section>
           </div>
-          <Section title="Training volume">
-            {dash.workouts.shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Workouts" />}
-          </Section>
-          {dash.prs.shared ? <PRList prs={dash.prs.data} /> : <Section title="Personal records"><NotShared label="Personal records" /></Section>}
-          <Section title="Body weight">
-            {dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />}
-          </Section>
+          {/* Volume, PRs and body weight live on the Overview — no copies here. */}
           <div className="lg:col-span-2">
             {dash.runs.shared ? (
               <div className="glass-card overflow-hidden">
@@ -892,24 +860,46 @@ const MasonryColumn: React.FC<{ id: string; itemIds: string[]; children: React.R
 
 /* ── Weekly goal ring ─────────────────────────────────────── */
 // SVG attributes need a real colour, not a CSS variable — palette hex.
-const GaugeRing: React.FC<{ value: number; goal: number }> = ({ value, goal }) => {
-  const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, value / goal));
-  const left = Math.max(0, goal - value);
+// This week in one card: goal ring, the days trained, and sessions / sets /
+// volume against last week. Replaces three separate cards.
+const WeekCard: React.FC<{ goal: number; sessions: number; lastSessions: number; sets: number; lastSets: number; volume: number; lastVolume: number; dates: string[] }> = ({ goal, sessions, lastSessions, sets, lastSets, volume, lastVolume, dates }) => {
+  const r = 40, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, sessions / goal));
+  const left = Math.max(0, goal - sessions);
+  const pct = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : null);
+  const strip = weekStrip(dates);
   return (
-    <WidgetCard title="Weekly goal" tone={IDENTITY.consistency} meta={`${goal} sessions`} ask="Will they hit the weekly goal?">
+    <WidgetCard title="This week" tone={IDENTITY.consistency} meta="last 7 days" ask="How was this week compared to last?">
       <div className="flex items-center gap-4">
-        <div className="relative shrink-0" style={{ width: 112, height: 112 }}>
-          <svg width={112} height={112} viewBox="0 0 132 132" className="-rotate-90">
-            <circle cx={66} cy={66} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={10} />
-            <circle cx={66} cy={66} r={r} fill="none" stroke={palette.green} strokeWidth={10} strokeLinecap="round"
-              strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
+        <div className="relative shrink-0" style={{ width: 92, height: 92 }}>
+          <svg width={92} height={92} viewBox="0 0 100 100" className="-rotate-90">
+            <circle cx={50} cy={50} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={9} />
+            <circle cx={50} cy={50} r={r} fill="none" stroke={palette.green} strokeWidth={9} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
           </svg>
-          <div className="absolute inset-0 flex items-center justify-center"><BigNumber value={`${value}/${goal}`} size="md" /></div>
+          <div className="absolute inset-0 flex items-center justify-center"><BigNumber value={`${sessions}/${goal}`} size="sm" /></div>
         </div>
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold text-[var(--text-primary)] leading-snug">{left === 0 ? 'Goal hit this week' : `${left} more to hit the goal`}</p>
-          <StatLabel>Sessions in the last 7 days</StatLabel>
+          <p className="text-[15px] font-semibold text-[var(--text-primary)] leading-snug">{left === 0 ? 'Weekly goal hit' : `${left} more to hit ${goal}`}</p>
+          <div className="mt-2 flex gap-1.5" aria-label={`${sessions} sessions in the last 7 days`}>
+            {strip.map((on, i) => {
+              const d = new Date(); d.setDate(d.getDate() - (6 - i));
+              return (
+                <span key={i} className="flex flex-col items-center gap-1">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: on ? 'var(--green)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }} />
+                  <span className="text-[9px] font-semibold text-[var(--text-muted)]">{'SMTWTFS'[d.getDay()]}</span>
+                </span>
+              );
+            })}
+          </div>
         </div>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {([['Sessions', sessions, pct(sessions, lastSessions), undefined], ['Sets', sets, pct(sets, lastSets), undefined], ['Volume', volume, pct(volume, lastVolume), 'lb']] as const).map(([label, v, d, unit]) => (
+          <div key={label} className="rounded-xl px-3 py-2.5" style={tile()}>
+            <BigNumber value={v.toLocaleString()} unit={unit} size="sm" />
+            <StatLabel>{label}</StatLabel>
+            <div className="mt-0.5 text-[11px]"><Delta pct={d} suffix="" /></div>
+          </div>
+        ))}
       </div>
     </WidgetCard>
   );
@@ -996,14 +986,6 @@ const SetGrid: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' 
 };
 
 /* ── This-vs-last stat (trend card) ──────────────────────── */
-const TrendStat: React.FC<{ label: string; now: number; unit?: string; delta: number }> = ({ label, now, unit, delta }) => (
-  <div className="rounded-xl px-3 py-3" style={tile()}>
-    <BigNumber value={now.toLocaleString()} unit={unit} size="md" />
-    <StatLabel>{label}</StatLabel>
-    <div className="mt-1"><Delta pct={delta} /></div>
-  </div>
-);
-
 /* ── Recent sessions (last 2 weeks) — calendar-style, scrollable ── */
 const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
   const recent = useMemo(() => {
@@ -1193,30 +1175,6 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
 
 /* ── This week at a glance ───────────────────────────────── */
 // One card, three numbers. "Last trained" lives in the header status line now.
-const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => {
-  const stat = useMemo(() => {
-    const now = Date.now();
-    const wk = workouts.filter((w) => now - parseDay(w.date) <= 7 * DAY);
-    return {
-      sessions: new Set(wk.map((w) => w.date)).size,
-      sets: wk.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0), 0), 0),
-      exercises: new Set(wk.flatMap((w) => (w.exercises || []).map((e) => e.name.toLowerCase()))).size,
-    };
-  }, [workouts]);
-  return (
-    <WidgetCard title="This week" tone={IDENTITY.consistency} meta="last 7 days" ask="How was this week?">
-      <div className="grid grid-cols-3 gap-2">
-        {([['Sessions', stat.sessions], ['Sets', stat.sets], ['Exercises', stat.exercises]] as const).map(([label, v]) => (
-          <div key={label} className="rounded-xl px-3 py-3" style={tile()}>
-            <BigNumber value={v} size="md" />
-            <StatLabel>{label}</StatLabel>
-          </div>
-        ))}
-      </div>
-    </WidgetCard>
-  );
-};
-
 /* ── Volume trend (last 8 weeks) ─────────────────────────── */
 const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => {
   const points = useMemo(() => {
