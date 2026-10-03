@@ -12,6 +12,7 @@ import { TodaySessionCard } from '../home/TodaySessionCard';
 import { CoachPlanCardView } from '../home/CoachPlanCardView';
 import { CoachLogStartModal } from './CoachLogStart';
 import { CoachSessionReview } from './CoachSessionReview';
+import { SessionRecapModal } from './SessionRecapModal';
 import { confirmDialog } from '../shared/ConfirmDialog';
 
 // Trainee Overview, top: what's next for this trainee and, once started, the
@@ -36,11 +37,15 @@ export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSa
   };
   const update = (workout: WorkoutState) => store({ sourcePlanId: draft?.sourcePlanId ?? null, sourcePlanDay: draft?.sourcePlanDay ?? null, workout });
 
+  // The recap compares against history from BEFORE the save, so snapshot it.
+  const [recap, setRecap] = useState<{ workout: WorkoutState; dash: TraineeDashboard } | null>(null);
+
   const save = async () => {
     if (!draft) return;
     setSaving(true);
     try {
       await saveCoachSession(traineeId, draft, overrides);
+      setRecap({ workout: draft.workout, dash });
       setReviewing(false);
       setDraft(null);
       toast.success(`Saved to ${dash.name}'s log`);
@@ -53,6 +58,7 @@ export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSa
   };
 
   if (!dash.workouts.shared) return null;
+  const recapEl = recap && <SessionRecapModal open dash={recap.dash} workout={recap.workout} onDone={() => setRecap(null)} />;
 
   if (draft) {
     return (
@@ -71,12 +77,14 @@ export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSa
         />
         <CoachSessionReview open={reviewing} onClose={() => !saving && setReviewing(false)} traineeName={dash.name}
           workout={draft.workout} onTitle={(title) => update({ ...draft.workout, title })} saving={saving} onSave={save} />
+        {recapEl}
       </>
     );
   }
 
   return (
     <>
+      {recapEl}
       {plan ? (
         <div>
           <CoachPlanCardView

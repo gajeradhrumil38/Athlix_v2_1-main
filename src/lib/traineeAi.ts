@@ -147,3 +147,9 @@ export function markVisit(key: string): string | null {
 
 export const messageRequest = (first: string, answer: string) =>
   `Rewrite this as a short, warm message from the coach to ${first}: 2–4 sentences, speak to ${first} as "you", plain text, no tags, no bullet points.\n\n${answer}`;
+
+export const recapRequest = (first: string, facts: string[]) =>
+  `Write a short post-session message from the coach to ${first}: 2–4 sentences, speak to ${first} as "you", warm and specific.
+Mention the best result with its real number, and give ONE clear target for next session. Plain text, no tags, no bullet points.
+What happened today:
+${facts.map((f) => `- ${f}`).join('\n')}`;

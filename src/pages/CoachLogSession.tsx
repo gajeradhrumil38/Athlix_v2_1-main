@@ -9,6 +9,7 @@ import { getTraineeDashboard, peekTraineeDashboard, type TraineeDashboard } from
 import { getAssignedPlansFor, peekAssignedPlansFor, type AssignedPlan } from '../lib/assignedPlans';
 import { readCoachDraft, saveCoachSession, seedSession, traineeRecentExercises, writeCoachDraft, type CoachLogStart } from '../lib/coachLog';
 import { CoachSessionReview } from '../components/coach/CoachSessionReview';
+import { SessionRecapModal } from '../components/coach/SessionRecapModal';
 import { useExerciseOverrides } from '../contexts/ExerciseOverridesContext';
 import { confirmDialog } from '../components/shared/ConfirmDialog';
 
@@ -95,6 +96,8 @@ export const CoachLogSession: React.FC = () => {
     setDraft(null);
   };
 
+  // After saving, show the recap (against pre-save history), then go back.
+  const [recap, setRecap] = useState<{ workout: WorkoutState; dash: TraineeDashboard } | null>(null);
   const save = async () => {
     if (!workout || !dash) return;
     setSaving(true);
@@ -102,7 +105,8 @@ export const CoachLogSession: React.FC = () => {
       await saveCoachSession(id, { workout, sourcePlanId, sourcePlanDay }, overrides);
       void getTraineeDashboard(id);
       toast.success(`Saved to ${dash.name}'s log`);
-      goBack();
+      setReviewing(false);
+      setRecap({ workout, dash });
     } catch (e: any) {
       toast.error(e?.message || 'Could not save this session.');
     } finally {
@@ -146,6 +150,7 @@ export const CoachLogSession: React.FC = () => {
 
         <CoachSessionReview open={reviewing} onClose={() => !saving && setReviewing(false)} traineeName={dash.name}
           workout={workout} onTitle={(title) => setWorkout((p) => (p ? { ...p, title } : p))} saving={saving} onSave={save} />
+        {recap && <SessionRecapModal open dash={recap.dash} workout={recap.workout} onDone={goBack} />}
       </>
     );
   }
