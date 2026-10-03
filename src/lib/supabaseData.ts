@@ -769,16 +769,22 @@ const readLegacyDb = (): LegacyDb | null => {
 
 const migrationMarkerKey = (supabaseUserId: string) => `${MIGRATION_KEY_PREFIX}:${supabaseUserId}`;
 
+// The app is lb-only for now: every profile reads as lb regardless of what's
+// stored, so no screen can fall into kg. Stored kg rows (sets, body-weight
+// logs) still carry their own unit and are converted where they're shown.
 const normalizeProfile = (userId: string, row: RawRecord | null): LocalProfile => {
+  const rawBodyWeight = typeof row?.body_weight === 'number' ? row.body_weight : null;
   return {
     id: userId,
     full_name: row?.full_name ?? null,
-    unit_preference: row?.unit_preference === 'kg' ? 'kg' : 'lbs',
+    unit_preference: 'lbs',
     theme_preference: row?.theme_preference === 'darker' ? 'darker' : 'dark',
     start_workout_enabled: Boolean(row?.start_workout_enabled),
     show_start_sheet: Boolean(row?.show_start_sheet),
-    body_weight: typeof row?.body_weight === 'number' ? row.body_weight : null,
-    body_weight_unit: row?.body_weight_unit === 'kg' ? 'kg' : 'lbs',
+    body_weight: rawBodyWeight != null && row?.body_weight_unit === 'kg'
+      ? convertWeight(rawBodyWeight, 'kg', 'lbs')
+      : rawBodyWeight,
+    body_weight_unit: 'lbs',
     height_feet: typeof row?.height_feet === 'number' ? row.height_feet : null,
     height_inches: typeof row?.height_inches === 'number' ? row.height_inches : null,
     created_at: row?.created_at || nowIso(),

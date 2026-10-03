@@ -153,7 +153,7 @@ const FUNCTION_DECLARATIONS = [
       type: 'object',
       properties: {
         weight: { type: 'number', description: 'Body weight value as a number' },
-        unit: { type: 'string', enum: ['kg', 'lbs'], description: "Unit of weight — 'kg' or 'lbs'. Default kg if not specified." },
+        unit: { type: 'string', enum: ['kg', 'lbs'], description: "Unit the user said. Default 'lbs' if not specified — the app stores everything in lbs." },
         date: { type: 'string', description: "Date in YYYY-MM-DD format. Use today's date if not mentioned." },
       },
       required: ['weight'],
@@ -183,7 +183,7 @@ const FUNCTION_DECLARATIONS = [
         sets: { type: 'number', description: 'Number of sets — only provide when explicitly stated by user' },
         reps: { type: 'number', description: 'Reps per set — only provide when explicitly stated by user' },
         weight: { type: 'number', description: 'Weight used. Use 0 for bodyweight exercises.' },
-        unit: { type: 'string', enum: ['kg', 'lbs'], description: "Weight unit — default 'kg'" },
+        unit: { type: 'string', enum: ['kg', 'lbs'], description: "Unit the user said. Default 'lbs' if not specified — the app stores everything in lbs." },
         date: { type: 'string', description: 'Date in YYYY-MM-DD format, defaults to today' },
       },
       required: ['exercise_name', 'sets', 'reps'],
@@ -1465,9 +1465,12 @@ async function executeTool(
 ): Promise<ToolResult> {
   const today = format(new Date(), 'yyyy-MM-dd');
 
+  // The app is lb-only: a value the user gave in kg is converted, never stored as kg.
+  const toLbs = (value: number) => (args.unit === 'kg' ? convertWeight(value, 'kg', 'lbs') : value);
+
   if (name === 'log_weight') {
-    const weight = Number(args.weight);
-    const unit = (args.unit as 'kg' | 'lbs') || 'kg';
+    const weight = toLbs(Number(args.weight));
+    const unit = 'lbs' as const;
     const date = (args.date as string) || today;
     await logBodyWeight(userId, { date, weight, unit });
     return {
@@ -1495,8 +1498,8 @@ async function executeTool(
     const rawName = (args.exercise_name as string) || '';
     const sets = Math.max(1, Number(args.sets) || 1);
     const reps = Math.max(1, Number(args.reps) || 1);
-    const weight = Math.max(0, Math.min(9999, Number(args.weight ?? 0)));
-    const unit = (args.unit as 'kg' | 'lbs') || 'kg';
+    const weight = Math.max(0, Math.min(9999, toLbs(Number(args.weight ?? 0))));
+    const unit = 'lbs' as const;
     const date = (args.date as string) || today;
 
     // Fuzzy-search the library (handles remaining typos the AI missed)

@@ -17,7 +17,7 @@ import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } 
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
 import { updateCoachNotes } from '../lib/coachLinks';
-import { Calendar } from './Calendar';
+import { Calendar, ReadOnlyWorkoutCards } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { RunHistory } from '../features/running/pages/RunHistory';
 import { muscleColor } from '../lib/muscleColors';
@@ -760,38 +760,10 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
       {recent.length === 0 ? (
         <p className="text-[13px] text-[var(--text-muted)] text-center py-6">No sessions in the last 2 weeks.</p>
       ) : (
-        <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--border)]">
-          {recent.map((w) => {
-            // Keep EVERY set per exercise so varying loads are shown accurately.
-            const groups = new Map<string, { sets: SetT[]; muscleGroup: string | null }>();
-            for (const e of w.exercises || []) {
-              const g = groups.get(e.name) || { sets: [], muscleGroup: e.muscle_group ?? null };
-              g.sets.push({ reps: e.reps, weight: e.weight });
-              if (!g.muscleGroup && e.muscle_group) g.muscleGroup = e.muscle_group;
-              groups.set(e.name, g);
-            }
-            const when = new Date(`${w.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-            return (
-              <div key={w.id} className="px-4 py-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[15px] font-bold text-[var(--text-primary)] truncate">{w.title || 'Workout'}</p>
-                  <p className="text-[12px] text-[var(--text-muted)] shrink-0">{when}</p>
-                </div>
-                <div className="mt-2.5 space-y-4">
-                  {[...groups.entries()].map(([name, g]) => (
-                    <ExerciseAccent
-                      key={name}
-                      name={name}
-                      muscleGroup={resolveMuscleGroup(name, g.muscleGroup)}
-                      right={<span className="text-[12px] font-semibold text-[var(--text-muted)]">{g.sets.length} set{g.sets.length !== 1 ? 's' : ''}</span>}
-                    >
-                      <div className="mt-2"><SetGrid sets={g.sets} /></div>
-                    </ExerciseAccent>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+        // The same cards the trainee sees in their own Calendar, read-only —
+        // so a session looks identical on both sides.
+        <div className="max-h-[520px] overflow-y-auto p-3 space-y-3">
+          <ReadOnlyWorkoutCards workouts={recent} />
         </div>
       )}
     </Card>

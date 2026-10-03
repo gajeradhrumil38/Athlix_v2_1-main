@@ -217,25 +217,17 @@ export const Log: React.FC = () => {
   // Set when this session was started from a coach-assigned plan — persisted to
   // the saved workout so the trainer can see prescribed-vs-actual / adherence.
   const sourcePlanIdRef = useRef<string | null>(null);
-  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
+  // lb-only for now — never follow a stale stored kg preference.
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('lbs');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>(() => {
     if (typeof window === 'undefined') return 'mi';
     const stored = localStorage.getItem('athlix_distance_unit');
     return stored === 'km' ? 'km' : 'mi';
   });
 
-  useEffect(() => {
-    setWeightUnit((profile?.unit_preference || 'lbs') as 'kg' | 'lbs');
-  }, [profile?.unit_preference]);
-
-  const handleWeightUnitChange = useCallback(async (nextUnit: 'kg' | 'lbs') => {
-    setWeightUnit(nextUnit);
-    try {
-      await updateProfile({ unit_preference: nextUnit });
-    } catch {
-      // keep local fallback even if remote update fails
-    }
-  }, [updateProfile]);
+  const handleWeightUnitChange = useCallback((_nextUnit: 'kg' | 'lbs') => {
+    setWeightUnit('lbs');
+  }, []);
 
   const handleDistanceUnitChange = useCallback((nextUnit: 'km' | 'mi') => {
     setDistanceUnit(nextUnit);

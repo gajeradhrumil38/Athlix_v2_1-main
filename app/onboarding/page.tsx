@@ -57,11 +57,8 @@ export default function OnboardingPage() {
   const [sport, setSport] = useState<Sport | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>('km');
-  // 'lbs' to match the actual backend default (profiles.unit_preference
-  // defaults to 'lbs' at signup, set by the handle_new_user trigger) -
-  // this was 'kg', silently contradicting the real default the rest of
-  // the app already uses.
-  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('lbs');
+  // The app is lb-only for now, so there's no unit choice to offer.
+  const weightUnit = 'lbs' as const;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -233,27 +230,6 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                {/* Weight unit */}
-                <div>
-                  <p className="brand-label mb-3">Weight units</p>
-                  <div className="flex gap-2">
-                    {(['kg', 'lbs'] as const).map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => setWeightUnit(u)}
-                        className="flex-1 rounded-lg border py-3 text-[14px] font-semibold uppercase transition-all"
-                        style={{
-                          borderColor: weightUnit === u ? '#C8FF00' : '#2a2a2a',
-                          background: weightUnit === u ? 'rgba(200,255,0,0.08)' : '#1a1a1a',
-                          color: weightUnit === u ? '#C8FF00' : '#666',
-                        }}
-                      >
-                        {u}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               {error && (

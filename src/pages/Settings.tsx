@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { HapticPicker } from '../components/shared/HapticPicker';
 import { Link, useNavigate } from 'react-router-dom';
-import { convertWeight, type WeightUnit } from '../lib/units';
 import { exportAllUserData } from '../lib/dataExport';
 import { whoopService } from '../features/whoop/services/whoopService';
 import { useAiCoachKey } from '../hooks/useAiCoachKey';
@@ -423,7 +422,7 @@ export const Settings: React.FC = () => {
     save(
       {
         body_weight: draftProfile?.body_weight ?? null,
-        body_weight_unit: draftProfile?.body_weight_unit || 'lbs',
+        body_weight_unit: 'lbs',
         height_feet: draftProfile?.height_feet ?? null,
         height_inches: draftProfile?.height_inches ?? null,
       },
@@ -432,28 +431,11 @@ export const Settings: React.FC = () => {
     setMetricsChanged(false);
   };
 
-  const handleUnitChange = (unit: string) => {
-    setDraftProfile((prev: any) => ({ ...prev, unit_preference: unit }));
-    save({ unit_preference: unit }, `Weight unit → ${unit}`);
-  };
-
   const handleThemeChange = (theme: string) =>
     save({ theme_preference: theme }, `Theme → ${theme}`);
 
   const handleToggle = (field: string, current: boolean) =>
     save({ [field]: !current }, 'Setting updated');
-
-  const handleBodyWeightUnitChange = (nextUnit: WeightUnit) => {
-    setDraftProfile((prev: any) => {
-      if (!prev || prev.body_weight_unit === nextUnit) return prev;
-      const nextWeight =
-        prev.body_weight == null
-          ? null
-          : convertWeight(Number(prev.body_weight), prev.body_weight_unit, nextUnit, 0.1);
-      return { ...prev, body_weight: nextWeight, body_weight_unit: nextUnit };
-    });
-    setMetricsChanged(true);
-  };
 
   const saveGeminiKey = async () => {
     const trimmed = geminiKeyInput.trim();
@@ -607,19 +589,14 @@ export const Settings: React.FC = () => {
           </Row>
         </Link>
 
-        {/* Weight unit */}
+        {/* Weight unit — the app is lb-only for now, so this is informational. */}
         <Row>
           <RowLabel
             icon={<Scale className="w-4 h-4" />}
             title="Weight Unit"
-            subtitle="Applies to all logging & history"
+            subtitle="All logging & history is in pounds"
           />
-          <SegmentControl
-            options={['kg', 'lbs']}
-            value={draftProfile?.unit_preference || 'lbs'}
-            onChange={handleUnitChange}
-            disabled={saving}
-          />
+          <span className="text-[13px] font-semibold px-3 py-1.5 rounded-xl" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>lbs</span>
         </Row>
 
         {/* Theme */}
@@ -790,11 +767,7 @@ export const Settings: React.FC = () => {
                 className="flex-1 h-10 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl px-3.5 text-[14px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]/60 transition-colors"
                 placeholder="e.g. 75"
               />
-              <SegmentControl
-                options={['kg', 'lbs']}
-                value={draftProfile?.body_weight_unit || 'lbs'}
-                onChange={(v) => handleBodyWeightUnitChange(v as WeightUnit)}
-              />
+              <span className="h-10 px-3.5 rounded-xl flex items-center text-[14px] font-semibold" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>lbs</span>
             </div>
           </div>
 

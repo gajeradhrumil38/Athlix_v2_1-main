@@ -1186,6 +1186,73 @@ const WorkoutCard: React.FC<{
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+// How one stored workout becomes calendar cards. Named workouts, and unnamed
+// ones with 0-1 exercises, render as a single card. Only an UNNAMED workout
+// with 2+ exercises splits into a card per exercise (the user's chosen
+// behaviour: unnamed = separate, named = grouped). The underlying data stays
+// ONE workout row. Shared by the Calendar and the coach's read-only log so
+// both always look the same.
+type WorkoutCardEntry = { workout: any; splitParentId?: string; splitName?: string };
+function workoutCardEntries(workout: any, filterMuscle: string | null = null): WorkoutCardEntry[] {
+  const distinctNames = Array.from(
+    new Set((workout.exercises || []).map((e: any) => e?.name as string).filter(Boolean)),
+  ) as string[];
+  if (!isWorkoutUnnamed(workout) || distinctNames.length <= 1) return [{ workout }];
+
+  // In filter mode, only the exercises of the filtered muscle become cards
+  // (an unnamed workout that included Legs shows just its leg exercises).
+  const splitNames = filterMuscle
+    ? distinctNames.filter((name) =>
+        exerciseMatchesFilter(
+          (workout.exercises || []).find((e: any) => e?.name === name)?.muscle_group,
+          filterMuscle,
+        ),
+      )
+    : distinctNames;
+
+  return splitNames.map((name) => {
+    const rows = (workout.exercises || []).filter((e: any) => e?.name === name);
+    const group = rows[0]?.muscle_group ?? (workout.muscle_groups || [])[0];
+    return {
+      workout: {
+        ...workout,
+        id: `${workout.id}::${name}`,
+        title: '',                  // unnamed single-exercise view → titled by its exercise
+        exercises: rows,
+        muscle_groups: group ? [group] : [],
+        duration_minutes: 0,        // a per-exercise card doesn't own the session's duration
+      },
+      splitParentId: workout.id,
+      splitName: name,
+    };
+  });
+}
+
+const noop = () => {};
+
+// The exact cards an athlete sees in their own Calendar, read-only — used by
+// the coach's view of a trainee so a trainee's log looks the same to both.
+export const ReadOnlyWorkoutCards: React.FC<{ workouts: any[]; unit?: WeightUnit }> = ({ workouts, unit = 'lbs' }) => (
+  <>
+    {workouts.flatMap((w) => workoutCardEntries(w).map((entry) => (
+      <WorkoutCard
+        key={entry.workout.id}
+        workout={entry.workout}
+        unit={unit}
+        onDelete={noop}
+        onSaved={noop}
+        onRenamed={noop}
+        onExtracted={noop}
+        sameDayWorkouts={[]}
+        onMerged={noop}
+        splitParentId={entry.splitParentId}
+        splitName={entry.splitName}
+        readOnly
+      />
+    )))}
+  </>
+);
+
 export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ userId, readOnly = false }) => {
   const { user, profile } = useAuth();
   // When a coach views a trainee, read that trainee's workouts (RLS-gated) in a
@@ -1509,78 +1576,27 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
     );
   };
 
-  const renderWorkoutCard = (workout: any, allDayWorkouts: any[], filterMuscle: string | null = null) => {
-    const distinctNames = Array.from(
-      new Set((workout.exercises || []).map((e: any) => e?.name as string).filter(Boolean)),
-    ) as string[];
-
-    // Named workouts, and unnamed ones with 0-1 exercises, render as a
-    // single card. Only an UNNAMED workout with 2+ exercises splits into a
-    // card per exercise (the user's chosen behaviour: unnamed = separate,
-    // named = grouped). The underlying data stays ONE workout row.
-    if (!isWorkoutUnnamed(workout) || distinctNames.length <= 1) {
-      return (
-        <WorkoutCard
-          key={workout.id}
-          workout={workout}
-          unit={unit}
-          onDelete={handleDelete}
-          onSaved={handleSetsUpdated}
-          onRenamed={handleRenamed}
-          onExtracted={handleExtracted}
-          sameDayWorkouts={allDayWorkouts.filter((w) => w.id !== workout.id)}
-          onMerged={handleMerged}
-          onOpenProgress={(name, muscle) => setProgressExercise({ name, muscle })}
-          onRepeat={() => repeatWorkout(workout)}
-          onOpenRun={isRunWorkout(workout) ? () => navigate(`/run/history?workout=${workout.id}`) : undefined}
-          readOnly={readOnly}
-        />
-      );
-    }
-
-    // In filter mode, only the exercises of the filtered muscle become cards
-    // (an unnamed workout that included Legs shows just its leg exercises).
-    const splitNames = filterMuscle
-      ? distinctNames.filter((name) =>
-          exerciseMatchesFilter(
-            (workout.exercises || []).find((e: any) => e?.name === name)?.muscle_group,
-            filterMuscle,
-          ),
-        )
-      : distinctNames;
-
-    return splitNames.map((name) => {
-      const rows = (workout.exercises || []).filter((e: any) => e?.name === name);
-      const group = rows[0]?.muscle_group ?? (workout.muscle_groups || [])[0];
-      const synthetic = {
-        ...workout,
-        id: `${workout.id}::${name}`,
-        title: '',                  // unnamed single-exercise view → titled by its exercise
-        exercises: rows,
-        muscle_groups: group ? [group] : [],
-        duration_minutes: 0,        // a per-exercise card doesn't own the session's duration
-      };
-      return (
-        <WorkoutCard
-          key={synthetic.id}
-          workout={synthetic}
-          unit={unit}
-          onDelete={handleDelete}
-          onSaved={handleSetsUpdated}
-          onRenamed={handleRenamed}
-          onExtracted={handleExtracted}
-          sameDayWorkouts={[]}
-          onMerged={handleMerged}
-          splitParentId={workout.id}
-          splitName={name}
-          onDeleteExercise={handleDeleteExercise}
-          onOpenProgress={(exName, muscle) => setProgressExercise({ name: exName, muscle })}
-          onRepeat={() => repeatWorkout(synthetic)}
-          readOnly={readOnly}
-        />
-      );
-    });
-  };
+  const renderWorkoutCard = (workout: any, allDayWorkouts: any[], filterMuscle: string | null = null) =>
+    workoutCardEntries(workout, filterMuscle).map((entry) => (
+      <WorkoutCard
+        key={entry.workout.id}
+        workout={entry.workout}
+        unit={unit}
+        onDelete={handleDelete}
+        onSaved={handleSetsUpdated}
+        onRenamed={handleRenamed}
+        onExtracted={handleExtracted}
+        sameDayWorkouts={entry.splitName ? [] : allDayWorkouts.filter((w) => w.id !== workout.id)}
+        onMerged={handleMerged}
+        splitParentId={entry.splitParentId}
+        splitName={entry.splitName}
+        onDeleteExercise={entry.splitName ? handleDeleteExercise : undefined}
+        onOpenProgress={(name, muscle) => setProgressExercise({ name, muscle })}
+        onRepeat={() => repeatWorkout(entry.workout)}
+        onOpenRun={!entry.splitName && isRunWorkout(workout) ? () => navigate(`/run/history?workout=${workout.id}`) : undefined}
+        readOnly={readOnly}
+      />
+    ));
 
   // 5-day focal strip for Today view — selected day centre, ±1 & ±2 fade out
   const renderTodayStrip = () => {

@@ -603,15 +603,20 @@ const readDb = (): LocalDatabase => {
 
   try {
     const parsed = JSON.parse(raw) as Partial<LocalDatabase>;
-    const normalizedProfiles = (parsed.profiles || []).map((profile) => ({
+    // lb-only for now (mirrors normalizeProfile in supabaseData).
+    const normalizedProfiles = (parsed.profiles || []).map((profile) => {
+      const rawBw = typeof (profile as any).body_weight === 'number' ? (profile as any).body_weight : null;
+      return {
       ...profile,
+      unit_preference: 'lbs',
       start_workout_enabled: Boolean((profile as any).start_workout_enabled),
       show_start_sheet: Boolean((profile as any).show_start_sheet),
-      body_weight: typeof (profile as any).body_weight === 'number' ? (profile as any).body_weight : null,
-      body_weight_unit: (profile as any).body_weight_unit === 'kg' ? 'kg' : 'lbs',
+      body_weight: rawBw != null && (profile as any).body_weight_unit === 'kg' ? convertWeight(rawBw, 'kg', 'lbs') : rawBw,
+      body_weight_unit: 'lbs',
       height_feet: typeof (profile as any).height_feet === 'number' ? (profile as any).height_feet : null,
       height_inches: typeof (profile as any).height_inches === 'number' ? (profile as any).height_inches : null,
-    })) as LocalProfile[];
+      };
+    }) as LocalProfile[];
 
     return {
       ...createInitialDb(),
