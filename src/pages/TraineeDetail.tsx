@@ -15,6 +15,7 @@ import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { getAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
+import { dayOfSession } from '../lib/planProgress';
 import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar, ReadOnlyWorkoutCards } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
@@ -1094,16 +1095,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
   // is scored against the day it best matches — not the whole program (which
   // marked every other day's exercises "Missed" and capped adherence at ~1/N).
   const dayGroups = groupByDay(plan.exercises);
-  const sessionDay = (() => {
-    if (!latest || dayGroups.length <= 1) return dayGroups[0]?.[0] ?? '';
-    let best = dayGroups[0][0];
-    let bestHits = -1;
-    for (const [label, exs] of dayGroups) {
-      const hits = exs.filter((ex) => actualFor(ex.name) != null).length;
-      if (hits > bestHits) { best = label; bestHits = hits; }
-    }
-    return best;
-  })();
+  const sessionDay = latest && dayGroups.length > 1 ? (dayOfSession(plan, latest) ?? dayGroups[0][0]) : (dayGroups[0]?.[0] ?? '');
   const scored = dayGroups.find(([label]) => label === sessionDay)?.[1] ?? plan.exercises;
   const doneCount = latest ? scored.filter((ex) => actualFor(ex.name) != null).length : 0;
   const donePct = latest && scored.length ? doneCount / scored.length : 0;

@@ -77,7 +77,7 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
     supabase.rpc('coach_trainee_identity', { _trainee: traineeId }).maybeSingle(),
     wantWorkouts
       ? supabase.from('workouts')
-          .select('id, date, title, duration_minutes, muscle_groups, source_plan_id, exercises(name, muscle_group, sets, reps, weight, unit, order_index, exercise_db_id)')
+          .select('id, date, created_at, title, duration_minutes, muscle_groups, source_plan_id, source_plan_day, exercises(name, muscle_group, sets, reps, weight, unit, order_index, exercise_db_id)')
           .eq('user_id', traineeId).order('date', { ascending: false }).limit(60)
       : Promise.resolve({ data: null }),
     wantPRs
