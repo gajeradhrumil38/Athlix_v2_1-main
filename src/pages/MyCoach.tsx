@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppIcon } from '../config/icons';
-import { getMyAssignedPlans, groupByDay, planStartState, type AssignedPlan } from '../lib/assignedPlans';
+import { getMyAssignedPlans, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
+import { startPlanDayDraft } from '../lib/workoutDraft';
 
 const formatRest = (v: number) => `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
 
@@ -20,7 +21,7 @@ export const MyCoach: React.FC = () => {
   }, []);
 
   const start = (plan: AssignedPlan, dayLabel: string) => {
-    navigate('/log', { state: planStartState(plan, dayLabel) });
+    if (startPlanDayDraft(plan, dayLabel)) navigate('/');
   };
 
   return (

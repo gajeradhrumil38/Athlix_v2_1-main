@@ -7,7 +7,7 @@ import { CoachPlanCardView } from './CoachPlanCardView';
 
 // Trainee Home: "what to do today" from the coach's current plan. Hidden for
 // anyone without an active plan.
-export const CoachPlanCard: React.FC = () => {
+export const CoachPlanCard: React.FC<{ onStartDay?: (plan: AssignedPlan, day: string) => void }> = ({ onStartDay }) => {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
   const [sessions, setSessions] = useState<PlanSession[]>([]);
@@ -41,7 +41,7 @@ export const CoachPlanCard: React.FC = () => {
         coachName={coachName}
         progress={planProgress(plan, sessions)}
         otherPlansCount={others.length}
-        onStart={(day) => navigate('/log', { state: planStartState(plan, day) })}
+        onStart={(day) => (onStartDay ? onStartDay(plan, day) : navigate('/log', { state: planStartState(plan, day) }))}
         onOpenPlan={() => navigate('/my-coach')}
         onSwitch={() => setSwitching(true)}
       />
