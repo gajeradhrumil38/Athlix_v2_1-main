@@ -20,6 +20,7 @@ import { Timeline } from './pages/Timeline';
 import { Settings } from './pages/Settings';
 import { CoachDashboard } from './pages/CoachDashboard';
 import { TraineeDetail } from './pages/TraineeDetail';
+import { CoachLogSession } from './pages/CoachLogSession';
 import { MyCoach } from './pages/MyCoach';
 import { Progress } from './pages/Progress';
 import { DashboardLayoutEditor } from './pages/DashboardLayoutEditor';
@@ -109,6 +110,7 @@ const AppRoutes = () => {
         <Route path="skincare" element={<SkincareRoutinePage />} />
         <Route path="coach" element={<CoachDashboard />} />
         <Route path="coach/trainee/:id" element={<TraineeDetail />} />
+        <Route path="coach/trainee/:id/log" element={<CoachLogSession />} />
         {/* A trainer's own athlete dashboard (their Home redirects to /coach). */}
         <Route path="me" element={<Home />} />
         <Route path="my-coach" element={<MyCoach />} />

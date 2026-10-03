@@ -38,7 +38,10 @@ export const Layout: React.FC = () => {
     typeof window === 'undefined' ? 0 : window.innerHeight,
   );
   const [tappedTab, setTappedTab] = useState<string | null>(null);
-  const isImmersiveRoute = location.pathname === '/log' || location.pathname.startsWith('/run');
+  // /coach/trainee/:id/log is the coach logging for a trainee in the same
+  // full-screen logger as /log, so it gets the same chrome-free treatment.
+  const isImmersiveRoute = location.pathname === '/log' || location.pathname.startsWith('/run')
+    || /^\/coach\/trainee\/[^/]+\/log$/.test(location.pathname);
   const isHomeRoute = location.pathname === '/';
   const isHeaderlessRoute =
     location.pathname.startsWith('/calendar') ||

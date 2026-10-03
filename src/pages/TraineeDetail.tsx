@@ -10,7 +10,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { AppIcon } from '../config/icons';
 import { NotShared } from '../components/coach/NotShared';
 import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
-import { LogForTraineeSheet } from '../components/coach/LogForTraineeSheet';
 import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
@@ -102,7 +101,6 @@ export const TraineeDetail: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [plans, setPlans] = useState<AssignedPlan[]>([]);
   const [assign, setAssign] = useState(false);
-  const [logForTrainee, setLogForTrainee] = useState(false);
   const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
@@ -309,13 +307,13 @@ export const TraineeDetail: React.FC = () => {
           {dash.workouts.shared && (
             <button
               type="button"
-              onClick={() => setLogForTrainee(true)}
+              onClick={() => navigate(`/coach/trainee/${id}/log`)}
               aria-label="Log a session for this trainee"
               title="Log a session — record a completed workout"
-              className="h-11 w-11 flex items-center justify-center rounded-2xl"
-              style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+              className="flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
+              style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)', border: '1.5px solid color-mix(in srgb, var(--accent) 55%, transparent)' }}
             >
-              <AppIcon name="Plus" size="sm" />
+              <AppIcon name="Plus" size="sm" /> Log
             </button>
           )}
           <button
@@ -556,14 +554,6 @@ export const TraineeDetail: React.FC = () => {
         onAssigned={loadPlans}
       />
 
-      <LogForTraineeSheet
-        open={logForTrainee}
-        traineeId={id!}
-        traineeName={dash.name}
-        traineeWorkouts={dash.workouts.shared ? dash.workouts.data : []}
-        onClose={() => setLogForTrainee(false)}
-        onLogged={loadDash}
-      />
     </div>
   );
 };

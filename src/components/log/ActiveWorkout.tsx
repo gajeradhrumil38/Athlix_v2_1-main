@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import type { WorkoutState, ExerciseEntry, Set as WorkoutSet } from '../../pages/Log';
 import { ExerciseContent } from './ExerciseContent';
 import { SetFeedbackFlash } from './SetFeedbackFlash';
-import { ExercisePicker } from './ExercisePicker';
+import { ExercisePicker, type Exercise } from './ExercisePicker';
 import { DialPicker } from './DialPicker';
 import { useAuth } from '../../contexts/AuthContext';
 import { useExerciseOverrides } from '../../contexts/ExerciseOverridesContext';
@@ -40,6 +40,12 @@ interface ActiveWorkoutProps {
   onRequestPlanToday?: () => void;
   onEditTemplate?: (template: any) => void;
   onPickerAutoOpened?: () => void;
+  // Coach logging for a trainee: prefill "last time" from THIS user's history
+  // instead of the signed-in coach's, and show their recent exercises.
+  historyUserId?: string;
+  recentExercises?: Exercise[];
+  contextLabel?: string;
+  finishLabel?: string;
 }
 
 interface DialPickerState {
@@ -114,8 +120,14 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
   onRequestPlanToday,
   onEditTemplate,
   onPickerAutoOpened,
+  historyUserId,
+  recentExercises,
+  contextLabel,
+  finishLabel = 'Finish Workout',
 }) => {
   const { user } = useAuth();
+  const historyId = historyUserId ?? user?.id;
+  const loggingForSomeoneElse = !!historyUserId && historyUserId !== user?.id;
   const { overrides: typeOverrides, setOverride: persistTypeOverride } = useExerciseOverrides();
   const [activeIndex, setActiveIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
@@ -626,7 +638,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
       // Background: fetch last session when picker didn't supply it (catalog exercises)
       if (!knownSummary && user) {
         try {
-          const response = await getLastExerciseSession(user.id, exerciseOption.name);
+          const response = await getLastExerciseSession(historyId ?? user.id, exerciseOption.name);
           const fetched = response?.lastSession;
           if (fetched) {
             const fetchedSets = makeSets(fetched);
@@ -659,7 +671,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         }
       }
     },
-    [setWorkout, user, workout.exercises, weightUnit],
+    [setWorkout, user, historyId, workout.exercises, weightUnit],
   );
 
   useEffect(() => {
@@ -680,7 +692,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     (async () => {
       for (const ex of bare) {
         try {
-          const resp = await getLastExerciseSession(user.id, ex.name);
+          const resp = await getLastExerciseSession(historyId ?? user.id, ex.name);
           const fetched = resp?.lastSession as {
             date: string; sets: number; reps: number; weight: number; unit?: string;
             totalVolume?: number; perSetData?: { weight: number; reps: number }[];
@@ -802,11 +814,11 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
         exercises: prev.exercises.map((ex, i) => i === index ? { ...ex, name: newName } : ex),
       };
     });
-    if (user && oldName && newName.trim() && newName.trim() !== oldName) {
+    if (user && !loggingForSomeoneElse && oldName && newName.trim() && newName.trim() !== oldName) {
       renameExerciseEverywhere(user.id, oldName, newName.trim(), exerciseDbId).catch(console.warn);
     }
     haptics.tick();
-  }, [setWorkout, workout, user]);
+  }, [setWorkout, workout, user, loggingForSomeoneElse]);
 
   const handleChangeExerciseGroup = useCallback((index: number, newGroup: string) => {
     setWorkout((prev) => {
@@ -955,7 +967,11 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                   style={{ color: workout.title ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                   {workout.title || 'Name workout'}
                 </p>
-                {workout.exercises.length > 0 && (
+                {contextLabel ? (
+                  <p className="text-[10px] mt-0.5 leading-none font-semibold truncate" style={{ color: 'var(--accent)' }}>
+                    {contextLabel}
+                  </p>
+                ) : workout.exercises.length > 0 && (
                   <p className="text-[10px] mt-0.5 leading-none" style={{ color: 'var(--text-muted)' }}>
                     tap to rename
                   </p>
@@ -1347,7 +1363,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
             onClick={() => { haptics.complete(); onFinish(); }}
             className="flex h-12 flex-1 items-center justify-center rounded-xl bg-[var(--accent)] text-[14px] font-bold text-black"
           >
-            Finish Workout
+            {finishLabel}
           </button>
         </div>
 
@@ -1358,7 +1374,8 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
           <ExercisePicker
             onSelect={(exercise) => { void handleAddExercise(exercise); }}
             onClose={() => setShowExercisePicker(false)}
-            recentExercises={[]}
+            recentExercises={recentExercises ?? []}
+            contextLabel={contextLabel}
             onEditTemplate={onEditTemplate}
             onLoadPlan={handleLoadPlan}
             defaultTab={pickerDefaultTab}
