@@ -12,7 +12,7 @@
     "lint": "next lint",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"No tests configured\"",
+    "test": "vitest run",
     "db:types": "supabase gen types typescript --project-id YOUR_PROJECT_ID > lib/database.types.ts"
   },
   "dependencies": {
@@ -64,6 +64,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.2.7"
   }
 }
