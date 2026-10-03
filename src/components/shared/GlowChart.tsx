@@ -29,7 +29,7 @@ export interface GlowChartPoint { label: string; value: number }
 
 // Trend states are status colours (theme palette — SVG gradient stops need
 // real colours). Labels go with them, never colour alone.
-const TREND_COLOR: Record<TrendState, string> = { up: palette.green, flat: palette.yellow, down: palette.red };
+const TREND_COLOR: Record<TrendState, string> = { up: palette.green, flat: 'rgba(255,255,255,0.55)', down: palette.red };
 const TREND_LABEL: Record<TrendState, string> = { up: 'Progressing', flat: 'Holding', down: 'Declining' };
 
 // Monotone cubic Hermite interpolation (Fritsch–Carlson), converted to SVG
@@ -96,9 +96,10 @@ export const GlowSparkline: React.FC<{
   unit?: string;
   height?: number;
   emptyText?: string;
-  // Colour the line by trend — green progressing, yellow holding, red
-  // declining (EMA-smoothed, ±3% noise band; see lib/trend) — and mark the
-  // holding/declining stretches at the top of the plot.
+  // Mark progressing (green) and declining (red) stretches with a thin bar
+  // above the plot and a faint column wash (EMA-smoothed, ±3% noise band; see
+  // lib/trend). Holding gets no mark — it's the quiet default. The line itself
+  // keeps the card's identity colour.
   showTrend?: boolean;
 }> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet', showTrend = false }) => {
   const uid = useId().replace(/:/g, '');
@@ -196,20 +197,9 @@ export const GlowSparkline: React.FC<{
                 <stop offset="0%" stopColor={color} stopOpacity="0.12" />
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
-              {geo.states && (
-                // Colour blends point to point along the line, like a heat line.
-                <linearGradient id={`${uid}-trend`} gradientUnits="userSpaceOnUse"
-                  x1={geo.pts[0][0]} y1={0} x2={geo.pts[geo.pts.length - 1][0]} y2={0}>
-                  {geo.pts.map(([x], i) => (
-                    <stop key={i}
-                      offset={`${((x - geo.pts[0][0]) / (geo.pts[geo.pts.length - 1][0] - geo.pts[0][0])) * 100}%`}
-                      stopColor={TREND_COLOR[geo.states![i]]} />
-                  ))}
-                </linearGradient>
-              )}
             </defs>
             <path d={geo.area} fill={`url(#${uid}-fill)`} />
-            <path d={geo.line} fill="none" stroke={geo.states ? `url(#${uid}-trend)` : color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            <path d={geo.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
             {activeIdx != null && (
               <line
                 x1={geo.pts[activeIdx][0]} y1={0} x2={geo.pts[activeIdx][0]} y2={h}
@@ -218,11 +208,24 @@ export const GlowSparkline: React.FC<{
             )}
           </svg>
 
-          {/* Holding / declining stretches marked along the top edge. */}
-          {geo.runs.filter((r) => r.state !== 'up' && r.end > r.start).map((r, i) => (
-            <span key={`run${i}`} aria-hidden className="absolute top-0 h-[3px] rounded-full pointer-events-none"
-              style={{ left: `${(geo.pts[r.start][0] / w) * 100}%`, width: `${((geo.pts[r.end][0] - geo.pts[r.start][0]) / w) * 100}%`, background: TREND_COLOR[r.state] }} />
-          ))}
+          {/* A state at point i describes the change from i-1 to i, so a run
+              covers the interval from the point before it to its last point.
+              Thin bar on top + a barely-there wash fading down the column. */}
+          {geo.runs.filter((r) => r.state !== 'flat').map((r, i) => {
+            const x0 = geo.pts[Math.max(0, r.start - 1)][0];
+            const x1 = geo.pts[r.end][0];
+            if (x1 - x0 < 1) return null;
+            const c = TREND_COLOR[r.state];
+            const box = { left: `calc(${(x0 / w) * 100}% + 2px)`, width: `calc(${((x1 - x0) / w) * 100}% - 4px)` };
+            return (
+              <React.Fragment key={`run${i}`}>
+                <span aria-hidden className="absolute top-0 bottom-0 pointer-events-none"
+                  style={{ ...box, background: `linear-gradient(${c}14, transparent 70%)` }} />
+                <span aria-hidden className="absolute top-0 h-[2px] rounded-full pointer-events-none"
+                  style={{ ...box, background: c, opacity: 0.85 }} />
+              </React.Fragment>
+            );
+          })}
 
           {/* Dots as HTML overlays (not SVG circles) — the SVG's non-uniform
               stretch (preserveAspectRatio="none") would otherwise squash them
@@ -235,7 +238,7 @@ export const GlowSparkline: React.FC<{
             const isLast = i === geo.pts.length - 1;
             const big = active || isLast;
             if (!big) return null;
-            const dot = geo.states ? TREND_COLOR[geo.states[i]] : color;
+            const dot = color;
             return (
               <span
                 key={i}
@@ -307,14 +310,14 @@ export const GlowSparkline: React.FC<{
         return (
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-1.5" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: TREND_COLOR[last.state] }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: last.state === 'flat' ? 'var(--text-secondary)' : TREND_COLOR[last.state] }} />
               <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{TREND_LABEL[last.state]}</span>
               <span>{last.end > last.start ? `since ${points[last.start].label}` : 'now'}</span>
             </span>
             <span className="flex items-center gap-2.5" style={{ fontSize: 10 }}>
-              {(['up', 'flat', 'down'] as const).map((k) => (
+              {(['up', 'down'] as const).map((k) => (
                 <span key={k} className="flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: TREND_COLOR[k] }} />{TREND_LABEL[k]}
+                  <span className="h-[2px] w-3 rounded-full" style={{ background: TREND_COLOR[k] }} />{TREND_LABEL[k]}
                 </span>
               ))}
             </span>
