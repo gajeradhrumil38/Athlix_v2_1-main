@@ -58,7 +58,7 @@ const getFieldBinding = (type: ReturnType<typeof resolveExerciseInputType>) => {
   }
 };
 
-const SetSeparator: React.FC<{ onCopy: () => void; onRemove: () => void }> = ({ onCopy, onRemove }) => (
+export const SetSeparator: React.FC<{ onCopy: () => void; onRemove: () => void }> = ({ onCopy, onRemove }) => (
   <div className="flex items-center gap-2 py-0.5 px-1">
     <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
     <button

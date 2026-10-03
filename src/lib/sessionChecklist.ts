@@ -61,6 +61,16 @@ export const addSet = (w: WorkoutState, exerciseId: string, newId: string) =>
     };
   });
 
+// "Copy set" from the logger: an un-ticked duplicate right after this set.
+export const copySet = (w: WorkoutState, exerciseId: string, setId: string, newId: string) =>
+  mapExercise(w, exerciseId, (e) => {
+    const i = e.sets.findIndex((s) => s.id === setId);
+    if (i === -1) return e;
+    const src = filled(e.sets[i]);
+    const copy = { ...src, id: newId, done: false };
+    return { ...e, sets: [...e.sets.slice(0, i + 1), copy, ...e.sets.slice(i + 1)] };
+  });
+
 export const removeSet = (w: WorkoutState, exerciseId: string, setId: string) =>
   mapExercise(w, exerciseId, (e) => (e.sets.length <= 1 ? e : { ...e, sets: e.sets.filter((s) => s.id !== setId) }));
 

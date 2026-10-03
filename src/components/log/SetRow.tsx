@@ -18,6 +18,9 @@ interface SetRowProps {
   onAdjust: (field: 'weight' | 'reps', delta: number) => void;
   onMarkDone: () => void;
   weightUnit?: string;
+  // Narrower boxes for cards (Home / coach session card) where two full-size
+  // value boxes would squeeze the digits.
+  compact?: boolean;
 }
 
 const ValueBox: React.FC<{
@@ -26,12 +29,13 @@ const ValueBox: React.FC<{
   step: number;
   onTap: () => void;
   onAdjust: (delta: number) => void;
-}> = ({ field, isDone, step, onTap, onAdjust }) => {
+  compact?: boolean;
+}> = ({ field, isDone, step, onTap, onAdjust, compact = false }) => {
   const stepLabel = Number.isInteger(step) ? `${step}` : step % 1 === 0.5 ? `${step}` : `${step}`;
 
   return (
     <div
-      className="relative flex h-[82px] w-full overflow-hidden rounded-xl border transition-colors duration-200"
+      className={`relative flex ${compact ? 'h-[68px]' : 'h-[82px]'} w-full overflow-hidden rounded-xl border transition-colors duration-200`}
       style={{
         background: 'var(--bg-base)',
         borderColor: isDone ? 'rgba(200,255,0,0.12)' : 'var(--border)',
@@ -44,7 +48,7 @@ const ValueBox: React.FC<{
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onAdjust(-step); }}
-        className="flex h-full w-[48px] shrink-0 flex-col items-center justify-center gap-0.5 active:bg-white/[0.04] transition-colors"
+        className={`flex h-full ${compact ? 'w-[34px]' : 'w-[48px]'} shrink-0 flex-col items-center justify-center gap-0.5 active:bg-white/[0.04] transition-colors`}
         style={{ color: 'var(--text-muted)', borderRight: '1px solid rgba(255,255,255,0.05)' }}
       >
         <span className="text-[22px] font-light leading-none select-none">−</span>
@@ -55,9 +59,9 @@ const ValueBox: React.FC<{
       <button
         type="button"
         onClick={onTap}
-        className="flex flex-1 flex-col items-center justify-center gap-[3px]"
+        className="flex flex-1 min-w-0 flex-col items-center justify-center gap-[3px]"
       >
-        <div className="font-victory tabular-nums text-[34px] leading-none font-black text-[var(--text-primary)]">
+        <div className={`font-victory tabular-nums ${compact ? 'text-[26px]' : 'text-[34px]'} leading-none font-black text-[var(--text-primary)]`}>
           {field.displayValue}
         </div>
         <div className="text-[10px] font-bold tracking-[0.16em] uppercase text-[var(--text-secondary)]">
@@ -69,7 +73,7 @@ const ValueBox: React.FC<{
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onAdjust(step); }}
-        className="flex h-full w-[48px] shrink-0 flex-col items-center justify-center gap-0.5 active:bg-white/[0.04] transition-colors"
+        className={`flex h-full ${compact ? 'w-[34px]' : 'w-[48px]'} shrink-0 flex-col items-center justify-center gap-0.5 active:bg-white/[0.04] transition-colors`}
         style={{ color: 'var(--accent)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}
       >
         <span className="text-[22px] font-light leading-none select-none">+</span>
@@ -88,6 +92,7 @@ export const SetRow: React.FC<SetRowProps> = ({
   onAdjust,
   onMarkDone,
   weightUnit = 'lbs',
+  compact = false,
 }) => {
   const weightStep = weightUnit === 'kg' ? 1.25 : 2.5;
   const repsStep = 1;
@@ -183,6 +188,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           step={stepFor(primary.field)}
           onTap={() => onOpenDial(primary.field)}
           onAdjust={(delta) => onAdjust(primary.field, delta)}
+          compact={compact}
         />
         {secondary && (
           <ValueBox
@@ -191,6 +197,7 @@ export const SetRow: React.FC<SetRowProps> = ({
             step={stepFor(secondary.field)}
             onTap={() => onOpenDial(secondary.field)}
             onAdjust={(delta) => onAdjust(secondary.field, delta)}
+            compact={compact}
           />
         )}
       </div>

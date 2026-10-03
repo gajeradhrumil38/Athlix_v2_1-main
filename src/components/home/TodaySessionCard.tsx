@@ -8,9 +8,10 @@ import { getLastExerciseSession } from '../../lib/supabaseData';
 import { readDraft } from '../../lib/workoutDraft';
 import type { ExerciseEntry, WorkoutState } from '../../pages/Log';
 import {
-  addExercises, addSet, markExerciseDone, markExerciseUndone, removeSet, sessionProgress, toggleSetDone, updateSetValue,
+  addExercises, addSet, copySet, markExerciseDone, markExerciseUndone, removeSet, sessionProgress, toggleSetDone, updateSetValue,
 } from '../../lib/sessionChecklist';
-import { SessionExerciseRow } from './SessionExerciseRow';
+import { SessionExerciseRow, type SessionDialRequest } from './SessionExerciseRow';
+import { DialPicker } from '../log/DialPicker';
 
 interface Props {
   workout: WorkoutState;
@@ -47,6 +48,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
   const [expanded, setExpanded] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [dial, setDial] = useState<(SessionDialRequest & { exerciseId: string }) | null>(null);
   const p = sessionProgress(workout);
 
   const addPicked = (picked: Exercise) => {
@@ -107,7 +109,9 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
             onUndo={() => onChange(markExerciseUndone(workout, ex.id))}
             onToggleSet={(setId) => onChange(toggleSetDone(workout, ex.id, setId))}
             onChangeSet={(setId, field, value) => onChange(updateSetValue(workout, ex.id, setId, field, value))}
+            onOpenDial={(req) => setDial({ ...req, exerciseId: ex.id })}
             onAddSet={() => onChange(addSet(workout, ex.id, uid()))}
+            onCopySet={(setId) => onChange(copySet(workout, ex.id, setId, uid()))}
             onRemoveSet={(setId) => onChange(removeSet(workout, ex.id, setId))}
           />
         ))}
@@ -130,6 +134,20 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
 
       {/* Portal: the card's glass background would otherwise trap the
           full-screen picker inside the card. */}
+      {/* The logger's scroll-wheel dial; portal for the same reason as the picker. */}
+      {dial && createPortal(
+        <DialPicker
+          title={dial.title}
+          fieldKind={dial.fieldKind}
+          inputType={dial.inputType}
+          initialValue={dial.currentValue}
+          weightUnit="lbs"
+          onClose={() => setDial(null)}
+          onConfirm={(v) => { onChange(updateSetValue(workout, dial.exerciseId, dial.setId, dial.field, v)); setDial(null); }}
+        />,
+        document.body,
+      )}
+
       {picking && createPortal(
         <ExercisePicker recentExercises={recentExercises ?? []} multiSelect onSelect={addPicked} onClose={() => setPicking(false)} />,
         document.body,

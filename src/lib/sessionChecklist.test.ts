@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ExerciseEntry, WorkoutState } from '../pages/Log';
 import {
-  addExercises, addSet, exerciseDone, exerciseSummary, markExerciseDone, markExerciseUndone,
+  addExercises, addSet, copySet, exerciseDone, exerciseSummary, markExerciseDone, markExerciseUndone,
   removeSet, sessionProgress, setsToSave, toggleSetDone, updateSetValue,
 } from './sessionChecklist';
 
@@ -101,5 +101,14 @@ describe('setsToSave', () => {
   });
   it('drops exercises with no values', () => {
     expect(setsToSave(w([ex('e1', 'A')]))).toEqual([]);
+  });
+});
+
+describe('copySet', () => {
+  it('inserts an un-ticked copy right after the set', () => {
+    const base = toggleSetDone(updateSetValue(w([ex('e1', 'A')]), 'e1', 'e1a', 'weight', 150), 'e1', 'e1a');
+    const s = copySet(base, 'e1', 'e1a', 'copy');
+    expect(s.exercises[0].sets.map((x) => x.id)).toEqual(['e1a', 'copy', 'e1b', 'e1c']);
+    expect(s.exercises[0].sets[1]).toMatchObject({ weight: 150, reps: 10, done: false });
   });
 });
