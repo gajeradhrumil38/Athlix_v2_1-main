@@ -1,4 +1,6 @@
 import React, { useId, useMemo, useRef, useState } from 'react';
+import { palette } from '../../theme/colors';
+import { classifyTrend, trendRuns, type TrendState } from '../../lib/trend';
 
 /**
  * Grid texture for a chart's plot area only — the card around it stays the
@@ -25,8 +27,10 @@ export const PlotGrid: React.FC<{ accent?: string; children: React.ReactNode; cl
 
 export interface GlowChartPoint { label: string; value: number }
 
-// Warning colour for stalled stretches (theme status token, never a series colour).
-const STALL = 'var(--yellow)';
+// Trend states are status colours (theme palette — SVG gradient stops need
+// real colours). Labels go with them, never colour alone.
+const TREND_COLOR: Record<TrendState, string> = { up: palette.green, flat: palette.yellow, down: palette.red };
+const TREND_LABEL: Record<TrendState, string> = { up: 'Progressing', flat: 'Holding', down: 'Declining' };
 
 // Monotone cubic Hermite interpolation (Fritsch–Carlson), converted to SVG
 // cubic-Bezier segments — same family as D3's curveMonotoneX. Unlike a plain
@@ -92,10 +96,11 @@ export const GlowSparkline: React.FC<{
   unit?: string;
   height?: number;
   emptyText?: string;
-  // Marks any run of 3+ consecutive points that never increases (flat or
-  // declining) — a stall a coach should act on, not just a wiggly line.
-  flagPlateaus?: boolean;
-}> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet', flagPlateaus = false }) => {
+  // Colour the line by trend — green progressing, yellow holding, red
+  // declining (EMA-smoothed, ±3% noise band; see lib/trend) — and mark the
+  // holding/declining stretches at the top of the plot.
+  showTrend?: boolean;
+}> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet', showTrend = false }) => {
   const uid = useId().replace(/:/g, '');
   const plotRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -119,20 +124,11 @@ export const GlowSparkline: React.FC<{
     const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
     const mid = (min + max) / 2;
 
-    let plateaus: { start: number; end: number }[] = [];
-    if (flagPlateaus) {
-      let runStart = 0;
-      for (let i = 1; i <= values.length; i++) {
-        const brokeRun = i === values.length || values[i] > values[i - 1];
-        if (brokeRun) {
-          if (i - 1 - runStart >= 2) plateaus.push({ start: runStart, end: i - 1 });
-          runStart = i;
-        }
-      }
-    }
+    const states = showTrend ? classifyTrend(values) : null;
+    const runs = states ? trendRuns(states) : [];
 
-    return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min], plateaus };
-  }, [points, h, flagPlateaus]);
+    return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min], states, runs };
+  }, [points, h, showTrend]);
 
   if (!geo) {
     return (
@@ -200,21 +196,20 @@ export const GlowSparkline: React.FC<{
                 <stop offset="0%" stopColor={color} stopOpacity="0.12" />
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
-              {/* The stalled stretch of the SAME curve: clip the line to each
-                  run's x-range and redraw it in the warning colour — the
-                  mark is on the line the eye is already following, not a
-                  background band competing with the area fill. */}
-              <clipPath id={`${uid}-stall`}>
-                {geo.plateaus.map((p, i) => (
-                  <rect key={i} x={geo.pts[p.start][0]} y={0} width={geo.pts[p.end][0] - geo.pts[p.start][0]} height={h} />
-                ))}
-              </clipPath>
+              {geo.states && (
+                // Colour blends point to point along the line, like a heat line.
+                <linearGradient id={`${uid}-trend`} gradientUnits="userSpaceOnUse"
+                  x1={geo.pts[0][0]} y1={0} x2={geo.pts[geo.pts.length - 1][0]} y2={0}>
+                  {geo.pts.map(([x], i) => (
+                    <stop key={i}
+                      offset={`${((x - geo.pts[0][0]) / (geo.pts[geo.pts.length - 1][0] - geo.pts[0][0])) * 100}%`}
+                      stopColor={TREND_COLOR[geo.states![i]]} />
+                  ))}
+                </linearGradient>
+              )}
             </defs>
             <path d={geo.area} fill={`url(#${uid}-fill)`} />
-            <path d={geo.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-            {geo.plateaus.length > 0 && (
-              <path d={geo.line} fill="none" stroke={STALL} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" clipPath={`url(#${uid}-stall)`} />
-            )}
+            <path d={geo.line} fill="none" stroke={geo.states ? `url(#${uid}-trend)` : color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
             {activeIdx != null && (
               <line
                 x1={geo.pts[activeIdx][0]} y1={0} x2={geo.pts[activeIdx][0]} y2={h}
@@ -223,6 +218,12 @@ export const GlowSparkline: React.FC<{
             )}
           </svg>
 
+          {/* Holding / declining stretches marked along the top edge. */}
+          {geo.runs.filter((r) => r.state !== 'up' && r.end > r.start).map((r, i) => (
+            <span key={`run${i}`} aria-hidden className="absolute top-0 h-[3px] rounded-full pointer-events-none"
+              style={{ left: `${(geo.pts[r.start][0] / w) * 100}%`, width: `${((geo.pts[r.end][0] - geo.pts[r.start][0]) / w) * 100}%`, background: TREND_COLOR[r.state] }} />
+          ))}
+
           {/* Dots as HTML overlays (not SVG circles) — the SVG's non-uniform
               stretch (preserveAspectRatio="none") would otherwise squash them
               into ellipses. */}
@@ -230,7 +231,7 @@ export const GlowSparkline: React.FC<{
             const active = activeIdx === i;
             const isLast = i === geo.pts.length - 1;
             const big = active || isLast;
-            const dot = geo.plateaus.some((p) => i >= p.start && i <= p.end) ? STALL : color;
+            const dot = geo.states ? TREND_COLOR[geo.states[i]] : color;
             return (
               <span
                 key={i}
@@ -275,36 +276,45 @@ export const GlowSparkline: React.FC<{
                 <p style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.5)', lineHeight: 1.2 }}>
                   {points[activeIdx].label}
                 </p>
+                {geo.states && activeIdx > 0 && points[activeIdx - 1].value > 0 && (() => {
+                  const pct = Math.round(((points[activeIdx].value - points[activeIdx - 1].value) / points[activeIdx - 1].value) * 100);
+                  return (
+                    <p style={{ fontSize: 9, fontWeight: 700, lineHeight: 1.3, color: TREND_COLOR[geo.states[activeIdx]] }}>
+                      {pct > 0 ? '▲' : pct < 0 ? '▼' : '•'} {Math.abs(pct)}% vs prev · {TREND_LABEL[geo.states[activeIdx]]}
+                    </p>
+                  );
+                })()}
               </div>
             );
           })()}
         </div>
       </div>
 
-      {/* X-axis: date/period ticks, indented to line up with the plot area.
-          A thin rule in the warning colour sits over the axis under each
-          stalled stretch — "this span", without covering any data. */}
+      {/* X-axis: date/period ticks, indented to line up with the plot area. */}
       <div className="relative flex items-center justify-between pt-2 pb-1" style={{ marginTop: 2, marginLeft: 30 }}>
-        {geo.plateaus.map((p, i) => (
-          <span key={i} aria-hidden className="absolute top-0 h-[3px] rounded-full pointer-events-none"
-            style={{ left: `${(geo.pts[p.start][0] / w) * 100}%`, width: `${((geo.pts[p.end][0] - geo.pts[p.start][0]) / w) * 100}%`, background: STALL }} />
-        ))}
         {tickIdxs.map((idx) => (
           <span key={idx} className="relative" style={{ fontSize: 9.5, color: 'var(--text-secondary)', opacity: 0.85, fontWeight: 700 }}>{points[idx].label}</span>
         ))}
       </div>
 
-      {/* Caption doubles as the legend for the yellow stretch: a coloured
-          dot + words, never colour alone. Text stays in text colours. Only
-          the most recent stall is spelled out. */}
-      {geo.plateaus.length > 0 && (() => {
-        const run = geo.plateaus[geo.plateaus.length - 1];
+      {/* Legend + the latest verdict in words (colour is never the only cue). */}
+      {geo.states && geo.runs.length > 0 && (() => {
+        const last = geo.runs[geo.runs.length - 1];
         return (
-          <p className="flex items-center gap-1.5 mt-1.5" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
-            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: STALL }} />
-            No progress <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{points[run.start].label} → {points[run.end].label}</span>
-            {geo.plateaus.length > 1 && <span>· {geo.plateaus.length} stalls in view</span>}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-1.5" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: TREND_COLOR[last.state] }} />
+              <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{TREND_LABEL[last.state]}</span>
+              <span>{last.end > last.start ? `since ${points[last.start].label}` : 'now'}</span>
+            </span>
+            <span className="flex items-center gap-2.5" style={{ fontSize: 10 }}>
+              {(['up', 'flat', 'down'] as const).map((k) => (
+                <span key={k} className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: TREND_COLOR[k] }} />{TREND_LABEL[k]}
+                </span>
+              ))}
+            </span>
+          </div>
         );
       })()}
     </div>

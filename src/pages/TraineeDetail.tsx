@@ -1098,7 +1098,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                               color={accent}
                               unit={weighted ? ' lb' : ' reps'}
                               height={100}
-                              flagPlateaus
+                              showTrend
                             />
                           </PlotGrid>
                         </div>
@@ -1190,7 +1190,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
         </div>
       </div>
       <PlotGrid accent={palette.accent}>
-        <GlowSparkline points={points} color={palette.accent} unit=" lb" flagPlateaus />
+        <GlowSparkline points={points} color={palette.accent} unit=" lb" showTrend />
       </PlotGrid>
     </WidgetCard>
   );
