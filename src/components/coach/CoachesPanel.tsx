@@ -7,6 +7,7 @@ import {
   SHARE_SCOPES, type CoachLink, type ScopeKey,
 } from '../../lib/coachLinks';
 import { ShareScopeSheet } from './ShareScopeSheet';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 // Trainee-side control center, shown in Settings: incoming coach invites to
 // accept/decline, and connected coaches with per-category sharing + disconnect.
@@ -49,7 +50,7 @@ export const CoachesPanel: React.FC = () => {
 
   // One mis-tap used to cut the coach off instantly, with no undo.
   const cut = async (link: CoachLink) => {
-    if (!window.confirm(`Disconnect from ${link.trainer_name || 'this coach'}? They'll immediately lose access to your data.`)) return;
+    if (!(await confirmDialog({ title: `Disconnect from ${link.trainer_name || 'this coach'}?`, message: "They'll immediately lose access to your data.", confirmLabel: 'Disconnect', danger: true }))) return;
     setBusyId(link.id);
     const res = await disconnect(link.id);
     if (!res.ok) toast.error(res.error || 'Could not disconnect.');

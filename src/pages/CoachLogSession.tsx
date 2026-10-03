@@ -10,6 +10,7 @@ import { getAssignedPlansFor, peekAssignedPlansFor, type AssignedPlan } from '..
 import { readCoachDraft, saveCoachSession, seedSession, traineeRecentExercises, writeCoachDraft, type CoachLogStart } from '../lib/coachLog';
 import { CoachSessionReview } from '../components/coach/CoachSessionReview';
 import { useExerciseOverrides } from '../contexts/ExerciseOverridesContext';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 // A coach recording a session for a trainee in the SAME logger the athlete
 // uses (ActiveWorkout), pointed at the trainee's history. Normally opened from
@@ -82,14 +83,14 @@ export const CoachLogSession: React.FC = () => {
     else navigate(`/coach/trainee/${id}`, { replace: true });
   };
 
-  const leave = () => {
+  const leave = async () => {
     const hasWork = workout?.exercises.some((e) => e.sets.some((s) => s.weight || s.reps));
-    if (hasWork && !window.confirm('Leave without saving? Your entries stay as a draft for next time.')) return;
+    if (hasWork && !(await confirmDialog({ title: 'Leave without saving?', message: 'Your entries stay as a draft for next time.', confirmLabel: 'Leave' }))) return;
     goBack();
   };
 
-  const discardDraft = () => {
-    if (!window.confirm('Discard the unsaved session?')) return;
+  const discardDraft = async () => {
+    if (!(await confirmDialog({ title: 'Discard the unsaved session?', message: 'The sets logged in it will be lost.', confirmLabel: 'Discard', danger: true }))) return;
     writeCoachDraft(id, null);
     setDraft(null);
   };

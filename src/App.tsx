@@ -31,6 +31,7 @@ import { FoodHistoryPage } from './features/food/pages/FoodHistoryPage';
 import { WhoopCallback } from './pages/WhoopCallback';
 import { ResetPassword } from './pages/ResetPassword';
 import { SkincareRoutinePage } from './features/skincare/SkincareRoutinePage';
+import { ConfirmHost } from './components/shared/ConfirmDialog';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, isPasswordRecovery } = useAuth();
@@ -128,6 +129,7 @@ export default function App() {
             <RestTimerProvider>
               <HashRouter>
                 <AppRoutes />
+                <ConfirmHost />
               </HashRouter>
             </RestTimerProvider>
           </HeartRateProvider>

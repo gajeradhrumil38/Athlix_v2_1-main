@@ -13,6 +13,7 @@ import { SetRow } from '../log/SetRow';
 import { SetSeparator } from '../log/ExerciseContent';
 import { DialPicker } from '../log/DialPicker';
 import type { ExerciseEntry } from '../../pages/Log';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 interface DialState {
   setId: string;
@@ -150,9 +151,9 @@ export const SessionExerciseRow: React.FC<Props> = ({
               <SetSeparator
                 soft
                 onCopy={() => onCopySet(s.id)}
-                onRemove={() => {
+                onRemove={async () => {
                   if (exercise.sets.length <= 1) return;
-                  if (window.confirm(`Remove set ${i + 1}?`)) onRemoveSet(s.id);
+                  if (await confirmDialog({ title: `Remove set ${i + 1}?`, confirmLabel: 'Remove', danger: true })) onRemoveSet(s.id);
                 }}
               />
             </React.Fragment>

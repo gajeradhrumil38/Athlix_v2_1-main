@@ -20,8 +20,8 @@ export const MyCoach: React.FC = () => {
     (async () => { setPlans(await getMyAssignedPlans()); setLoading(false); })();
   }, []);
 
-  const start = (plan: AssignedPlan, dayLabel: string) => {
-    if (startPlanDayDraft(plan, dayLabel)) navigate('/');
+  const start = async (plan: AssignedPlan, dayLabel: string) => {
+    if (await startPlanDayDraft(plan, dayLabel)) navigate('/');
   };
 
   return (

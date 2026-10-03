@@ -24,6 +24,7 @@ import {
 } from '../../lib/exerciseTypes';
 import { haptics } from '../../lib/haptics';
 import { convertWeight } from '../../lib/units';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 interface ActiveWorkoutProps {
   workout: WorkoutState;
@@ -1091,8 +1092,8 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm('Remove all exercises from this workout?')) {
+                  onClick={async () => {
+                    if (await confirmDialog({ title: 'Remove all exercises?', message: 'This clears every exercise from this workout.', confirmLabel: 'Remove all', danger: true })) {
                       // Clearing back to an empty workout also clears the
                       // title back to empty (no auto generic name) — matches
                       // the empty default a fresh workout starts with.

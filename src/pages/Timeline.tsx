@@ -12,6 +12,7 @@ import { parseDateAtStartOfDay } from '../lib/dates';
 import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
 import { getWorkoutDisplayTitle } from '../lib/workoutTitle';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -59,13 +60,15 @@ const TimelineItem: React.FC<{
       if (expanded) return;
       const trigger = vx > 0.5 || mx < -100;
       if (!down && trigger && xDir < 0) {
-        if (!window.confirm(`Delete "${workout.title}"? This cannot be undone.`)) {
-          controls.start({ x: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } });
-          return;
-        }
-        controls
-          .start({ x: -window.innerWidth, opacity: 0, transition: { duration: 0.2 } })
-          .then(() => handleDelete(workout.id));
+        confirmDialog({ title: `Delete "${workout.title}"?`, message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }).then((ok) => {
+          if (!ok) {
+            controls.start({ x: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } });
+            return;
+          }
+          controls
+            .start({ x: -window.innerWidth, opacity: 0, transition: { duration: 0.2 } })
+            .then(() => handleDelete(workout.id));
+        });
       } else if (!down) {
         controls.start({ x: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } });
       } else if (mx < 0) {
@@ -181,9 +184,9 @@ const TimelineItem: React.FC<{
             {/* Actions */}
             <div className="flex items-center gap-1 shrink-0 mt-0.5">
               <button
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if (window.confirm(`Delete "${workout.title}"?`)) handleDelete(workout.id);
+                  if (await confirmDialog({ title: `Delete "${workout.title}"?`, message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true })) handleDelete(workout.id);
                 }}
                 className="h-8 w-8 flex items-center justify-center rounded-lg transition-colors"
                 style={{ background: 'rgba(255,59,48,0.07)', color: 'rgba(255,59,48,0.8)' }}

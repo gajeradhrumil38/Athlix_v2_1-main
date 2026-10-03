@@ -10,6 +10,7 @@ import { getSentLinks, type CoachLink } from '../../lib/coachLinks';
 import { createAppointment, updateAppointment, getMyCreatedAppointments, type TrainerAppointment } from '../../lib/appointments';
 import { getAssignedPlansFor, type AssignedPlan } from '../../lib/assignedPlans';
 import { DialPicker } from '../log/DialPicker';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 // Trainer schedules a session with one of their trainees, from the
 // trainer's own personal calendar. Picking the trainee is step one (this
@@ -124,7 +125,7 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointme
       const aEnd = aStart + (a.duration_minutes || 60) * 60_000;
       return start.getTime() < aEnd && aStart < start.getTime() + durMs;
     });
-    if (clash && !window.confirm(`This overlaps "${clash.title}" with ${clash.trainee_name || 'another trainee'} at ${format(new Date(clash.scheduled_at), 'h:mm a')}. Schedule anyway?`)) {
+    if (clash && !(await confirmDialog({ title: 'This time overlaps', message: `"${clash.title}" with ${clash.trainee_name || 'another trainee'} at ${format(new Date(clash.scheduled_at), 'h:mm a')}. Schedule anyway?`, confirmLabel: 'Schedule anyway' }))) {
       setBusy(false);
       return;
     }

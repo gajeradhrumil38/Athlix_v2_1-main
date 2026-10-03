@@ -14,6 +14,7 @@ import {
   searchExerciseLibrary,
   extractInputTypeFromSlugs,
 } from '../../lib/supabaseData';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -329,8 +330,8 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
   // absent-mindedly hit the wrong corner button lost all of them. Only the
   // "Add N Exercises" button should ever commit or lose a selection; every
   // other exit now confirms first when there's something to lose.
-  const closeGuarded = () => {
-    if (selectedMap.size > 0 && !window.confirm(`Discard ${selectedMap.size} selected exercise${selectedMap.size > 1 ? 's' : ''}?`)) return;
+  const closeGuarded = async () => {
+    if (selectedMap.size > 0 && !(await confirmDialog({ title: `Discard ${selectedMap.size} selected exercise${selectedMap.size > 1 ? 's' : ''}?`, confirmLabel: 'Discard', danger: true }))) return;
     onClose();
   };
 

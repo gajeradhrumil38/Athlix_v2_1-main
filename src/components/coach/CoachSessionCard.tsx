@@ -12,6 +12,7 @@ import { TodaySessionCard } from '../home/TodaySessionCard';
 import { CoachPlanCardView } from '../home/CoachPlanCardView';
 import { CoachLogStartModal } from './CoachLogStart';
 import { CoachSessionReview } from './CoachSessionReview';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 // Trainee Overview, top: what's next for this trainee and, once started, the
 // in-person session as a tick-off card. Same draft as the full coach logger.
@@ -63,7 +64,7 @@ export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSa
           recentExercises={recent}
           readCurrent={() => readCoachDraft(traineeId)?.workout ?? null}
           onChange={update}
-          onDiscard={() => { if (window.confirm('Discard this session? Nothing will be saved.')) store(null); }}
+          onDiscard={async () => { if (await confirmDialog({ title: 'Discard this session?', message: 'Nothing will be saved.', confirmLabel: 'Discard', danger: true })) store(null); }}
           onOpenLogger={() => navigate(`/coach/trainee/${traineeId}/log`, { state: { start: { kind: 'resume' } } })}
           onFinish={() => setReviewing(true)}
           menuInset={menuInset}

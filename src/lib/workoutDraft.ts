@@ -2,6 +2,7 @@ import type { ExerciseEntry, WorkoutState } from '../pages/Log';
 import { OPENTRAINING_ASSETS_BY_ID, OPENTRAINING_ID_BY_NAME, normalizeExerciseName } from '../data/opentrainingCatalog';
 import { convertWeight } from './units';
 import { planStartState, type AssignedPlan } from './assignedPlans';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 // The one in-progress workout, shared by the full logger (/log) and the Home
 // "Today's session" card. localStorage (not sessionStorage) so it survives the
@@ -133,8 +134,8 @@ export function workoutFromPlanDay(plan: AssignedPlan, dayLabel: string): Workou
 
 // Start a plan day as the in-progress session (Home card). Returns false if
 // the trainee chose to keep an unfinished workout instead.
-export function startPlanDayDraft(plan: AssignedPlan, dayLabel: string): boolean {
-  if (draftHasWork(readDraft()) && !window.confirm('Replace your in-progress workout? Logged sets in it will be lost.')) return false;
+export async function startPlanDayDraft(plan: AssignedPlan, dayLabel: string): Promise<boolean> {
+  if (draftHasWork(readDraft()) && !(await confirmDialog({ title: 'Replace your in-progress workout?', message: 'Logged sets in it will be lost.', confirmLabel: 'Replace', danger: true }))) return false;
   writeDraft(workoutFromPlanDay(plan, dayLabel));
   return true;
 }

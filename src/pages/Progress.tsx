@@ -46,6 +46,7 @@ import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { palette } from '../theme/colors';
 import { getTodayCalories, getFoodScans } from '../lib/foodData';
 import type { FoodScan } from '../features/food/types';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 const HEART_RATE_ZONES = [
   { id: 'z1', name: 'Recovery', range: '50-94',   color: 'var(--back)'   },
@@ -749,7 +750,7 @@ export const Progress: React.FC = () => {
 
   const handleDeleteWeight = async () => {
     if (!editEntry || !user) return;
-    if (!window.confirm('Delete this body-weight entry? This cannot be undone.')) return;
+    if (!(await confirmDialog({ title: 'Delete this body-weight entry?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await deleteBodyWeightLog(user.id, editEntry.id);
       setEditEntry(null);

@@ -13,6 +13,7 @@ import { whoopService } from '../features/whoop/services/whoopService';
 import { useAiCoachKey } from '../hooks/useAiCoachKey';
 import { aiCoachFetch } from '../lib/aiCoachFetch';
 import { CoachesPanel } from '../components/coach/CoachesPanel';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 /* ── WHOOP connect sub-section ─────────────────────────────── */
 const WhoopConnect: React.FC<{ userId: string }> = ({ userId }) => {
@@ -477,9 +478,12 @@ export const Settings: React.FC = () => {
   /* ── Delete account ──────────────────────────── */
   const handleDeleteAccount = async () => {
     if (!user) return;
-    const confirmed = window.confirm(
-      'Delete your account and all data permanently? This cannot be undone.',
-    );
+    const confirmed = await confirmDialog({
+      title: 'Delete your account?',
+      message: 'Your account and all your data will be deleted permanently. This cannot be undone.',
+      confirmLabel: 'Delete account',
+      danger: true,
+    });
     if (!confirmed) return;
     try {
       await deleteAccount();

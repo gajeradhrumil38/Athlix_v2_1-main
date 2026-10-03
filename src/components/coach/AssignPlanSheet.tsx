@@ -14,6 +14,7 @@ import { DEFAULT_REST, DEFAULT_SETS, DEFAULT_REPS, lastSetLookup, type PlanStart
 import { AssignStartStep } from './assign/AssignStartStep';
 import { AssignPreviewStep } from './assign/AssignPreviewStep';
 import { PlanExerciseRow, type DialField } from './assign/PlanExerciseRow';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 // Coach assigns (or edits) a plan in three steps: pick a starting point →
 // adjust (compact rows, day tabs, whole-day set/rep chips) → preview exactly
@@ -90,8 +91,8 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
 
   const hasContent = rows.length > 0;
   const close = () => { onClose(); setStep('start'); };
-  const requestClose = () => {
-    if (step !== 'start' && hasContent && !window.confirm('Discard this plan? Your changes will be lost.')) return;
+  const requestClose = async () => {
+    if (step !== 'start' && hasContent && !(await confirmDialog({ title: 'Discard this plan?', message: 'Your changes will be lost.', confirmLabel: 'Discard', danger: true }))) return;
     close();
   };
 
@@ -127,10 +128,10 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
     haptics.tick();
   };
   const renameDay = (label: string) => setDays((d) => d.map((g) => (g.id === activeDay.id ? { ...g, label } : g)));
-  const removeDay = () => {
+  const removeDay = async () => {
     if (days.length <= 1) return;
     const n = dayRows.length;
-    if (n && !window.confirm(`Remove ${activeDay.label || 'this day'} and its ${n} exercise${n > 1 ? 's' : ''}?`)) return;
+    if (n && !(await confirmDialog({ title: `Remove ${activeDay.label || 'this day'}?`, message: `Its ${n} exercise${n > 1 ? 's' : ''} will be removed too.`, confirmLabel: 'Remove', danger: true }))) return;
     setRows((p) => p.filter((r) => r.dayId !== activeDay.id));
     const rest = days.filter((g) => g.id !== activeDay.id);
     setDays(rest.length === 1 ? [{ ...rest[0], label: '' }] : rest);

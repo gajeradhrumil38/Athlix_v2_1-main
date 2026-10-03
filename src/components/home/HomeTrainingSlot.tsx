@@ -4,6 +4,7 @@ import { clearDraft, DRAFT_EVENT, readDraft, startPlanDayDraft, writeDraft } fro
 import type { WorkoutState } from '../../pages/Log';
 import { CoachPlanCard } from './CoachPlanCard';
 import { TodaySessionCard } from './TodaySessionCard';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 // Top of Home: an in-progress session as a tick-off card, otherwise the coach
 // plan card whose Start begins that session right here.
@@ -26,7 +27,7 @@ export const HomeTrainingSlot: React.FC = () => {
       <TodaySessionCard
         workout={draft}
         onChange={(next) => { setDraft(next); writeDraft(next); }}
-        onDiscard={() => { if (window.confirm('Discard this session? Nothing will be saved.')) clearDraft(); }}
+        onDiscard={async () => { if (await confirmDialog({ title: 'Discard this session?', message: 'Nothing will be saved.', confirmLabel: 'Discard', danger: true })) clearDraft(); }}
         onOpenLogger={() => navigate('/log')}
         onFinish={() => navigate('/log?finish=1')}
       />

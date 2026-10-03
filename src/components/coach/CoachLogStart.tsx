@@ -7,6 +7,7 @@ import type { TraineeDashboard } from '../../lib/coachData';
 import type { AssignedPlan } from '../../lib/assignedPlans';
 import { getWorkoutDisplayTitle } from '../../lib/workoutTitle';
 import { planDayOptions, readCoachDraft, writeCoachDraft, type CoachLogDraft, type CoachLogStart } from '../../lib/coachLog';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 interface OptionsProps {
   dash: TraineeDashboard;
@@ -71,8 +72,8 @@ export const CoachLogStartModal: React.FC<ModalProps> = ({ open, onClose, traine
     if (onPickOverride) onPickOverride(start);
     else navigate(`/coach/trainee/${traineeId}/log`, { state: { start } });
   };
-  const discard = () => {
-    if (!window.confirm('Discard the unsaved session?')) return;
+  const discard = async () => {
+    if (!(await confirmDialog({ title: 'Discard the unsaved session?', message: "The sets logged in it will be lost.", confirmLabel: 'Discard', danger: true }))) return;
     writeCoachDraft(traineeId, null);
     setDraft(null);
   };

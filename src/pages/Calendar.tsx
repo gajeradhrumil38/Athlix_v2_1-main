@@ -57,6 +57,7 @@ import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentShe
 import { PlanPreviewModal } from '../components/coach/PlanPreviewModal';
 import { getMyAppointments, getAppointmentsForTrainee, getMyCreatedAppointments, updateAppointment, formatApptTimeRange, type TrainerAppointment } from '../lib/appointments';
 import { getPlanById, type AssignedPlan } from '../lib/assignedPlans';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -302,7 +303,7 @@ const AppointmentCard: React.FC<{
   // nothing ever set that status, since this used to delete the row
   // outright) and lets the notifications feed surface the cancellation.
   const remove = async () => {
-    if (!window.confirm('Cancel this appointment?')) return;
+    if (!(await confirmDialog({ title: 'Cancel this appointment?', message: "They'll see it as cancelled.", confirmLabel: 'Cancel appointment', cancelLabel: 'Keep', danger: true }))) return;
     setBusy(true);
     const res = await updateAppointment(appt.id, { status: 'cancelled' });
     setBusy(false);
@@ -1478,10 +1479,10 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   // Repeat a past workout: seed a fresh log-session draft with the same
   // exercises (weights/reps pre-filled from last time as starting values,
   // none marked done) and open the logger. Turns "reviewing" into "doing".
-  const repeatWorkout = (w: any) => {
+  const repeatWorkout = async (w: any) => {
     const groups = groupExerciseSets(w, unit);
     if (groups.length === 0) return;
-    if (readDraft() && !window.confirm('Start a new workout from this? Your current in-progress workout draft will be replaced.')) return;
+    if (readDraft() && !(await confirmDialog({ title: 'Start a new workout from this?', message: 'Your current in-progress workout will be replaced.', confirmLabel: 'Replace' }))) return;
     const exercises = groups.map((g) => ({
       id: crypto.randomUUID(),
       name: g.name,
@@ -1496,7 +1497,7 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   // ── Delete ───────────────────────────────────────────────────────────────────
 
   const handleDelete = async (id: string, title: string) => {
-    if (!user || !window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    if (!user || !(await confirmDialog({ title: `Delete "${title}"?`, message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await deleteWorkout(user.id, id);
       setWorkouts((p) => p.filter((w) => w.id !== id));
@@ -1514,7 +1515,7 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
     const parent = workouts.find((w) => w.id === parentId);
     if (!parent) return;
     const remaining = groupExerciseSets(parent, unit).filter((g) => g.name !== exerciseName);
-    if (!window.confirm(`Remove "${exerciseName}" from this workout?`)) return;
+    if (!(await confirmDialog({ title: `Remove "${exerciseName}"?`, message: 'It will be removed from this workout.', confirmLabel: 'Remove', danger: true }))) return;
     try {
       if (remaining.length === 0) {
         await deleteWorkout(user.id, parentId);

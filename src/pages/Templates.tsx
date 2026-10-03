@@ -8,6 +8,7 @@ import { deleteTemplate, getTemplates } from '../lib/supabaseData';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
 import { muscleColor } from '../lib/muscleColors';
 import type { ExerciseEntry } from './Log';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 interface TemplateExercise {
   id: string;
@@ -58,7 +59,7 @@ export const Templates: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this plan?')) return;
+    if (!(await confirmDialog({ title: 'Delete this plan?', message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       if (!user) throw new Error('Not signed in');
       await deleteTemplate(user.id, id);

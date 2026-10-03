@@ -32,6 +32,7 @@ import { settleColumns } from '../lib/masonry';
 import { AskAiCard, type AiCardActions } from '../components/coach/overview/AskAiCard';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
 import type { PlanStarter } from '../lib/planStarters';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 // Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
 const ACCENT = 'var(--accent)';
@@ -680,7 +681,7 @@ export const TraineeDetail: React.FC = () => {
                       workouts={shared ? dash.workouts.data : []}
                       onEdit={() => { setEditingPlan(p); setAssign(true); }}
                       onRemove={async () => {
-                        if (!window.confirm(`Delete "${p.title}"? This can't be undone.`)) return;
+                        if (!(await confirmDialog({ title: `Delete "${p.title}"?`, message: 'This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
                         const res = await deletePlan(p.id);
                         if (!res.ok) { toast.error(res.error || 'Could not delete plan.'); return; }
                         toast.success('Plan deleted');

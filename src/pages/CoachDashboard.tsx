@@ -6,6 +6,7 @@ import { AppIcon } from '../config/icons';
 import { getSentLinks, cancelInvite, SHARE_SCOPES, type CoachLink } from '../lib/coachLinks';
 import { getRosterStatus, type RosterStatus } from '../lib/coachData';
 import { InviteTraineeSheet } from '../components/coach/InviteTraineeSheet';
+import { confirmDialog } from '../components/shared/ConfirmDialog';
 
 // Trainer's home: the roster of accepted trainees + pending invites, and the
 // one-tap invite. Guarded by profiles.is_trainer.
@@ -84,7 +85,7 @@ export const CoachDashboard: React.FC = () => {
               key={l.id}
               link={l}
               onCancel={async () => {
-                if (!window.confirm(`Cancel the invite to ${l.invited_email}?`)) return;
+                if (!(await confirmDialog({ title: 'Cancel this invite?', message: `${l.invited_email} won't be able to join with it.`, confirmLabel: 'Cancel invite', cancelLabel: 'Keep', danger: true }))) return;
                 const res = await cancelInvite(l.id);
                 if (!res.ok) { toast.error(res.error || 'Could not cancel invite.'); return; }
                 toast.success('Invite cancelled');
