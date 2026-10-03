@@ -41,8 +41,8 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
   const SIZE = 290;
   const cx = SIZE / 2;
   const cy = SIZE / 2;
-  const R = 98;
-  const LABEL_R = R + 26;
+  const R = 112;
+  const LABEL_R = R + 16;
 
   const angleOf = (i: number) => -Math.PI / 2 + (2 * Math.PI / N) * i;
 
@@ -126,22 +126,27 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
       )}
 
       {/* Radar SVG — fills the card width */}
-      <div className="relative w-full" style={{ aspectRatio: '1/1', maxHeight: 300 }}>
+      <div className="relative w-full" style={{ aspectRatio: '1/1', maxHeight: 360 }}>
         {/* Widen the viewBox horizontally so long edge labels (CORE / BACK /
             SHOULDERS) render fully instead of clipping at the SVG edge. */}
-        <svg viewBox={`-60 0 ${SIZE + 120} ${SIZE}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
+        <svg viewBox={`-30 -4 ${SIZE + 62} ${SIZE + 8}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
           <defs>
             <radialGradient id="chartBg2" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="rgba(255,255,255,0.03)" />
               <stop offset="100%" stopColor="rgba(0,0,0,0)" />
             </radialGradient>
             <radialGradient id="radarFill3" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#C8FF00" stopOpacity="0.10" />
-              <stop offset="100%" stopColor="#C8FF00" stopOpacity="0.02" />
+              <stop offset="0%" stopColor="#C8FF00" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#C8FF00" stopOpacity="0.12" />
             </radialGradient>
           </defs>
 
-          {/* Background disc */}
+          {/* Solid face under the web so the card's plot grid doesn't show
+              through the chart itself — only around it. */}
+          <path
+            d={spoke.map((s, i) => `${i === 0 ? 'M' : 'L'}${s.axisx.toFixed(2)},${s.axisy.toFixed(2)}`).join(' ') + ' Z'}
+            fill="#121316"
+          />
           <circle cx={cx} cy={cy} r={R + 2} fill="url(#chartBg2)" />
 
           {/* Ring grid */}
@@ -160,25 +165,26 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
                 fill="none"
                 stroke={
                   r === 1.0
-                    ? 'rgba(255,255,255,0.10)'
+                    ? 'rgba(255,255,255,0.16)'
                     : r === 0.6
-                      ? 'rgba(255,255,255,0.07)'
-                      : 'rgba(255,255,255,0.04)'
+                      ? 'rgba(255,255,255,0.10)'
+                      : 'rgba(255,255,255,0.06)'
                 }
-                strokeWidth={r === 1.0 ? 0.8 : 0.5}
+                strokeWidth={r === 1.0 ? 1 : 0.6}
                 strokeDasharray={r === 0.6 ? '2,3' : undefined}
               />
             );
           })}
 
-          {/* % labels — subtle, only at 40% and 80% */}
+          {/* % labels — subtle, only at 40% and 80%, set between the first
+              two spokes so they never sit on the Chest trace. */}
           {[0.4, 0.8].map(r => (
             <text
               key={r}
-              x={cx + 3}
-              y={cy - R * r + 4}
-              fontSize="6"
-              fill="rgba(255,255,255,0.13)"
+              x={cx + R * r * Math.cos(angleOf(0.5)) + 2}
+              y={cy + R * r * Math.sin(angleOf(0.5))}
+              fontSize="8"
+              fill="rgba(255,255,255,0.28)"
               textAnchor="start"
             >
               {r * 100}%
@@ -191,7 +197,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
               key={i}
               x1={cx} y1={cy}
               x2={s.axisx} y2={s.axisy}
-              stroke="rgba(255,255,255,0.05)"
+              stroke="rgba(255,255,255,0.07)"
               strokeWidth="0.7"
             />
           ))}
@@ -200,9 +206,9 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
           <path
             d={ghostPolygon}
             fill="none"
-            stroke="rgba(255,255,255,0.11)"
-            strokeWidth="0.8"
-            strokeDasharray="2,3"
+            stroke="rgba(255,255,255,0.22)"
+            strokeWidth="1"
+            strokeDasharray="3,3"
           />
 
           {/* Load fill polygon */}
@@ -210,8 +216,8 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
             <path
               d={polygon}
               fill="url(#radarFill3)"
-              stroke="rgba(200,255,0,0.50)"
-              strokeWidth="1.3"
+              stroke="#C8FF00"
+              strokeWidth="2.2"
               strokeLinejoin="round"
             />
           )}
@@ -239,9 +245,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
                     />
                   </circle>
                   {/* Solid dot */}
-                  <circle cx={s.px} cy={s.py} r="3" fill={s.hex} />
-                  {/* Inner highlight */}
-                  <circle cx={s.px} cy={s.py} r="1.1" fill="rgba(255,255,255,0.65)" />
+                  <circle cx={s.px} cy={s.py} r="4.2" fill={s.hex} stroke="#121316" strokeWidth="1.5" />
                 </g>
               ) : null,
             )}
@@ -259,9 +263,9 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
                 y={s.ly}
                 textAnchor={anchor(s.lx)}
                 dominantBaseline="middle"
-                fontSize="9"
+                fontSize="12"
                 fontWeight="700"
-                fill={isActive ? s.hex : 'rgba(255,255,255,0.18)'}
+                fill={isActive ? s.hex : 'rgba(255,255,255,0.38)'}
                 letterSpacing="0.5"
               >
                 {s.key.toUpperCase()}
@@ -276,7 +280,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
             <svg width="14" height="5">
               <line x1="0" y1="2.5" x2="14" y2="2.5" stroke="rgba(255,255,255,0.4)" strokeWidth="0.8" strokeDasharray="2,2.5" />
             </svg>
-            <span className="text-[10px] text-[var(--text-secondary)]">Goal ({targetSets} sets)</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">Goal ({targetSets} sets)</span>
           </div>
         )}
       </div>
