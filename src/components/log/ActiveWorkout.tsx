@@ -46,6 +46,8 @@ interface ActiveWorkoutProps {
   recentExercises?: Exercise[];
   contextLabel?: string;
   finishLabel?: string;
+  // Let the picker add several exercises in one go ("Add N exercises").
+  multiSelectPicker?: boolean;
 }
 
 interface DialPickerState {
@@ -124,6 +126,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
   recentExercises,
   contextLabel,
   finishLabel = 'Finish Workout',
+  multiSelectPicker = false,
 }) => {
   const { user } = useAuth();
   const historyId = historyUserId ?? user?.id;
@@ -1376,6 +1379,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
             onClose={() => setShowExercisePicker(false)}
             recentExercises={recentExercises ?? []}
             contextLabel={contextLabel}
+            multiSelect={multiSelectPicker}
             onEditTemplate={onEditTemplate}
             onLoadPlan={handleLoadPlan}
             defaultTab={pickerDefaultTab}

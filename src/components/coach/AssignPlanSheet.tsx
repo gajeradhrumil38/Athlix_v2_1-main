@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
+import { CenterModal } from '../shared/CenterModal';
 import { haptics } from '../../lib/haptics';
 import { ExercisePicker, type Exercise } from '../log/ExercisePicker';
 import { DialPicker } from '../log/DialPicker';
@@ -214,143 +214,135 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   const heading = editingPlan ? 'Edit plan' : step === 'start' ? 'Assign a plan' : step === 'preview' ? 'Preview' : 'Build the plan';
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-[70] flex items-end justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={requestClose} style={{ background: 'rgba(3,5,9,0.94)' }}>
-          <motion.div className="w-full max-w-md rounded-t-3xl overflow-hidden flex flex-col"
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', stiffness: 440, damping: 42 }}
-            onClick={(e) => e.stopPropagation()}
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', maxHeight: '90vh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-            <div className="px-6 pt-6 pb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">{heading}</h2>
-                <p className="text-[15px] text-[var(--text-secondary)] mt-1">For {traineeName}</p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {step === 'build' && (
-                  <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-label="More"
-                    className="h-9 w-9 rounded-full flex items-center justify-center text-[18px] leading-none"
-                    style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>⋯</button>
-                )}
-                <button type="button" onClick={requestClose} aria-label="Close" className="h-9 w-9 rounded-full flex items-center justify-center"
-                  style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-                  <AppIcon name="Close" size="sm" />
-                </button>
-              </div>
-            </div>
-
-            {menuOpen && step === 'build' && (
-              <div className="mx-6 mb-2 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
-                <button type="button" onClick={saveAsTemplate} disabled={!rows.length} className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[var(--text-primary)] disabled:opacity-40">Save as template</button>
-                <button type="button" onClick={duplicateDay} disabled={!dayRows.length} className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[var(--text-primary)] disabled:opacity-40">Duplicate {multi ? activeDay.label || 'day' : 'as a new day'}</button>
-                {multi && <button type="button" onClick={removeDay} className="w-full px-4 py-3 text-left text-[14px] font-semibold" style={{ color: '#ff8080' }}>Remove {activeDay.label || 'this day'}</button>}
-              </div>
-            )}
-
-            <div className="px-6 overflow-y-auto flex-1 pb-4">
-              {step === 'start' && <AssignStartStep traineeName={traineeName} traineeWorkouts={traineeWorkouts} onPick={loadStarter} />}
-
-              {step === 'preview' && (
-                <AssignPreviewStep plan={draftPlan} coachName={coachName} traineeName={traineeName} message={message} onMessage={setMessage}
-                  busy={busy} error={error} isEdit={!!editingPlan} onBack={() => setStep('build')} onSend={send} />
-              )}
-
-              {step === 'build' && (
-                <>
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${traineeName}'s program`}
-                    className="w-full h-12 rounded-2xl px-4 text-[16px] font-semibold outline-none"
-                    style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
-                  <p className="text-[12px] text-[var(--text-muted)] mt-2">Each day is one workout. Your trainee does them in order.</p>
-
-                  <div className="flex gap-1.5 mt-3 overflow-x-auto no-scrollbar -mx-1 px-1">
-                    {multi && days.map((d) => (
-                      <button key={d.id} type="button" onClick={() => { setActiveDayId(d.id); setExpanded(null); }}
-                        className="shrink-0 px-3 h-9 rounded-xl text-[13px] font-semibold"
-                        style={d.id === activeDay.id
-                          ? { background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)' }
-                          : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid transparent' }}>
-                        {d.label || 'Day'}
-                      </button>
-                    ))}
-                    <button type="button" onClick={addDay} className="shrink-0 px-3 h-9 rounded-xl text-[13px] font-semibold flex items-center gap-1" style={{ color: 'var(--accent)' }}>
-                      <AppIcon name="Plus" size="sm" /> Day
-                    </button>
-                  </div>
-                  {multi && (
-                    <input value={activeDay.label} onChange={(e) => renameDay(e.target.value)} placeholder="Day name"
-                      className="w-full h-9 mt-2 rounded-xl px-3 text-[13px] font-semibold outline-none"
-                      style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
-                  )}
-
-                  {dayRows.length > 0 && (
-                    <div className="flex items-center gap-1.5 mt-3">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] shrink-0">All</span>
-                      {SCHEMES.map(([s, r]) => {
-                        const active = dayRows.every(({ r: row }) => row.sets === s && row.reps === r);
-                        return (
-                          <button key={`${s}x${r}`} type="button" onClick={() => applyScheme(s, r)}
-                            className="px-2.5 h-8 rounded-lg text-[12px] font-bold tabular-nums"
-                            style={active ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-                            {s}×{r}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="space-y-2 mt-3">
-                    {dayRows.length === 0 ? (
-                      <p className="text-[14px] text-[var(--text-muted)] text-center py-6">No exercises{multi ? ' in this day' : ''} yet.</p>
-                    ) : dayRows.map(({ r, i }, pos) => (
-                      <PlanExerciseRow key={`${r.name}-${i}`} row={r} index={pos} expanded={expanded === i}
-                        isFirst={pos === 0} isLast={pos === dayRows.length - 1}
-                        onToggle={() => setExpanded(expanded === i ? null : i)}
-                        onChange={(f, v) => setField(i, f, v)} onNote={(v) => setNote(i, v)}
-                        onOpenDial={(f) => setOpenDial({ rowIndex: i, field: f })}
-                        onMove={(dir) => move(i, dir)} onRemove={() => removeRow(i)} />
-                    ))}
-                  </div>
-
-                  <button type="button" onClick={() => setPicking(true)}
-                    className="w-full h-12 mt-3 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-1.5 text-[var(--text-secondary)]"
-                    style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border)' }}>
-                    <AppIcon name="Search" size="sm" /> Add exercise{multi && activeDay.label ? ` to ${activeDay.label}` : ''}
-                  </button>
-                  {error && <p className="text-[14px] mt-2" style={{ color: '#ff8080' }}>{error}</p>}
-                </>
-              )}
-            </div>
-
+    <>
+      <CenterModal open={open} onClose={requestClose}>
+        <div className="px-6 pt-6 pb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-[24px] font-bold text-[var(--text-primary)] leading-tight">{heading}</h2>
+            <p className="text-[15px] text-[var(--text-secondary)] mt-1">For {traineeName}</p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
             {step === 'build' && (
-              <div className="px-6 pt-2 pb-6">
-                <button type="button" disabled={!rows.length} onClick={goPreview}
-                  className="w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-40"
-                  style={{ background: 'var(--accent)', color: '#000' }}>
-                  Preview & send
+              <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-label="More"
+                className="h-9 w-9 rounded-full flex items-center justify-center text-[18px] leading-none"
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>⋯</button>
+            )}
+            <button type="button" onClick={requestClose} aria-label="Close" className="h-9 w-9 rounded-full flex items-center justify-center"
+              style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+              <AppIcon name="Close" size="sm" />
+            </button>
+          </div>
+        </div>
+
+        {menuOpen && step === 'build' && (
+          <div className="mx-6 mb-2 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
+            <button type="button" onClick={saveAsTemplate} disabled={!rows.length} className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[var(--text-primary)] disabled:opacity-40">Save as template</button>
+            <button type="button" onClick={duplicateDay} disabled={!dayRows.length} className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[var(--text-primary)] disabled:opacity-40">Duplicate {multi ? activeDay.label || 'day' : 'as a new day'}</button>
+            {multi && <button type="button" onClick={removeDay} className="w-full px-4 py-3 text-left text-[14px] font-semibold" style={{ color: '#ff8080' }}>Remove {activeDay.label || 'this day'}</button>}
+          </div>
+        )}
+
+        <div className="px-6 overflow-y-auto flex-1 pb-4">
+          {step === 'start' && <AssignStartStep traineeName={traineeName} traineeWorkouts={traineeWorkouts} onPick={loadStarter} />}
+
+          {step === 'preview' && (
+            <AssignPreviewStep plan={draftPlan} coachName={coachName} traineeName={traineeName} message={message} onMessage={setMessage}
+              busy={busy} error={error} isEdit={!!editingPlan} onBack={() => setStep('build')} onSend={send} />
+          )}
+
+          {step === 'build' && (
+            <>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${traineeName}'s program`}
+                className="w-full h-12 rounded-2xl px-4 text-[16px] font-semibold outline-none"
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+              <p className="text-[12px] text-[var(--text-muted)] mt-2">Each day is one workout. Your trainee does them in order.</p>
+
+              <div className="flex gap-1.5 mt-3 overflow-x-auto no-scrollbar -mx-1 px-1">
+                {multi && days.map((d) => (
+                  <button key={d.id} type="button" onClick={() => { setActiveDayId(d.id); setExpanded(null); }}
+                    className="shrink-0 px-3 h-9 rounded-xl text-[13px] font-semibold"
+                    style={d.id === activeDay.id
+                      ? { background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)' }
+                      : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid transparent' }}>
+                    {d.label || 'Day'}
+                  </button>
+                ))}
+                <button type="button" onClick={addDay} className="shrink-0 px-3 h-9 rounded-xl text-[13px] font-semibold flex items-center gap-1" style={{ color: 'var(--accent)' }}>
+                  <AppIcon name="Plus" size="sm" /> Day
                 </button>
               </div>
-            )}
-          </motion.div>
+              {multi && (
+                <input value={activeDay.label} onChange={(e) => renameDay(e.target.value)} placeholder="Day name"
+                  className="w-full h-9 mt-2 rounded-xl px-3 text-[13px] font-semibold outline-none"
+                  style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+              )}
 
-          {picking && (
-            <div className="fixed inset-0 z-[80]" onClick={(e) => e.stopPropagation()}>
-              <ExercisePicker recentExercises={recentExercises} defaultTab="recent" multiSelect
-                contextLabel={multi ? `Adding to ${activeDay.label || 'this day'}` : `Adding to ${traineeName}'s plan`}
-                onSelect={(ex) => addExercise(ex.name)}
-                onLoadTemplate={(exs) => { exs.forEach((ex) => addExercise(ex.name)); setPicking(false); }}
-                onClose={() => setPicking(false)} />
-            </div>
-          )}
+              {dayRows.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] shrink-0">All</span>
+                  {SCHEMES.map(([s, r]) => {
+                    const active = dayRows.every(({ r: row }) => row.sets === s && row.reps === r);
+                    return (
+                      <button key={`${s}x${r}`} type="button" onClick={() => applyScheme(s, r)}
+                        className="px-2.5 h-8 rounded-lg text-[12px] font-bold tabular-nums"
+                        style={active ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+                        {s}×{r}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-          {openDial && rows[openDial.rowIndex] && (
-            <DialPicker title={DIAL_LABEL[openDial.field]} fieldKind={DIAL_KIND[openDial.field]} inputType="weight_reps"
-              initialValue={rows[openDial.rowIndex][openDial.field]} weightUnit="lbs"
-              onClose={() => setOpenDial(null)}
-              onConfirm={(v) => { setField(openDial.rowIndex, openDial.field, v); setOpenDial(null); }} />
+              <div className="space-y-2 mt-3">
+                {dayRows.length === 0 ? (
+                  <p className="text-[14px] text-[var(--text-muted)] text-center py-6">No exercises{multi ? ' in this day' : ''} yet.</p>
+                ) : dayRows.map(({ r, i }, pos) => (
+                  <PlanExerciseRow key={`${r.name}-${i}`} row={r} index={pos} expanded={expanded === i}
+                    isFirst={pos === 0} isLast={pos === dayRows.length - 1}
+                    onToggle={() => setExpanded(expanded === i ? null : i)}
+                    onChange={(f, v) => setField(i, f, v)} onNote={(v) => setNote(i, v)}
+                    onOpenDial={(f) => setOpenDial({ rowIndex: i, field: f })}
+                    onMove={(dir) => move(i, dir)} onRemove={() => removeRow(i)} />
+                ))}
+              </div>
+
+              <button type="button" onClick={() => setPicking(true)}
+                className="w-full h-12 mt-3 rounded-2xl font-semibold text-[15px] flex items-center justify-center gap-1.5 text-[var(--text-secondary)]"
+                style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border)' }}>
+                <AppIcon name="Search" size="sm" /> Add exercise{multi && activeDay.label ? ` to ${activeDay.label}` : ''}
+              </button>
+              {error && <p className="text-[14px] mt-2" style={{ color: '#ff8080' }}>{error}</p>}
+            </>
           )}
-        </motion.div>
+        </div>
+
+        {step === 'build' && (
+          <div className="px-6 pt-2 pb-5 border-t border-[var(--border)]">
+            <button type="button" disabled={!rows.length} onClick={goPreview}
+              className="w-full h-14 rounded-2xl font-bold text-[17px] flex items-center justify-center gap-2 disabled:opacity-40"
+              style={{ background: 'var(--accent)', color: '#000' }}>
+              Preview & send
+            </button>
+          </div>
+        )}
+      </CenterModal>
+
+      {open && picking && (
+        <div className="fixed inset-0 z-[80]" onClick={(e) => e.stopPropagation()}>
+          <ExercisePicker recentExercises={recentExercises} defaultTab="recent" multiSelect
+            contextLabel={multi ? `Adding to ${activeDay.label || 'this day'}` : `Adding to ${traineeName}'s plan`}
+            onSelect={(ex) => addExercise(ex.name)}
+            onLoadTemplate={(exs) => { exs.forEach((ex) => addExercise(ex.name)); setPicking(false); }}
+            onClose={() => setPicking(false)} />
+        </div>
       )}
-    </AnimatePresence>
+
+      {open && openDial && rows[openDial.rowIndex] && (
+        <DialPicker title={DIAL_LABEL[openDial.field]} fieldKind={DIAL_KIND[openDial.field]} inputType="weight_reps"
+          initialValue={rows[openDial.rowIndex][openDial.field]} weightUnit="lbs"
+          onClose={() => setOpenDial(null)}
+          onConfirm={(v) => { setField(openDial.rowIndex, openDial.field, v); setOpenDial(null); }} />
+      )}
+    </>
   );
 };

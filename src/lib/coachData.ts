@@ -60,7 +60,19 @@ function latestFromCache(rows: { cache_key: string; data: any }[] | null, pick: 
   return null;
 }
 
+// Last-loaded dashboard per trainee, so moving between the trainee page and the
+// coach logger renders instantly from memory while a fresh copy loads.
+const dashboardCache = new Map<string, TraineeDashboard>();
+export const peekTraineeDashboard = (traineeId: string): TraineeDashboard | null => dashboardCache.get(traineeId) ?? null;
+
 export async function getTraineeDashboard(traineeId: string): Promise<TraineeDashboard | null> {
+  const result = await loadTraineeDashboard(traineeId);
+  if (result) dashboardCache.set(traineeId, result);
+  else dashboardCache.delete(traineeId);
+  return result;
+}
+
+async function loadTraineeDashboard(traineeId: string): Promise<TraineeDashboard | null> {
   const link = (await getSentLinks()).find((l) => l.trainee_id === traineeId && l.status === 'accepted');
   if (!link) return null;
 

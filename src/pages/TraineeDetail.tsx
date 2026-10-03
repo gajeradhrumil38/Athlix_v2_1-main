@@ -13,8 +13,9 @@ import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
 import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
 import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
-import { getTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
-import { getAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
+import { getTraineeDashboard, peekTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
+import { CoachLogStartModal } from '../components/coach/CoachLogStart';
+import { getAssignedPlansFor, peekAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
 import { dayOfSession } from '../lib/planProgress';
 import { updateCoachNotes } from '../lib/coachLinks';
 import { Calendar, ReadOnlyWorkoutCards } from './Calendar';
@@ -97,17 +98,20 @@ function buildMuscleViz(workouts: TraineeWorkout[]): { map: MuscleData; radar: M
 export const TraineeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [dash, setDash] = useState<TraineeDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Render from the last-loaded copy (e.g. coming back from the coach logger)
+  // and refresh quietly — no "Loading…" flash on every return.
+  const [dash, setDash] = useState<TraineeDashboard | null>(() => (id ? peekTraineeDashboard(id) : null));
+  const [loading, setLoading] = useState(() => !(id && peekTraineeDashboard(id)));
   const [missing, setMissing] = useState(false);
-  const [plans, setPlans] = useState<AssignedPlan[]>([]);
+  const [plans, setPlans] = useState<AssignedPlan[]>(() => (id ? peekAssignedPlansFor(id) ?? [] : []));
   const [assign, setAssign] = useState(false);
+  const [logStart, setLogStart] = useState(false);
   const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(() => (id ? peekTraineeDashboard(id)?.coachNotes ?? '' : ''));
   const [notesSaved, setNotesSaved] = useState(false);
-  const savedNotesRef = React.useRef('');
+  const savedNotesRef = React.useRef(notes);
   // Responsive column count for the masonry distribution (1 / 2 / 3).
   const [cols, setCols] = useState(3);
   useEffect(() => {
@@ -230,21 +234,26 @@ export const TraineeDetail: React.FC = () => {
   const loadDash = React.useCallback(async () => {
     if (!id) return;
     const d = await getTraineeDashboard(id);
-    if (!d) setMissing(true); else { setDash(d); setNotes(d.coachNotes); savedNotesRef.current = d.coachNotes; }
+    if (!d) { setMissing(true); return; }
+    setDash(d);
+    // Only take the server's notes if the coach hasn't edited them meanwhile.
+    setNotes((cur) => (cur === savedNotesRef.current ? d.coachNotes : cur));
+    savedNotesRef.current = d.coachNotes;
   }, [id]);
 
   useEffect(() => {
     if (!id) return;
     (async () => {
-      await loadDash();
-      await loadPlans();
+      await Promise.all([loadDash(), loadPlans()]);
       setLoading(false);
     })();
   }, [id, loadDash, loadPlans]);
 
   if (loading) {
-    return <div className="max-w-2xl mx-auto px-4 py-16 flex items-center justify-center gap-2 text-[var(--text-muted)]">
-      <AppIcon name="Spinner" size="sm" /> Loading…
+    return <div className="max-w-6xl mx-auto px-4 pt-2 space-y-3">
+      <div className="skeleton h-12 rounded-2xl" />
+      <div className="skeleton h-12 rounded-2xl" />
+      <div className="skeleton h-40 rounded-2xl" />
     </div>;
   }
   if (missing || !dash) {
@@ -295,37 +304,39 @@ export const TraineeDetail: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 pb-10">
       {/* Header */}
-      <div className="flex items-center gap-3 pt-2 pb-4">
+      <div className="flex items-center gap-3 pt-2 pb-3">
         <button onClick={() => navigate('/coach')} aria-label="Back"
-          className="h-10 w-10 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)' }}>
+          className="h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)' }}>
           <AppIcon name="Back" size="md" />
         </button>
         <div className="min-w-0 flex-1">
           <h1 className="text-[26px] font-bold text-[var(--text-primary)] leading-none truncate">{dash.name}</h1>
           <p className="text-[14px] text-[var(--text-muted)] mt-1">Trainee overview</p>
         </div>
-        <div className="shrink-0 flex items-center gap-2">
-          {dash.workouts.shared && (
-            <button
-              type="button"
-              onClick={() => navigate(`/coach/trainee/${id}/log`)}
-              aria-label="Log a session for this trainee"
-              title="Log a session — record a completed workout"
-              className="flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
-              style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)', border: '1.5px solid color-mix(in srgb, var(--accent) 55%, transparent)' }}
-            >
-              <AppIcon name="Plus" size="sm" /> Log
-            </button>
-          )}
+      </div>
+
+      {/* The two things a coach does here, side by side and equally easy to hit. */}
+      <div className={`grid gap-2 pb-4 md:max-w-md ${dash.workouts.shared ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {dash.workouts.shared && (
           <button
             type="button"
-            onClick={() => setAssign(true)}
-            className="flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
-            style={{ background: 'var(--accent)', color: '#000' }}
+            onClick={() => setLogStart(true)}
+            title="Record a session you did together"
+            className="h-12 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-1.5"
+            style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)', border: '1.5px solid color-mix(in srgb, var(--accent) 55%, transparent)' }}
           >
-            <AppIcon name="Clipboard" size="sm" /> Assign
+            <AppIcon name="Plus" size="sm" /> Log session
           </button>
-        </div>
+        )}
+        <button
+          type="button"
+          onClick={() => { setEditingPlan(null); setAssign(true); }}
+          title="Give them a plan to follow"
+          className="h-12 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-1.5"
+          style={{ background: 'var(--accent)', color: '#000' }}
+        >
+          <AppIcon name="Clipboard" size="sm" /> Assign plan
+        </button>
       </div>
 
       {/* Coaching triage banner — red flags first, or an all-clear */}
@@ -543,6 +554,10 @@ export const TraineeDetail: React.FC = () => {
         dash.workouts.shared
           ? <div className="glass-card overflow-hidden"><Calendar userId={id!} readOnly /></div>
           : <NotShared label="Workouts" />
+      )}
+
+      {dash.workouts.shared && (
+        <CoachLogStartModal open={logStart} onClose={() => setLogStart(false)} traineeId={id!} dash={dash} plans={plans} />
       )}
 
       <AssignPlanSheet

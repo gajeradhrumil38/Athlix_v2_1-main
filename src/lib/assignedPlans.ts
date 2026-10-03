@@ -146,7 +146,11 @@ function shape(rows: any[]): AssignedPlan[] {
 
 const SELECT = '*, assigned_plan_exercises(name, muscle_group, default_sets, default_reps, default_weight, unit, order_index, day_label, rest_seconds, note)';
 
-// Trainer: plans they assigned to a given trainee.
+// Trainer: plans they assigned to a given trainee. The last result per trainee
+// is kept in memory so coach screens can render instantly while refreshing.
+const plansForCache = new Map<string, AssignedPlan[]>();
+export const peekAssignedPlansFor = (traineeId: string): AssignedPlan[] | null => plansForCache.get(traineeId) ?? null;
+
 export async function getAssignedPlansFor(traineeId: string): Promise<AssignedPlan[]> {
   const { data } = await supabase
     .from('assigned_plans')
@@ -154,7 +158,9 @@ export async function getAssignedPlansFor(traineeId: string): Promise<AssignedPl
     .eq('trainee_id', traineeId)
     .eq('status', 'active')
     .order('created_at', { ascending: false });
-  return shape(data ?? []);
+  const plans = shape(data ?? []);
+  plansForCache.set(traineeId, plans);
+  return plans;
 }
 
 // Trainee: plans assigned to me.
