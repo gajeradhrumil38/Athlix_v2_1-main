@@ -28,6 +28,7 @@ import { muscleColor } from '../lib/muscleColors';
 import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
 import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard, tile } from '../components/coach/overview/Widget';
 import { palette } from '../theme/colors';
+import { settleColumns } from '../lib/masonry';
 
 // Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
 const ACCENT = 'var(--accent)';
@@ -199,6 +200,33 @@ export const TraineeDetail: React.FC = () => {
       return next;
     });
   }, [availableKey, cols]);
+
+  // The seeded split guesses card heights; real ones differ (the session card
+  // comes and goes, Day/Week/Month resizes the muscle cards), which left a
+  // column ending far short of the others. Measure the cards and settle the
+  // columns whenever their sizes change — but never mid-drag.
+  const [masonryEl, setMasonryEl] = useState<HTMLDivElement | null>(null);
+  const draggingRef = React.useRef(false);
+  draggingRef.current = activeCardId != null;
+  useEffect(() => {
+    const root = masonryEl;
+    if (!root || tab !== 'overview') return;
+    let timer: number | undefined;
+    const settle = () => {
+      if (draggingRef.current) return;
+      const heights: Record<string, number> = {};
+      root.querySelectorAll<HTMLElement>('[data-card-id]').forEach((el) => { heights[el.dataset.cardId!] = el.offsetHeight; });
+      setColumns((prev) => {
+        const next = settleColumns(prev, (cid) => heights[cid] ?? 0, 12);
+        if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
+        try { localStorage.setItem(OVERVIEW_COLUMNS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+        return next;
+      });
+    };
+    const ro = new ResizeObserver(() => { window.clearTimeout(timer); timer = window.setTimeout(settle, 250); });
+    root.querySelectorAll('[data-card-id]').forEach((el) => ro.observe(el));
+    return () => { ro.disconnect(); window.clearTimeout(timer); };
+  }, [masonryEl, columns, tab, activeCardId]);
 
   const findColumn = (id: string, cols2: string[][]) => cols2.findIndex((c) => c.includes(id));
 
@@ -652,7 +680,7 @@ export const TraineeDetail: React.FC = () => {
                 SortableContext (dnd-kit's multi-container pattern), so a
                 card can actually move to wherever there's room, and the
                 drag animation stays correct across the column boundary. */}
-            <div className="flex gap-3 items-start">
+            <div ref={setMasonryEl} className="flex gap-3 items-start">
               {renderColumns.map((colIds, ci) => (
                 <MasonryColumn key={ci} id={`col-${ci}`} itemIds={colIds}>
                   {colIds.map((k) => <SortableCard key={k} id={k}>{WIDGETS[k]}</SortableCard>)}
@@ -770,6 +798,7 @@ const SortableCard: React.FC<{ id: string; children: React.ReactNode }> = ({ id,
   return (
     <div
       ref={setNodeRef}
+      data-card-id={id}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }}
       className="relative"
     >
