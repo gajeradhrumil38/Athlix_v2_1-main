@@ -217,6 +217,7 @@ export const Log: React.FC = () => {
   // Set when this session was started from a coach-assigned plan — persisted to
   // the saved workout so the trainer can see prescribed-vs-actual / adherence.
   const sourcePlanIdRef = useRef<string | null>(null);
+  const sourcePlanDayRef = useRef<string | null>(null);
   // lb-only for now — never follow a stale stored kg preference.
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('lbs');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>(() => {
@@ -280,7 +281,9 @@ export const Log: React.FC = () => {
     // plan take priority over a lingering empty draft.
     const recExercises = (location.state as { recommendedExercises?: PlanExercise[] } | null)?.recommendedExercises;
     if (recExercises?.length) {
-      sourcePlanIdRef.current = (location.state as { sourcePlanId?: string } | null)?.sourcePlanId ?? null;
+      const planState = location.state as { sourcePlanId?: string; sourcePlanDay?: string } | null;
+      sourcePlanIdRef.current = planState?.sourcePlanId ?? null;
+      sourcePlanDayRef.current = planState?.sourcePlanDay ?? null;
       const draftHasWork = draft?.exercises?.some((e) => e.sets.length > 0);
       if (draft && draftHasWork) {
         setWorkout(draft);
@@ -524,6 +527,7 @@ export const Log: React.FC = () => {
         duration_minutes: Math.max(1, Math.round(finalElapsedSeconds / 60)),
         notes: notes || null,
         source_plan_id: sourcePlanIdRef.current,
+        source_plan_day: sourcePlanDayRef.current,
           exercises: completedExercises.map(({ exercise, completedSets, exerciseIndex }) => ({
             name: exercise.name,
             muscle_group: exercise.muscleGroup,
