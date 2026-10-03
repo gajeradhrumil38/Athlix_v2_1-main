@@ -57,18 +57,19 @@ export const CoachLogStartOptions: React.FC<OptionsProps> = ({ dash, plans, draf
   );
 };
 
-interface ModalProps { open: boolean; onClose: () => void; traineeId: string; dash: TraineeDashboard; plans: AssignedPlan[] }
+interface ModalProps { open: boolean; onClose: () => void; traineeId: string; dash: TraineeDashboard; plans: AssignedPlan[]; onPick?: (start: CoachLogStart) => void }
 
 // "+ Log" popup on the trainee page. Picking hands the choice to the logger
 // route, which builds the session from cached data — no loading screen.
-export const CoachLogStartModal: React.FC<ModalProps> = ({ open, onClose, traineeId, dash, plans }) => {
+export const CoachLogStartModal: React.FC<ModalProps> = ({ open, onClose, traineeId, dash, plans, onPick: onPickOverride }) => {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<CoachLogDraft | null>(null);
   useEffect(() => { if (open) setDraft(readCoachDraft(traineeId)); }, [open, traineeId]);
 
   const pick = (start: CoachLogStart) => {
     onClose();
-    navigate(`/coach/trainee/${traineeId}/log`, { state: { start } });
+    if (onPickOverride) onPickOverride(start);
+    else navigate(`/coach/trainee/${traineeId}/log`, { state: { start } });
   };
   const discard = () => {
     if (!window.confirm('Discard the unsaved session?')) return;

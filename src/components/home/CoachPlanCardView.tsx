@@ -8,6 +8,7 @@ import type { PlanProgress } from '../../lib/planProgress';
 interface Props {
   plan: AssignedPlan;
   coachName: string | null;
+  eyebrow?: string;
   progress: PlanProgress;
   preview?: boolean;
   otherPlansCount?: number;
@@ -18,7 +19,7 @@ interface Props {
 
 const dayName = (label: string, i: number) => label || `Day ${i + 1}`;
 
-export const CoachPlanCardView: React.FC<Props> = ({ plan, coachName, progress, preview, otherPlansCount = 0, onStart, onOpenPlan, onSwitch }) => {
+export const CoachPlanCardView: React.FC<Props> = ({ plan, coachName, eyebrow, progress, preview, otherPlansCount = 0, onStart, onOpenPlan, onSwitch }) => {
   const [pickingDay, setPickingDay] = useState(false);
   const groups = groupByDay(plan.exercises);
   const isMulti = groups.length > 1;
@@ -32,7 +33,7 @@ export const CoachPlanCardView: React.FC<Props> = ({ plan, coachName, progress, 
       <div className="flex items-start justify-between gap-3">
         <button type="button" onClick={onOpenPlan} disabled={preview} className="min-w-0 text-left">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-            From {coachName || 'your coach'}
+            {eyebrow ?? `From ${coachName || 'your coach'}`}
           </p>
           <p className="text-[18px] font-bold text-[var(--text-primary)] leading-tight truncate mt-0.5">{plan.title}</p>
         </button>

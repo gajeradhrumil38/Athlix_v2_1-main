@@ -18,6 +18,12 @@ interface Props {
   onDiscard: () => void;
   onOpenLogger: () => void;
   onFinish: () => void;
+  // Coach-run sessions: a different heading, prefill from the trainee's
+  // history, the trainee's recent exercises, and re-reading the coach draft.
+  label?: string;
+  historyUserId?: string;
+  recentExercises?: Exercise[];
+  readCurrent?: () => WorkoutState | null;
 }
 
 const uid = () => crypto.randomUUID();
@@ -34,7 +40,7 @@ const setsFrom = (ex: Exercise): ExerciseEntry['sets'] => {
 
 // Home "Today's session": the in-progress workout as a tick-off list. Same
 // draft as the full logger, so either can continue or finish it.
-export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard, onOpenLogger, onFinish }) => {
+export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard, onOpenLogger, onFinish, label, historyUserId, recentExercises, readCurrent }) => {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
@@ -48,9 +54,9 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
     // Re-read the draft when it arrives (the card may have changed since) and
     // only replace this exercise's sets if they're still untouched.
     if (!picked.lastSession && user) {
-      getLastExerciseSession(user.id, picked.name).then((res) => {
+      getLastExerciseSession(historyUserId ?? user.id, picked.name).then((res) => {
         const last = res?.lastSession as Exercise['lastSession'] | undefined;
-        const current = readDraft();
+        const current = (readCurrent ?? readDraft)();
         if (!last || !current) return;
         onChange({
           ...current,
@@ -65,7 +71,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
     <div className="glass-card px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Today&apos;s session</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">{label ?? <>Today&apos;s session</>}</p>
           <p className="text-[18px] font-bold text-[var(--text-primary)] leading-tight truncate mt-0.5">{workout.title || 'Workout'}</p>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
             {p.done} of {p.total} done · started {formatDistanceToNowStrict(new Date(workout.startTime), { addSuffix: true })}
@@ -105,6 +111,10 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
         ))}
       </div>
 
+      {workout.exercises.length === 0 && (
+        <p className="text-[13px] text-[var(--text-muted)] text-center py-4">No exercises yet — add what you&apos;re doing.</p>
+      )}
+
       <button type="button" onClick={() => setPicking(true)}
         className="w-full h-11 mt-2 rounded-2xl font-semibold text-[14px] flex items-center justify-center gap-1.5 text-[var(--text-secondary)]"
         style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border)' }}>
@@ -119,7 +129,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
       {/* Portal: the card's glass background would otherwise trap the
           full-screen picker inside the card. */}
       {picking && createPortal(
-        <ExercisePicker recentExercises={[]} multiSelect onSelect={addPicked} onClose={() => setPicking(false)} />,
+        <ExercisePicker recentExercises={recentExercises ?? []} multiSelect onSelect={addPicked} onClose={() => setPicking(false)} />,
         document.body,
       )}
     </div>
