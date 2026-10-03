@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners, useDroppable,
   type DragStartEvent, type DragOverEvent, type DragEndEvent,
@@ -735,27 +734,26 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
     {children}
   </section>
 );
-// Sliding Today / Week / Month switch — the highlight glides to the chosen
-// period (shared layoutId, unique per card instance).
+// Sliding Today / Week / Month switch. The highlight is placed by index with a
+// CSS transform — not framer's layoutId, which measures page position and so
+// re-animated the pill whenever the card itself was dragged.
 const PERIODS: { key: MusclePeriod; label: string }[] = [
   { key: 'today', label: 'Day' }, { key: 'week', label: 'Week' }, { key: 'month', label: 'Month' },
 ];
 const PeriodToggle: React.FC<{ value: MusclePeriod; onChange: (p: MusclePeriod) => void }> = ({ value, onChange }) => {
-  const id = React.useId();
+  const idx = Math.max(0, PERIODS.findIndex((p) => p.key === value));
   return (
-    <div role="radiogroup" aria-label="Time range" className="relative flex p-0.5 rounded-full w-fit"
+    <div role="radiogroup" aria-label="Time range" className="relative grid grid-cols-3 p-0.5 rounded-full w-fit"
       style={tile()}>
+      <span aria-hidden className="absolute top-0.5 bottom-0.5 left-0.5 rounded-full transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+        style={{ width: 'calc((100% - 4px) / 3)', transform: `translateX(${idx * 100}%)`, background: 'var(--accent)' }} />
       {PERIODS.map((p) => {
         const active = value === p.key;
         return (
           <button key={p.key} type="button" role="radio" aria-checked={active} onClick={() => onChange(p.key)}
             className="relative px-4 h-7 rounded-full text-[11px] font-bold transition-colors"
             style={{ color: active ? '#000' : 'var(--text-secondary)' }}>
-            {active && (
-              <motion.span layoutId={`period-${id}`} className="absolute inset-0 rounded-full"
-                style={{ background: 'var(--accent)' }} transition={{ type: 'spring', stiffness: 520, damping: 40 }} />
-            )}
-            <span className="relative">{p.label}</span>
+            {p.label}
           </button>
         );
       })}
