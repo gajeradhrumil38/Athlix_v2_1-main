@@ -32,7 +32,7 @@ export const CoachPlanCardView: React.FC<Props> = ({ plan, coachName, eyebrow, p
     <div className="glass-card px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <button type="button" onClick={onOpenPlan} disabled={preview} className="min-w-0 text-left">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
             {eyebrow ?? `From ${coachName || 'your coach'}`}
           </p>
           <p className="text-[18px] font-bold text-[var(--text-primary)] leading-tight truncate mt-0.5">{plan.title}</p>

@@ -73,7 +73,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
     <div className="glass-card px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">{label ?? <>Today&apos;s session</>}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">{label ?? <>Today&apos;s session</>}</p>
           <p className="text-[18px] font-bold text-[var(--text-primary)] leading-tight truncate mt-0.5">{workout.title || 'Workout'}</p>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
             {p.done} of {p.total} done · started {formatDistanceToNowStrict(new Date(workout.startTime), { addSuffix: true })}

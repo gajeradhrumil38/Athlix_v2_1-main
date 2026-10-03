@@ -82,6 +82,17 @@ function reconcileColumns(saved: string[][], availableIds: string[]): string[][]
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
+type MusclePeriod = 'today' | 'week' | 'month';
+const PERIOD_LABEL: Record<MusclePeriod, string> = { today: 'today', week: 'last 7 days', month: 'last 30 days' };
+// Relative to a week of training, for the radar's spokes and goal ring.
+const PERIOD_SCALE: Record<MusclePeriod, number> = { today: 0.4, week: 1, month: 4 };
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const inPeriod = (date: string, p: MusclePeriod, now: number) =>
+  p === 'today' ? date === localToday() : now - parseDay(date) < (p === 'week' ? 7 : 30) * DAY;
+
 // Build both muscle visualisations from the trainee's workouts — slug-keyed for
 // the anatomical MuscleMap (via profile.targets), region-keyed for the radar
 // (via primary/secondary). Mirrors how Home feeds the same components.
@@ -225,13 +236,21 @@ export const TraineeDetail: React.FC = () => {
   // Radar is "this week" (matches its label + the sets normalization, so it
   // isn't pinned to the edge by months of cumulative sets); the anatomical map
   // uses a 4-week window like the athlete's own Home.
+  // Each muscle card has its own Today / Week / Month switch, and says which
+  // window it shows — the radar used to be "this week" while the map silently
+  // covered 4 weeks. "Focus next" always reads the last 7 days.
+  const [mapPeriod, setMapPeriod] = useState<MusclePeriod>('week');
+  const [radarPeriod, setRadarPeriod] = useState<MusclePeriod>('week');
   const muscle = useMemo(() => {
     const all = dash?.workouts.shared ? dash.workouts.data : [];
     const now = Date.now();
-    const week = all.filter((w) => now - parseDay(w.date) <= 7 * DAY);
-    const month = all.filter((w) => now - parseDay(w.date) <= 28 * DAY);
-    return { map: buildMuscleViz(month).map, radar: buildMuscleViz(week).radar };
-  }, [dash]);
+    const pick = (p: MusclePeriod) => all.filter((w) => inPeriod(w.date, p, now));
+    return {
+      map: buildMuscleViz(pick(mapPeriod)).map,
+      radar: buildMuscleViz(pick(radarPeriod)).radar,
+      focus: buildMuscleViz(pick('week')).radar,
+    };
+  }, [dash, mapPeriod, radarPeriod]);
 
   const loadPlans = React.useCallback(async () => {
     if (id) setPlans(await getAssignedPlansFor(id));
@@ -405,7 +424,7 @@ export const TraineeDetail: React.FC = () => {
 
         // Least-trained muscle group this week → suggest a focus.
         const REGIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Glutes', 'Core'];
-        const regionSets = REGIONS.map((r) => ({ r, sets: Math.round(muscle.radar[r]?.sets || 0) }));
+        const regionSets = REGIONS.map((r) => ({ r, sets: Math.round(muscle.focus[r]?.sets || 0) }));
         const anyTrained = regionSets.some((x) => x.sets > 0);
         const focusPick = [...regionSets].sort((a, b) => a.sets - b.sets)[0];
 
@@ -419,7 +438,7 @@ export const TraineeDetail: React.FC = () => {
           gauge: <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />,
           trend: shared ? (
             <Card>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-3">This week vs last</p>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-3">This week vs last</p>
               <div className="grid grid-cols-2 gap-3">
                 <TrendStat label="Sessions" now={weekSessions} prev={lastSessions} delta={pctDelta(weekSessions, lastSessions)} />
                 <TrendStat label="Volume" now={thisVol} prev={lastVol} delta={pctDelta(thisVol, lastVol)} />
@@ -428,7 +447,7 @@ export const TraineeDetail: React.FC = () => {
           ) : <NotShared label="Workouts" />,
           focus: shared ? (
             <Card>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-2">Focus next</p>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">Focus next</p>
               {anyTrained ? (
                 <>
                   <p className="text-[24px] font-bold text-[var(--text-primary)] leading-none">{focusPick.r}</p>
@@ -437,16 +456,26 @@ export const TraineeDetail: React.FC = () => {
               ) : <p className="text-[14px] text-[var(--text-muted)] py-2">No training logged this week yet.</p>}
             </Card>
           ) : <NotShared label="Workouts" />,
-          radar: shared ? <Card><MuscleRadar muscleData={muscle.radar} /></Card> : <NotShared label="Muscle balance" />,
-          map: shared ? <Card><MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title="Trained muscles" unit="lbs" gender={dash.sex} /></Card> : <NotShared label="Muscle map" />,
+          radar: shared ? (
+            <Card>
+              <PeriodToggle value={radarPeriod} onChange={setRadarPeriod} />
+              <MuscleRadar muscleData={muscle.radar} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
+            </Card>
+          ) : <NotShared label="Muscle balance" />,
+          map: shared ? (
+            <Card>
+              <PeriodToggle value={mapPeriod} onChange={setMapPeriod} />
+              <MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title={`Trained muscles · ${PERIOD_LABEL[mapPeriod]}`} unit="lbs" gender={dash.sex} />
+            </Card>
+          ) : <NotShared label="Muscle map" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
           notes: (
             <Card className="!p-0 overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
-                <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Coach notes</p>
+              <div className="px-4 pt-3.5 pb-1 flex items-center justify-between">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Coach notes</p>
                 {notesSaved && <span className="text-[11px] font-semibold" style={{ color: '#4dff91' }}>Saved</span>}
               </div>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Private notes — injuries, goals, cues…" rows={4}
@@ -458,7 +487,7 @@ export const TraineeDetail: React.FC = () => {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <AppIcon name="Clipboard" size="sm" />
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                     Assigned plans{plans.length ? ` · ${plans.length}` : ''}
                   </p>
                 </div>
@@ -589,9 +618,20 @@ export const TraineeDetail: React.FC = () => {
 /* ── Layout bits ─────────────────────────────────────────── */
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <section>
-    <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-2.5">{title}</h2>
+    <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2.5">{title}</h2>
     {children}
   </section>
+);
+const PeriodToggle: React.FC<{ value: MusclePeriod; onChange: (p: MusclePeriod) => void }> = ({ value, onChange }) => (
+  <div className="flex gap-1 p-0.5 mb-3 rounded-full w-fit" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    {(['today', 'week', 'month'] as const).map((p) => (
+      <button key={p} type="button" onClick={() => onChange(p)}
+        className="px-3 h-7 rounded-full text-[11px] font-bold transition-colors"
+        style={value === p ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}>
+        {p === 'today' ? 'Today' : p === 'week' ? 'Week' : 'Month'}
+      </button>
+    ))}
+  </div>
 );
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`glass-card p-4 ${className}`}>{children}</div>
@@ -656,7 +696,7 @@ const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string
   const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct));
   return (
     <Card className="flex flex-col items-center justify-center py-5">
-      <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] self-start mb-1">{caption}</p>
+      <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] self-start mb-1">{caption}</p>
       <div className="relative flex items-center justify-center" style={{ width: 132, height: 132 }}>
         <svg width={132} height={132} className="-rotate-90">
           <circle cx={66} cy={66} r={r} fill="none" stroke="var(--bg-elevated)" strokeWidth={10} />
@@ -775,8 +815,8 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
 
   return (
     <Card className="!p-0 overflow-hidden">
-      <div className="px-4 py-3 border-b border-[var(--border)]">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Recent sessions · 2 weeks</p>
+      <div className="px-4 pt-3.5 pb-1">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Recent sessions · 2 weeks</p>
       </div>
       {recent.length === 0 ? (
         <p className="text-[13px] text-[var(--text-muted)] text-center py-6">No sessions in the last 2 weeks.</p>
@@ -847,8 +887,8 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
 
   return (
     <Card className="!p-0 overflow-hidden">
-      <div className="px-4 py-3 border-b border-[var(--border)]">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)] mb-2">Exercise history</p>
+      <div className="px-4 pt-3.5 pb-1">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">Exercise history</p>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -1045,9 +1085,9 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
 const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best_reps: number; unit: string }[] }> = ({ prs }) => {
   return (
     <Card className="!p-0 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)]">
+      <div className="flex items-center gap-2 px-4 pt-3.5 pb-1">
         <AppIcon name="Trophy" size="sm" />
-        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">Personal records</p>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Personal records</p>
       </div>
       {!prs.length ? (
         <Empty text="No personal records yet." />
@@ -1145,7 +1185,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
       {open && (
         <div className="px-4 pb-3 border-t border-[var(--border)]">
           <div className="flex items-center justify-between pt-3 pb-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
               {latest ? `Last session (${lastLabel})` : 'Prescribed'}
             </p>
             <div className="flex items-center gap-1.5">
