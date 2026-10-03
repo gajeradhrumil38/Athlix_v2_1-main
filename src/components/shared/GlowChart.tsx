@@ -227,10 +227,14 @@ export const GlowSparkline: React.FC<{
           {/* Dots as HTML overlays (not SVG circles) — the SVG's non-uniform
               stretch (preserveAspectRatio="none") would otherwise squash them
               into ellipses. */}
+          {/* Only the latest point (end-dot) and the hovered one are drawn —
+              a dot on every point cluttered the line; its shape and colour
+              carry the trend. */}
           {geo.pts.map(([x, y], i) => {
             const active = activeIdx === i;
             const isLast = i === geo.pts.length - 1;
             const big = active || isLast;
+            if (!big) return null;
             const dot = geo.states ? TREND_COLOR[geo.states[i]] : color;
             return (
               <span
