@@ -332,6 +332,18 @@ export const TraineeDetail: React.FC = () => {
     return out.sort((x, y) => (x.level === y.level ? 0 : x.level === 'high' ? -1 : 1));
   })();
   const topLevel: Alert['level'] | 'ok' = alerts[0]?.level ?? 'ok';
+  // One line of real status under the name instead of a static label.
+  const statusLine = (() => {
+    if (!dash.workouts.shared) return 'Not sharing workouts with you';
+    const ws = dash.workouts.data;
+    const now = Date.now();
+    const last = ws.reduce((m, w) => Math.max(m, parseDay(w.date)), 0);
+    if (!last) return 'No sessions logged yet';
+    const d = Math.floor((now - last) / DAY);
+    const week = new Set(ws.filter((w) => now - parseDay(w.date) <= 7 * DAY).map((w) => w.date)).size;
+    const when = d <= 0 ? 'Trained today' : d === 1 ? 'Trained yesterday' : `Trained ${d}d ago`;
+    return `${when} · ${week} session${week === 1 ? '' : 's'} this week`;
+  })();
 
   // Fires on blur — skip the write when nothing changed, and never flash
   // "Saved" for a write that actually failed.
@@ -347,18 +359,35 @@ export const TraineeDetail: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 pb-10">
       {/* Header */}
-      <div className="flex items-center gap-3 pt-2 pb-3">
-        <button onClick={() => navigate('/coach')} aria-label="Back"
-          className="h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-elevated)' }}>
+      {/* Who + how they're doing, read together: name, the alert status right
+          beside it, and a live status line — not a far-right chip. */}
+      <div className="flex items-center gap-3 pt-2 pb-4">
+        <button onClick={() => navigate('/coach')} aria-label="Back to trainees"
+          className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center text-[var(--text-primary)]"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <AppIcon name="Back" size="md" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[26px] font-bold text-[var(--text-primary)] leading-none truncate">{dash.name}</h1>
-          <p className="text-[14px] text-[var(--text-muted)] mt-1">Trainee overview</p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h1 className="text-[26px] font-bold text-[var(--text-primary)] leading-tight truncate">{dash.name}</h1>
+            {dash.workouts.shared && (
+              <button
+                type="button"
+                onClick={() => setAlertsOpen(true)}
+                aria-label={alerts.length ? `${alerts.length} alert${alerts.length > 1 ? 's' : ''} — view` : 'On track — view'}
+                className="shrink-0 h-7 px-2.5 rounded-full text-[12px] font-bold flex items-center gap-1.5"
+                style={{ background: `color-mix(in srgb, ${ALERT_COLOR[topLevel]} 14%, transparent)`, color: ALERT_COLOR[topLevel], border: `1px solid color-mix(in srgb, ${ALERT_COLOR[topLevel]} 35%, transparent)` }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: ALERT_COLOR[topLevel] }} />
+                {alerts.length ? `${alerts.length} alert${alerts.length > 1 ? 's' : ''}` : 'On track'}
+              </button>
+            )}
+          </div>
+          <p className="text-[13px] text-[var(--text-secondary)] mt-0.5 truncate">{statusLine}</p>
         </div>
       </div>
 
-      {/* The two things a coach does here, plus the alerts — one row. */}
+      {/* The two things a coach does here. */}
       <div className="flex items-stretch gap-2 pb-4">
         {dash.workouts.shared && (
           <button
@@ -380,23 +409,6 @@ export const TraineeDetail: React.FC = () => {
         >
           <AppIcon name="Clipboard" size="sm" /> Assign plan
         </button>
-        {dash.workouts.shared && (
-          <button
-            type="button"
-            onClick={() => setAlertsOpen(true)}
-            aria-label={alerts.length ? `${alerts.length} alert${alerts.length > 1 ? 's' : ''}` : 'On track'}
-            className="ml-auto shrink-0 h-12 px-3 sm:px-4 rounded-2xl font-bold text-[14px] flex items-center gap-2"
-            style={{ background: `color-mix(in srgb, ${ALERT_COLOR[topLevel]} 12%, transparent)`, color: ALERT_COLOR[topLevel], border: `1px solid color-mix(in srgb, ${ALERT_COLOR[topLevel]} 35%, transparent)` }}
-          >
-            <span className="h-2 w-2 rounded-full" style={{ background: ALERT_COLOR[topLevel] }} />
-            <span className="hidden sm:inline">{alerts.length ? 'Needs attention' : 'On track'}</span>
-            {alerts.length > 0 && (
-              <span className="min-w-[22px] h-[22px] px-1.5 rounded-full text-[12px] flex items-center justify-center" style={{ background: ALERT_COLOR[topLevel], color: '#000' }}>
-                {alerts.length}
-              </span>
-            )}
-          </button>
-        )}
       </div>
 
       <CenterModal open={alertsOpen} onClose={() => setAlertsOpen(false)}>
@@ -435,9 +447,13 @@ export const TraineeDetail: React.FC = () => {
       </CenterModal>
 
 
-      {/* Menu bar — sticky so it stays put while scrolling; jumps between views */}
-      <div className="sticky top-0 z-30 -mx-4 px-4 pt-1 pb-3" style={{ background: 'var(--bg-base)' }}>
-        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto" style={{ background: 'var(--bg-elevated)' }}>
+      {/* Menu bar — pinned while scrolling. top-0 is right on phones too: the
+          scroll area's own top padding already clears the fixed app header.
+          The blurred backdrop + bottom edge make it read as a pinned bar
+          (same-colour background made it look like it had scrolled away). */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-2 mb-3"
+        style={{ background: 'color-mix(in srgb, var(--bg-base) 92%, transparent)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto w-full md:w-fit" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           {TABS.map((t) => {
             const active = tab === t.key;
             return (
@@ -445,7 +461,7 @@ export const TraineeDetail: React.FC = () => {
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className="flex-1 min-w-[84px] h-10 rounded-xl text-[14px] font-semibold transition-colors"
+                className="flex-1 md:flex-none min-w-[84px] md:px-6 h-10 rounded-xl text-[14px] font-semibold transition-colors"
                 style={{ background: active ? 'var(--accent)' : 'transparent', color: active ? '#000' : 'var(--text-secondary)' }}
               >
                 {t.label}
