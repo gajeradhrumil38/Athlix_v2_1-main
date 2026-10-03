@@ -13,6 +13,12 @@ interface MuscleMapProps {
   title?: string
   unit?: string
   gender?: 'male' | 'female'
+  // Extra row under the header (e.g. a period switch), inside the gradient panel.
+  controls?: React.ReactNode
+  // Room on the right of the header for an overlaid control (drag handle).
+  headerInsetRight?: number
+  // Corner radius when the map is a card on its own rather than nested.
+  radius?: number | string
 }
 
 const VALID_SLUGS = new Set<Slug>(Object.keys(MUSCLE_SLUG_LABELS) as MuscleSlug[])
@@ -67,7 +73,7 @@ const loadToIntensity = (load: number, maxLoad: number): number => {
 const getMetric = (entry: MuscleEntry) => entry.relativeLoad || entry.load || entry.sets || 0
 
 export const MuscleMap: React.FC<MuscleMapProps> = ({
-  muscleData, view, onViewChange, title, unit = 'lbs', gender = 'male'
+  muscleData, view, onViewChange, title, unit = 'lbs', gender = 'male', controls, headerInsetRight = 0, radius = 14
 }) => {
   const [tooltip, setTooltip] = useState<{ slug: string; x: number; y: number } | null>(null)
 
@@ -118,7 +124,7 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
   return (
     <div style={{
       background: 'linear-gradient(160deg, rgba(14,24,36,0.95) 0%, rgba(10,18,28,0.98) 65%, rgba(8,12,18,1) 100%)',
-      borderRadius: 14,
+      borderRadius: radius,
       border: '0.5px solid var(--border)',
       width: '100%',
       height: '100%',
@@ -130,7 +136,7 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 0%, rgba(200,255,0,0.12), transparent 55%)', pointerEvents: 'none' }} />
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 10px 6px', position: 'relative', zIndex: 2, flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `10px ${10 + headerInsetRight}px 6px 10px`, position: 'relative', zIndex: 2, flexShrink: 0 }}>
         <span style={{ fontSize: 9, letterSpacing: '1.2px', color: 'rgba(255,255,255,0.8)', fontWeight: 700, textTransform: 'uppercase' }}>
           {title || 'Muscle Map'}
         </span>
@@ -150,6 +156,8 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
           ))}
         </div>
       </div>
+
+      {controls && <div style={{ padding: '0 10px 8px', position: 'relative', zIndex: 2 }}>{controls}</div>}
 
       {/* Body: split row */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 4, padding: '0 6px 8px', position: 'relative', zIndex: 1 }}>

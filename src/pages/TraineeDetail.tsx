@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { motion } from 'framer-motion';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners, useDroppable,
   type DragStartEvent, type DragOverEvent, type DragEndEvent,
@@ -458,15 +459,17 @@ export const TraineeDetail: React.FC = () => {
           ) : <NotShared label="Workouts" />,
           radar: shared ? (
             <Card>
-              <PeriodToggle value={radarPeriod} onChange={setRadarPeriod} />
+              <div className="mb-3"><PeriodToggle value={radarPeriod} onChange={setRadarPeriod} /></div>
               <MuscleRadar muscleData={muscle.radar} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
             </Card>
           ) : <NotShared label="Muscle balance" />,
+          // The map draws its own gradient panel — it IS the card here, so no
+          // outer Card (that left a plain frame around the gradient).
           map: shared ? (
-            <Card>
-              <PeriodToggle value={mapPeriod} onChange={setMapPeriod} />
-              <MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} title={`Trained muscles · ${PERIOD_LABEL[mapPeriod]}`} unit="lbs" gender={dash.sex} />
-            </Card>
+            <MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView}
+              title={`Trained muscles · ${PERIOD_LABEL[mapPeriod]}`} unit="lbs" gender={dash.sex}
+              controls={<PeriodToggle value={mapPeriod} onChange={setMapPeriod} />}
+              headerInsetRight={34} radius="var(--radius-xl)" />
           ) : <NotShared label="Muscle map" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
@@ -622,17 +625,33 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
     {children}
   </section>
 );
-const PeriodToggle: React.FC<{ value: MusclePeriod; onChange: (p: MusclePeriod) => void }> = ({ value, onChange }) => (
-  <div className="flex gap-1 p-0.5 mb-3 rounded-full w-fit" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-    {(['today', 'week', 'month'] as const).map((p) => (
-      <button key={p} type="button" onClick={() => onChange(p)}
-        className="px-3 h-7 rounded-full text-[11px] font-bold transition-colors"
-        style={value === p ? { background: 'var(--accent)', color: '#000' } : { color: 'var(--text-secondary)' }}>
-        {p === 'today' ? 'Today' : p === 'week' ? 'Week' : 'Month'}
-      </button>
-    ))}
-  </div>
-);
+// Sliding Today / Week / Month switch — the highlight glides to the chosen
+// period (shared layoutId, unique per card instance).
+const PERIODS: { key: MusclePeriod; label: string }[] = [
+  { key: 'today', label: 'Day' }, { key: 'week', label: 'Week' }, { key: 'month', label: 'Month' },
+];
+const PeriodToggle: React.FC<{ value: MusclePeriod; onChange: (p: MusclePeriod) => void }> = ({ value, onChange }) => {
+  const id = React.useId();
+  return (
+    <div role="radiogroup" aria-label="Time range" className="relative flex p-0.5 rounded-full w-fit"
+      style={{ background: 'rgba(12,20,30,0.7)', border: '1px solid var(--border)' }}>
+      {PERIODS.map((p) => {
+        const active = value === p.key;
+        return (
+          <button key={p.key} type="button" role="radio" aria-checked={active} onClick={() => onChange(p.key)}
+            className="relative px-4 h-7 rounded-full text-[11px] font-bold transition-colors"
+            style={{ color: active ? '#000' : 'var(--text-secondary)' }}>
+            {active && (
+              <motion.span layoutId={`period-${id}`} className="absolute inset-0 rounded-full"
+                style={{ background: 'var(--accent)' }} transition={{ type: 'spring', stiffness: 520, damping: 40 }} />
+            )}
+            <span className="relative">{p.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div className={`glass-card p-4 ${className}`}>{children}</div>
 );
