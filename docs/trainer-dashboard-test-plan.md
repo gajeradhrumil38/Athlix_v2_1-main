@@ -169,6 +169,31 @@ Use the browser console on a signed-in session. `supabase` is the app client, or
 | SEC-10 | Trainee T | `update coach_links set trainer_name = 'x'` | Error "Only the coach can change this". |
 | SEC-11 | Coach A after T disconnects | Read T's workouts, assign a plan, log a session | All denied or empty. |
 
+## 10. Coach plan "Today" card and easy Assign
+
+| ID | Steps | Expected |
+|---|---|---|
+| TDY-1 | Trainee with no active plan opens Home | No "From your coach" card. |
+| TDY-2 | Coach assigns a Push/Pull/Legs plan → trainee opens Home | Card at the top: "From <coach> · Push / Pull / Legs", pills Push ● / Pull / Legs, "Today: Push", first 4 exercises with "3 × 10 @ … lb", Start Push. |
+| TDY-3 | Trainee taps Start Push, logs, finishes | Home card: "Push done today ✓ · Next: Pull"; Push pill ticked; button reads "Train again". |
+| TDY-4 | Next day, Start | Starts Pull (rotation). After Legs, it wraps to Push. |
+| TDY-5 | Other day → pick Legs | Logger opens with the Legs exercises; afterwards the next day is Push. |
+| TDY-6 | Two active plans | "Switch" shows both; picking one shows it on the card; starting it keeps it current on the next visit. |
+| TDY-7 | Single-day plan | No pills; "Done N× this week" after sessions. |
+| TDY-8 | Coach views the trainee after TDY-3 | The plan card says "3/3 exercises done · Push", with Pull/Legs not marked Missed. |
+| TDY-9 | Coach logs a session for the trainee from the Pull day | The trainee's card counts Pull as done. |
+| ASG-1 | Coach taps Assign | The starting-point screen shows: Based on their recent training / Full body · Upper/Lower · Push/Pull/Legs / From my templates / Blank. |
+| ASG-2 | Tap Push / Pull / Legs → Preview & send → Send | Sent with no typing; the trainee gets the popup and the card. Weights prefill from the trainee's history where known. |
+| ASG-3 | Trainee with no sessions in 14 days | "Based on their recent training" is disabled with "No sessions in the last 2 weeks". |
+| ASG-4 | Day chips: tap 4×12 on Push | Every Push exercise becomes 4 × 12; the chip highlights. |
+| ASG-5 | Tap a row | It expands to Sets/Reps/Weight/Rest tiles; "+ Add note" reveals the note field; move/remove work within the day. |
+| ASG-6 | ⋯ → Save as template, then a new Assign → From my templates | The template appears and loads. |
+| ASG-7 | Preview shows a message; Send | The trainee's card and popup show the message. |
+| ASG-8 | Edit an existing plan | Opens straight into the builder (no starting points); the message is prefilled; Save changes works and keeps the message. |
+| ASG-9 | Rename two days to the same name → Preview & send | Error: "Two days have the same name — rename one." |
+| ASG-10 | Close with exercises added | Confirm "Discard this plan?". On the starting screen it closes freely. |
+| DB-1 | Run `supabase/tests/plan_day_check.sql` | 3 lines, no BAD. |
+
 ## Known gaps (not fixed, worth deciding on)
 
 - **Email enumeration.** `email_is_registered()` lets any signed-in user check whether an email has an account. It returns a boolean only, but it is still enumeration. One option is to rate-limit it or restrict it to trainers.
