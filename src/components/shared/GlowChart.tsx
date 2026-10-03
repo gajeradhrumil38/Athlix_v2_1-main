@@ -25,6 +25,9 @@ export const PlotGrid: React.FC<{ accent?: string; children: React.ReactNode; cl
 
 export interface GlowChartPoint { label: string; value: number }
 
+// Warning colour for stalled stretches (theme status token, never a series colour).
+const STALL = 'var(--yellow)';
+
 // Monotone cubic Hermite interpolation (Fritsch–Carlson), converted to SVG
 // cubic-Bezier segments — same family as D3's curveMonotoneX. Unlike a plain
 // Catmull-Rom spline, it never overshoots past the data: two equal
@@ -89,7 +92,7 @@ export const GlowSparkline: React.FC<{
   unit?: string;
   height?: number;
   emptyText?: string;
-  // Shades any run of 3+ consecutive points that never increases (flat or
+  // Marks any run of 3+ consecutive points that never increases (flat or
   // declining) — a stall a coach should act on, not just a wiggly line.
   flagPlateaus?: boolean;
 }> = ({ points, color, unit = '', height = 110, emptyText = 'Not enough data yet', flagPlateaus = false }) => {
@@ -166,7 +169,6 @@ export const GlowSparkline: React.FC<{
             label centers on its line. A left-side scrim sits behind the
             numbers so they stay legible over the card's dot-grid texture. */}
         <div className="relative shrink-0" style={{ width: 30 }}>
-          <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, rgba(9,13,19,0.7) 55%, transparent 100%)' }} />
           {geo.yTicks.map((v, i) => (
             <span
               key={i}
@@ -174,7 +176,7 @@ export const GlowSparkline: React.FC<{
               style={{
                 top: `${(geo.yOf(v) / h) * 100}%`, left: 0,
                 transform: i === 0 ? 'translateY(0%)' : i === geo.yTicks.length - 1 ? 'translateY(-100%)' : 'translateY(-50%)',
-                fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.38)',
+                fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', opacity: 0.85,
               }}
             >
               {fmtVal(v)}
@@ -195,20 +197,24 @@ export const GlowSparkline: React.FC<{
           <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
             <defs>
               <linearGradient id={`${uid}-fill`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity="0.26" />
+                <stop offset="0%" stopColor={color} stopOpacity="0.12" />
                 <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
+              {/* The stalled stretch of the SAME curve: clip the line to each
+                  run's x-range and redraw it in the warning colour — the
+                  mark is on the line the eye is already following, not a
+                  background band competing with the area fill. */}
+              <clipPath id={`${uid}-stall`}>
+                {geo.plateaus.map((p, i) => (
+                  <rect key={i} x={geo.pts[p.start][0]} y={0} width={geo.pts[p.end][0] - geo.pts[p.start][0]} height={h} />
+                ))}
+              </clipPath>
             </defs>
-            {geo.plateaus.map((p, i) => (
-              <rect
-                key={i}
-                x={geo.pts[p.start][0]} y={0}
-                width={geo.pts[p.end][0] - geo.pts[p.start][0]} height={h}
-                fill="#ffd54f" opacity="0.09"
-              />
-            ))}
             <path d={geo.area} fill={`url(#${uid}-fill)`} />
             <path d={geo.line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            {geo.plateaus.length > 0 && (
+              <path d={geo.line} fill="none" stroke={STALL} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" clipPath={`url(#${uid}-stall)`} />
+            )}
             {activeIdx != null && (
               <line
                 x1={geo.pts[activeIdx][0]} y1={0} x2={geo.pts[activeIdx][0]} y2={h}
@@ -224,6 +230,7 @@ export const GlowSparkline: React.FC<{
             const active = activeIdx === i;
             const isLast = i === geo.pts.length - 1;
             const big = active || isLast;
+            const dot = geo.plateaus.some((p) => i >= p.start && i <= p.end) ? STALL : color;
             return (
               <span
                 key={i}
@@ -233,10 +240,10 @@ export const GlowSparkline: React.FC<{
                   left: `${(x / w) * 100}%`, top: `${(y / h) * 100}%`,
                   transform: 'translate(-50%,-50%)',
                   width: big ? 9 : 6, height: big ? 9 : 6,
-                  background: color,
-                  opacity: big ? 1 : 0.75,
+                  background: dot,
+                  opacity: big ? 1 : 0.85,
                   boxShadow: big
-                    ? `0 0 0 2px #0a0f16, 0 0 8px color-mix(in srgb, ${color} 55%, transparent)`
+                    ? `0 0 0 2px #0a0f16, 0 0 8px color-mix(in srgb, ${dot} 55%, transparent)`
                     : `0 0 0 2px #0a0f16`,
                 }}
               />
@@ -275,26 +282,29 @@ export const GlowSparkline: React.FC<{
       </div>
 
       {/* X-axis: date/period ticks, indented to line up with the plot area.
-          A bottom scrim (matching the Y-axis one) keeps the dates legible
-          over the card's dot-grid texture. */}
-      <div className="relative flex items-center justify-between py-1" style={{ marginTop: 4, marginLeft: 30 }}>
-        <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(0deg, rgba(9,13,19,0.6) 0%, transparent 100%)' }} />
+          A thin rule in the warning colour sits over the axis under each
+          stalled stretch — "this span", without covering any data. */}
+      <div className="relative flex items-center justify-between pt-2 pb-1" style={{ marginTop: 2, marginLeft: 30 }}>
+        {geo.plateaus.map((p, i) => (
+          <span key={i} aria-hidden className="absolute top-0 h-[3px] rounded-full pointer-events-none"
+            style={{ left: `${(geo.pts[p.start][0] / w) * 100}%`, width: `${((geo.pts[p.end][0] - geo.pts[p.start][0]) / w) * 100}%`, background: STALL }} />
+        ))}
         {tickIdxs.map((idx) => (
-          <span key={idx} className="relative" style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.32)', fontWeight: 700 }}>{points[idx].label}</span>
+          <span key={idx} className="relative" style={{ fontSize: 9.5, color: 'var(--text-secondary)', opacity: 0.85, fontWeight: 700 }}>{points[idx].label}</span>
         ))}
       </div>
 
-      {/* Plateau callout — only the most recent stall, so it stays a single
-          clear line rather than a wall of historical stalls. */}
+      {/* Caption doubles as the legend for the yellow stretch: a coloured
+          dot + words, never colour alone. Text stays in text colours. Only
+          the most recent stall is spelled out. */}
       {geo.plateaus.length > 0 && (() => {
         const run = geo.plateaus[geo.plateaus.length - 1];
         return (
-          <div className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(255,213,79,0.08)', border: '1px solid rgba(255,213,79,0.22)' }}>
-            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: '#ffd54f' }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#ffd54f' }}>
-              No progress {points[run.start].label}–{points[run.end].label}
-            </span>
-          </div>
+          <p className="flex items-center gap-1.5 mt-1.5" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: STALL }} />
+            No progress <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{points[run.start].label} → {points[run.end].label}</span>
+            {geo.plateaus.length > 1 && <span>· {geo.plateaus.length} stalls in view</span>}
+          </p>
         );
       })()}
     </div>
