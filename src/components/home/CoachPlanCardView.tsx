@@ -29,7 +29,7 @@ export const CoachPlanCardView: React.FC<Props> = ({ plan, coachName, eyebrow, p
   const doneTodayIdx = progress.doneTodayDay != null ? groups.findIndex(([l]) => l === progress.doneTodayDay) : -1;
 
   return (
-    <div className="glass-card px-4 py-4">
+    <div className="glass-card px-4 py-4" style={{ backgroundImage: 'radial-gradient(130% 90% at 0% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 55%)' }}>
       <div className="flex items-start justify-between gap-3">
         <button type="button" onClick={onOpenPlan} disabled={preview} className="min-w-0 text-left">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">

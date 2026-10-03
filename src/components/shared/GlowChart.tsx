@@ -5,12 +5,16 @@ import React, { useId, useMemo, useRef, useState } from 'react';
  * plain shared card. Tinted to the chart's accent.
  */
 export const PlotGrid: React.FC<{ accent?: string; children: React.ReactNode; className?: string }> = ({ accent = 'var(--accent)', children, className = '' }) => (
-  <div className={`relative overflow-hidden rounded-xl ${className}`} style={{ background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)', border: '1px solid var(--border-subtle)' }}>
+  <div className={`relative ${className}`}>
+    {/* No box: the grid fades out towards its edges (radial mask) so the
+        chart sits in the card rather than in a framed panel. */}
     <div
       aria-hidden
       className="absolute inset-0 pointer-events-none"
       style={{
-        opacity: 0.6,
+        opacity: 0.7,
+        maskImage: 'radial-gradient(ellipse 72% 70% at 50% 50%, #000 35%, transparent 100%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 72% 70% at 50% 50%, #000 35%, transparent 100%)',
         backgroundImage: `linear-gradient(color-mix(in srgb, ${accent} 12%, transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb, ${accent} 12%, transparent) 1px,transparent 1px)`,
         backgroundSize: '26px 26px',
       }}

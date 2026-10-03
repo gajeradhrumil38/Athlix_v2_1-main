@@ -26,7 +26,7 @@ import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { RunHistory } from '../features/running/pages/RunHistory';
 import { muscleColor } from '../lib/muscleColors';
 import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
-import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard } from '../components/coach/overview/Widget';
+import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard, tile } from '../components/coach/overview/Widget';
 import { palette } from '../theme/colors';
 
 // Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
@@ -383,7 +383,7 @@ export const TraineeDetail: React.FC = () => {
       <div className="flex items-center gap-3 pt-2 pb-4">
         <button onClick={() => navigate('/coach')} aria-label="Back to trainees"
           className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center text-[var(--text-primary)]"
-          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+          style={tile()}>
           <AppIcon name="Back" size="md" />
         </button>
         <div className="min-w-0 flex-1">
@@ -450,7 +450,7 @@ export const TraineeDetail: React.FC = () => {
               <span className="text-[14px] font-semibold" style={{ color: ALERT_COLOR.ok }}>Training on schedule — nothing to act on.</span>
             </div>
           ) : alerts.map((a, i) => (
-            <div key={i} className="relative rounded-2xl pl-4 pr-3 py-3 overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <div key={i} className="relative rounded-2xl pl-4 pr-3 py-3 overflow-hidden" style={tile()}>
               <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: ALERT_COLOR[a.level] }} />
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[15px] font-bold text-[var(--text-primary)]">{a.text}</p>
@@ -472,7 +472,7 @@ export const TraineeDetail: React.FC = () => {
           (same-colour background made it look like it had scrolled away). */}
       <div className="sticky top-0 z-30 -mx-4 px-4 py-2 mb-3"
         style={{ background: 'color-mix(in srgb, var(--bg-base) 92%, transparent)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto w-full md:w-fit" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto w-full md:w-fit" style={tile()}>
           {TABS.map((t) => {
             const active = tab === t.key;
             return (
@@ -605,7 +605,7 @@ export const TraineeDetail: React.FC = () => {
               right={<span className="text-[11px] font-semibold" style={{ color: notesSaved ? TONE.good : 'var(--text-secondary)' }}>{notesSaved ? 'Saved ✓' : 'Private · saves automatically'}</span>}>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Injuries, goals, cues…" rows={4}
                 className="w-full rounded-xl px-3 py-2.5 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-secondary)] placeholder:opacity-60"
-                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }} />
+                style={tile()} />
             </WidgetCard>
           ),
           plans: (
@@ -743,7 +743,7 @@ const PeriodToggle: React.FC<{ value: MusclePeriod; onChange: (p: MusclePeriod) 
   const id = React.useId();
   return (
     <div role="radiogroup" aria-label="Time range" className="relative flex p-0.5 rounded-full w-fit"
-      style={{ background: 'rgba(12,20,30,0.7)', border: '1px solid var(--border)' }}>
+      style={tile()}>
       {PERIODS.map((p) => {
         const active = value === p.key;
         return (
@@ -926,7 +926,7 @@ const SetGrid: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' 
 
 /* ── This-vs-last stat (trend card) ──────────────────────── */
 const TrendStat: React.FC<{ label: string; now: number; unit?: string; delta: number }> = ({ label, now, unit, delta }) => (
-  <div className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
+  <div className="rounded-xl px-3 py-3" style={tile()}>
     <BigNumber value={now.toLocaleString()} unit={unit} size="md" />
     <StatLabel>{label}</StatLabel>
     <div className="mt-1"><Delta pct={delta} /></div>
@@ -1136,7 +1136,7 @@ const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
     <WidgetCard title="This week" tone={IDENTITY.consistency} meta="last 7 days">
       <div className="grid grid-cols-3 gap-2">
         {([['Sessions', stat.sessions], ['Sets', stat.sets], ['Exercises', stat.exercises]] as const).map(([label, v]) => (
-          <div key={label} className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
+          <div key={label} className="rounded-xl px-3 py-3" style={tile()}>
             <BigNumber value={v} size="md" />
             <StatLabel>{label}</StatLabel>
           </div>
@@ -1181,10 +1181,10 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
         <Delta pct={deltaPct} suffix="vs last week" />
       </div>
       <div className="grid grid-cols-2 gap-2 mb-3">
-        <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--bg-elevated)' }}>
+        <div className="rounded-xl px-3 py-2.5" style={tile(IDENTITY.load)}>
           <BigNumber value={avg.toLocaleString()} unit="lb" size="sm" /><StatLabel>8-week average</StatLabel>
         </div>
-        <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--bg-elevated)' }}>
+        <div className="rounded-xl px-3 py-2.5" style={tile(IDENTITY.load)}>
           <BigNumber value={peak.toLocaleString()} unit="lb" size="sm" /><StatLabel>Peak week</StatLabel>
         </div>
       </div>
@@ -1207,7 +1207,7 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
           const group = resolveMuscleGroup(p.exercise_name);
           const color = muscleColor(group);
           return (
-            <div key={i} className="relative flex items-center justify-between gap-3 rounded-xl pl-4 pr-3 py-2.5 overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
+            <div key={i} className="relative flex items-center justify-between gap-3 rounded-xl pl-4 pr-3 py-2.5 overflow-hidden" style={tile()}>
               <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: color }} />
               <div className="min-w-0">
                 <p className="text-[14px] font-bold text-[var(--text-primary)] truncate">{p.exercise_name}</p>
@@ -1283,7 +1283,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
   const donePct = latest && scored.length ? doneCount / scored.length : 0;
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="rounded-2xl overflow-hidden" style={tile()}>
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-3.5 text-left">
         <div className="min-w-0">
           <p className="text-[17px] font-semibold text-[var(--text-primary)] truncate">{plan.title}</p>
@@ -1306,7 +1306,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
                 onClick={onEdit}
                 aria-label="Edit plan"
                 className="flex items-center gap-1 h-7 px-2 rounded-lg text-[12px] font-semibold transition-colors"
-                style={{ color: 'var(--text-secondary)', background: 'var(--bg-elevated)' }}
+                style={{ color: 'var(--text-secondary)', ...tile() }}
               >
                 <AppIcon name="Edit" size="sm" /> Edit
               </button>
@@ -1333,7 +1333,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
                   {Math.round(donePct * 100)}%
                 </p>
               </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
+              <div className="h-1.5 rounded-full overflow-hidden" style={tile()}>
                 <div className="h-full rounded-full" style={{ width: `${donePct * 100}%`, background: donePct === 1 ? TONE.good : ACCENT }} />
               </div>
             </div>

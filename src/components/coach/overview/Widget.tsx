@@ -24,6 +24,19 @@ export const TONE = {
   info: 'var(--ring-volume)',
 } as const;
 
+// Inner surfaces blend into the card: a faint light (or identity-tinted) fill,
+// no border. --bg-elevated is 35% black, which read as a hole cut in the card.
+export const tile = (tint?: string): React.CSSProperties => ({
+  background: tint
+    ? `color-mix(in srgb, ${tint} 8%, transparent)`
+    : 'color-mix(in srgb, var(--text-primary) 4.5%, transparent)',
+});
+
+// A soft glow of the card's identity colour from the top-left corner — depth
+// from tone rather than lines.
+export const glow = (tone?: string): React.CSSProperties =>
+  tone ? { backgroundImage: `radial-gradient(130% 90% at 0% 0%, color-mix(in srgb, ${tone} 11%, transparent), transparent 55%)` } : {};
+
 interface WidgetCardProps {
   title: string;
   // Identity colour for the title/icon. Omit for neutral cards (notes, lists).
@@ -40,7 +53,7 @@ interface WidgetCardProps {
 }
 
 export const WidgetCard: React.FC<WidgetCardProps> = ({ title, tone, icon, meta, right, flush = false, className = '', children }) => (
-  <section className={`glass-card overflow-hidden ${flush ? '' : 'p-4'} ${className}`}>
+  <section className={`glass-card overflow-hidden ${flush ? '' : 'p-4'} ${className}`} style={glow(tone)}>
     {/* pr-9 keeps the header clear of the Overview's drag handle (top-right). */}
     <header className={`flex items-center justify-between gap-2 pr-9 ${flush ? 'px-4 pt-4 pb-3' : 'mb-3'}`}>
       <div className="flex items-center gap-1.5 min-w-0">

@@ -74,7 +74,7 @@ export const SessionExerciseRow: React.FC<Props> = ({
   };
 
   return (
-    <div className="relative rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: `1px solid ${isNext ? 'color-mix(in srgb, var(--accent) 40%, transparent)' : 'var(--border)'}`, opacity: done && !expanded ? 0.62 : 1 }}>
+    <div className="relative rounded-2xl overflow-hidden" style={{ background: isNext ? 'color-mix(in srgb, var(--accent) 7%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4.5%, transparent)', opacity: done && !expanded ? 0.62 : 1 }}>
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: color }} />
       <div className="flex items-center gap-3 pl-4 pr-3 py-3">
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">

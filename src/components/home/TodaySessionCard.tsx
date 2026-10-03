@@ -80,7 +80,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
   };
 
   return (
-    <div className="glass-card px-4 py-4">
+    <div className="glass-card px-4 py-4" style={{ backgroundImage: `radial-gradient(130% 90% at 0% 0%, color-mix(in srgb, ${dayColor} 11%, transparent), transparent 55%)` }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">{label ?? <>Today&apos;s session</>}</p>
@@ -94,7 +94,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>⋯</button>
       </div>
 
-      <div className="h-1.5 rounded-full overflow-hidden mt-3" style={{ background: 'var(--bg-elevated)' }}>
+      <div className="h-1.5 rounded-full overflow-hidden mt-3" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         <div className="h-full rounded-full transition-all" style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%`, background: dayColor }} />
       </div>
 
@@ -131,7 +131,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
 
       <button type="button" onClick={() => setPicking(true)}
         className="w-full h-11 mt-2 rounded-2xl font-semibold text-[14px] flex items-center justify-center gap-1.5 text-[var(--text-secondary)]"
-        style={{ background: 'var(--bg-elevated)', border: '1px dashed var(--border)' }}>
+        style={{ background: 'color-mix(in srgb, var(--text-primary) 4.5%, transparent)' }}>
         <AppIcon name="Plus" size="sm" /> Add exercise
       </button>
       <button type="button" onClick={onFinish} disabled={!p.anySetDone}
