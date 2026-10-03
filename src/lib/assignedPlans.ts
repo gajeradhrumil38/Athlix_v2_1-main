@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { format, subDays } from 'date-fns';
+import type { PlanSession } from './planProgress';
 
 // Plans a trainer assigns to a trainee. Trainer has full CRUD on their own
 // plans; the trainee can read plans assigned to them (RLS enforced). A plan is
@@ -197,4 +199,39 @@ export async function deletePlan(id: string): Promise<{ ok: boolean; error?: str
   if (error) return { ok: false, error: error.message };
   if (!data || data.length === 0) return { ok: false, error: 'Plan not found or you do not have permission to delete it.' };
   return { ok: true };
+}
+
+// Route state for starting one day of a plan in the logger. Every "start
+// from a plan" entry point uses this, so they all record the same day.
+export function planStartState(plan: AssignedPlan, dayLabel: string) {
+  const groups = groupByDay(plan.exercises);
+  const isMulti = groups.length > 1;
+  const exercises = groups.find(([label]) => label === dayLabel)?.[1] ?? plan.exercises;
+  return {
+    recommendedExercises: exercises.map((e) => ({
+      name: e.name,
+      sets: e.default_sets,
+      reps: String(e.default_reps),
+      rest: e.rest_seconds ?? null,
+      weight: e.default_weight || null,
+    })),
+    suggestedTitle: isMulti && dayLabel ? `${plan.title} — ${dayLabel}` : plan.title,
+    sourcePlanId: plan.id,
+    sourcePlanDay: isMulti ? dayLabel : '',
+  };
+}
+
+// Trainee: my recent sessions performed from any of these plans (60 days).
+export async function getMyPlanSessions(planIds: string[]): Promise<PlanSession[]> {
+  const me = await meId();
+  if (!me || !planIds.length) return [];
+  const { data } = await supabase
+    .from('workouts')
+    .select('id, date, created_at, source_plan_id, source_plan_day, exercises(name)')
+    .eq('user_id', me)
+    .in('source_plan_id', planIds)
+    .gte('date', format(subDays(new Date(), 60), 'yyyy-MM-dd'))
+    .order('date', { ascending: false })
+    .limit(200);
+  return (data ?? []) as PlanSession[];
 }
