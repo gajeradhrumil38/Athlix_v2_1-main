@@ -372,17 +372,21 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // Phones: full-screen sheet sliding up. Wider screens: a centered panel —
+  // full-bleed at desktop width turned every row into a 1,600px-wide strip.
+  const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
+
   return (
-    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm md:flex md:items-center md:justify-center md:p-6">
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-        className="absolute inset-0 mx-auto w-full max-w-[860px] flex flex-col border-x lg-sheet"
+        initial={isWide ? { opacity: 0, scale: 0.97 } : { y: '100%' }}
+        animate={isWide ? { opacity: 1, scale: 1 } : { y: 0 }}
+        exit={isWide ? { opacity: 0, scale: 0.97 } : { y: '100%' }}
+        transition={isWide ? { duration: 0.16 } : { type: 'spring', damping: 28, stiffness: 260 }}
+        className="absolute inset-0 mx-auto w-full max-w-[860px] flex flex-col border-x lg-sheet md:relative md:inset-auto md:h-[min(86vh,820px)] md:max-w-[560px] md:rounded-3xl md:border md:overflow-hidden"
         style={{ borderColor: 'var(--border)', borderTop: '1px solid rgba(255,255,255,0.13)' }}
       >
-        <div className="lg-handle" />
+        <div className="lg-handle md:hidden" />
         {/* ── Header ── */}
         <div
           className="flex items-center justify-between px-4 pb-3"
