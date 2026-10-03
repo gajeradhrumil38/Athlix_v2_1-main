@@ -243,6 +243,13 @@
     -webkit-backdrop-filter: blur(50px) saturate(2.0) brightness(1.04);
   }
 
+  /* Opaque panel for dialogs that hold a lot of text (exercise picker, coach
+     popups). --bg-surface alone is 5% white, so the page showed through;
+     layering it on --bg-base keeps the same tint, fully opaque. */
+  .solid-panel {
+    background: linear-gradient(var(--bg-surface), var(--bg-surface)), var(--bg-base);
+  }
+
   /* Fixed mobile top header (Layout.tsx) — was referenced but never defined,
      leaving the header fully transparent (only its 1px bottom border was
      visible) so scrolled-under page content showed straight through it.

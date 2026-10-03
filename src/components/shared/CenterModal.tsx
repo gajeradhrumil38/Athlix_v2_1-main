@@ -16,14 +16,14 @@ export const CenterModal: React.FC<Props> = ({ open, onClose, children, zIndex =
     {open && (
       <motion.div
         className="fixed inset-0 flex items-center justify-center px-4"
-        style={{ zIndex, background: 'rgba(3,5,9,0.88)', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ zIndex, background: 'rgba(3,5,9,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
         onClick={onClose}
       >
         <motion.div
-          className="w-full max-w-md rounded-3xl overflow-hidden flex flex-col"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', maxHeight: 'min(88vh, 760px)', boxShadow: '0 24px 60px rgba(0,0,0,0.55)' }}
+          className="w-full max-w-md rounded-3xl overflow-hidden flex flex-col solid-panel"
+          style={{ border: '1px solid var(--border)', maxHeight: 'min(88vh, 760px)', boxShadow: '0 24px 60px rgba(0,0,0,0.55)' }}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 4 }}

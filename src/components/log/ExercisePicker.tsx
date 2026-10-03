@@ -377,13 +377,15 @@ export const ExercisePicker: React.FC<ExercisePickerProps> = ({
   const isWide = typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches;
 
   return (
-    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm md:flex md:items-center md:justify-center md:p-6">
+    <div className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-xl md:flex md:items-center md:justify-center md:p-6">
       <motion.div
         initial={isWide ? { opacity: 0, scale: 0.97 } : { y: '100%' }}
         animate={isWide ? { opacity: 1, scale: 1 } : { y: 0 }}
         exit={isWide ? { opacity: 0, scale: 0.97 } : { y: '100%' }}
         transition={isWide ? { duration: 0.16 } : { type: 'spring', damping: 28, stiffness: 260 }}
-        className="absolute inset-0 mx-auto w-full max-w-[860px] flex flex-col border-x lg-sheet md:relative md:inset-auto md:h-[min(86vh,820px)] md:max-w-[560px] md:rounded-3xl md:border md:overflow-hidden"
+        className="absolute inset-0 mx-auto w-full max-w-[860px] flex flex-col border-x solid-panel md:relative md:inset-auto md:h-[min(86vh,820px)] md:max-w-[560px] md:rounded-3xl md:border md:overflow-hidden"
+        // Opaque panel: the shared glass sheet let the page behind bleed
+        // through the exercise list. The page is dimmed and blurred instead.
         style={{ borderColor: 'var(--border)', borderTop: '1px solid rgba(255,255,255,0.13)' }}
       >
         <div className="lg-handle md:hidden" />
