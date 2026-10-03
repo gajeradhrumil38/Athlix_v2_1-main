@@ -15,7 +15,8 @@ export interface TraineeWorkout {
   source_plan_id: string | null;
   source_plan_day?: string | null;
   created_at?: string | null;
-  exercises: { name: string; muscle_group: string | null; sets: number; reps: number; weight: number; unit: string; order_index?: number | null; exercise_db_id?: string | null }[];
+  // rpe is read via exercises(*) so the query works before and after the set_rpe migration.
+  exercises: { name: string; muscle_group: string | null; sets: number; reps: number; weight: number; unit: string; order_index?: number | null; exercise_db_id?: string | null; rpe?: number | null }[];
 }
 export interface TraineePR { exercise_name: string; best_weight: number; best_reps: number; achieved_date: string; unit: string; }
 export interface TraineeRun { id: number; run_ts: number; distance: number; duration: number; pace: number; }
@@ -89,7 +90,7 @@ async function loadTraineeDashboard(traineeId: string): Promise<TraineeDashboard
     supabase.rpc('coach_trainee_identity', { _trainee: traineeId }).maybeSingle(),
     wantWorkouts
       ? supabase.from('workouts')
-          .select('id, date, created_at, title, duration_minutes, muscle_groups, source_plan_id, source_plan_day, exercises(name, muscle_group, sets, reps, weight, unit, order_index, exercise_db_id)')
+          .select('id, date, created_at, title, duration_minutes, muscle_groups, source_plan_id, source_plan_day, exercises(*)')
           .eq('user_id', traineeId).order('date', { ascending: false }).limit(60)
       : Promise.resolve({ data: null }),
     wantPRs

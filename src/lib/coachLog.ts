@@ -190,6 +190,7 @@ export async function saveCoachSession(traineeId: string, draft: CoachLogDraft, 
           reps: Math.max(0, Math.round(Number(s.reps || 0))),
           weight: repsOnly ? 0 : Math.max(0, Math.min(9999, Number(s.weight || 0))),
           unit: isDistance ? 'km' as const : 'lbs' as const,
+          ...(s.rpe ? { rpe: s.rpe } : {}),
         })),
       };
     }),

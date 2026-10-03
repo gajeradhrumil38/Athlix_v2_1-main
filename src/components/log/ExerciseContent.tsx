@@ -38,6 +38,7 @@ interface ExerciseContentProps {
   onWeightUnitChange: (unit: WeightUnit) => void;
   onDistanceUnitChange: (unit: DistanceUnit) => void;
   onUpdateSet: (setId: string, field: 'weight' | 'reps', value: number) => void;
+  onSetRpe?: (setId: string, rpe: number | null) => void;
   onMarkSetDone: (setId: string) => void;
   onAddSet: () => void;
   onCopySet: (setIndex: number) => void;
@@ -97,6 +98,7 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
     bodyWeightForMath = null,
     onDistanceUnitChange,
     onUpdateSet,
+    onSetRpe,
     onMarkSetDone,
     onAddSet,
     onCopySet,
@@ -232,6 +234,7 @@ export const ExerciseContent: React.FC<ExerciseContentProps> = (props) => {
                 index={index + 1}
                 set={set}
                 onMarkDone={() => onMarkSetDone(set.id)}
+                onSetRpe={onSetRpe ? (rpe) => onSetRpe(set.id, rpe) : undefined}
                 onOpenDial={(field) => onOpenDial(set.id, field)}
                 onAdjust={(field, delta) => {
                   const cur = set[field] ?? 0;

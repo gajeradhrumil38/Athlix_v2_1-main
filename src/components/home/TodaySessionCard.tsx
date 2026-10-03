@@ -116,6 +116,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
             onUndo={() => onChange(markExerciseUndone(workout, ex.id))}
             onToggleSet={(setId) => onChange(toggleSetDone(workout, ex.id, setId))}
             onChangeSet={(setId, field, value) => onChange(updateSetValue(workout, ex.id, setId, field, value))}
+            onSetRpe={(setId, rpe) => onChange({ ...workout, exercises: workout.exercises.map((e) => (e.id === ex.id ? { ...e, sets: e.sets.map((s) => (s.id === setId ? { ...s, rpe } : s)) } : e)) })}
             onAddSet={() => onChange(addSet(workout, ex.id, uid()))}
             onCopySet={(setId) => onChange(copySet(workout, ex.id, setId, uid()))}
             onRemoveSet={(setId) => onChange(removeSet(workout, ex.id, setId))}

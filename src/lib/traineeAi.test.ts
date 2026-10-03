@@ -23,6 +23,12 @@ describe('buildTraineeContext', () => {
     expect(ctx).toContain('Bench Press 4x8 @ 185');
     expect(ctx).toContain('Pull (40 min)');
   });
+  it('includes RPE when a set has one', () => {
+    const ctx = buildTraineeContext(base({ workouts: { shared: true, data: [
+      { id: '1', date: '2026-10-01', title: 'Push', duration_minutes: null, muscle_groups: null, source_plan_id: null, exercises: [{ name: 'Bench', muscle_group: 'Chest', sets: 1, reps: 5, weight: 185, unit: 'lbs', rpe: 9 }] },
+    ] } }), NOW);
+    expect(ctx).toContain('Bench 1x5 @ 185 RPE 9');
+  });
   it('drops workouts older than 8 weeks', () => {
     const ctx = buildTraineeContext(base({ workouts: { shared: true, data: [
       { id: '1', date: '2026-06-01', title: 'Old', duration_minutes: null, muscle_groups: null, source_plan_id: null, exercises: [] },

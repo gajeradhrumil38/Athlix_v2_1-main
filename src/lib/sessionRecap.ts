@@ -9,6 +9,7 @@ export interface RecapExercise {
   name: string;
   sets: number;
   top: { weight: number; reps: number };
+  rpe: number | null; // hardest effort logged on this lift today
   prev: { weight: number; reps: number; date: string } | null;
   pr: boolean;
 }
@@ -27,6 +28,7 @@ export function buildRecap(workout: WorkoutState, before: TraineeDashboard): Rec
   const history = before.workouts.shared ? [...before.workouts.data].sort((a, b) => b.date.localeCompare(a.date)) : [];
   const exercises = setsToSave(workout).map(({ exercise, sets }) => {
     const done = sets.map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0 }));
+    const rpes = sets.map((s) => Number(s.rpe) || 0).filter((v) => v > 0);
     const best = top(done);
     const prevW = history.find((w) => w.exercises.some((e) => e.name === exercise.name));
     const prev = prevW ? { ...top(prevW.exercises.filter((e) => e.name === exercise.name).map((e) => ({ weight: e.weight, reps: e.reps }))), date: prevW.date } : null;
@@ -34,7 +36,7 @@ export function buildRecap(workout: WorkoutState, before: TraineeDashboard): Rec
     const recorded = before.prs.shared ? before.prs.data.find((p) => p.exercise_name === exercise.name)?.best_weight ?? 0 : 0;
     // A PR needs something to beat — a first-ever lift isn't a "record".
     const pr = best.weight > 0 && (histBest > 0 || recorded > 0) && best.weight > Math.max(histBest, recorded);
-    return { name: exercise.name, sets: done.length, top: best, prev, pr };
+    return { name: exercise.name, sets: done.length, top: best, rpe: rpes.length ? Math.max(...rpes) : null, prev, pr };
   });
   const volume = setsToSave(workout).reduce((a, { sets }) => a + sets.reduce((b, s) => b + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0), 0);
   const last = history[0];
@@ -52,9 +54,10 @@ export function buildRecap(workout: WorkoutState, before: TraineeDashboard): Rec
 export function recapFacts(r: Recap): string[] {
   const out = r.exercises.map((e) => {
     const now = `${e.top.weight} lb × ${e.top.reps}`;
-    if (!e.prev) return `${e.name}: ${e.sets} sets, top ${now} (first time logged)`;
+    const effort = e.rpe ? `, hardest set RPE ${e.rpe}` : '';
+    if (!e.prev) return `${e.name}: ${e.sets} sets, top ${now}${effort} (first time logged)`;
     const d = e.top.weight - e.prev.weight;
-    return `${e.name}: ${e.sets} sets, top ${now} (last time ${e.prev.weight} × ${e.prev.reps}${d ? `, ${d > 0 ? '+' : ''}${d} lb` : ''})${e.pr ? ' — NEW PR' : ''}`;
+    return `${e.name}: ${e.sets} sets, top ${now}${effort} (last time ${e.prev.weight} × ${e.prev.reps}${d ? `, ${d > 0 ? '+' : ''}${d} lb` : ''})${e.pr ? ' — NEW PR' : ''}`;
   });
   out.push(`Total: ${r.sets} sets, ${r.volume.toLocaleString()} lb volume${r.prevVolume ? ` (previous session ${r.prevVolume.toLocaleString()} lb)` : ''}.`);
   return out;

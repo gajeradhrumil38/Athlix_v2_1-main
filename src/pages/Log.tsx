@@ -32,6 +32,8 @@ export interface Set {
   /** Target values loaded from a template / plan — shown as hint during the workout */
   planned_weight?: number | null;
   planned_reps?: number | null;
+  /** How hard the set felt, 1–10 (optional). */
+  rpe?: number | null;
 }
 
 export interface ExerciseEntry {
@@ -452,6 +454,7 @@ export const Log: React.FC = () => {
                 reps: rawReps,
                 weight: rawWeight,
                 unit: isDistanceType ? distanceUnit : weightUnit,
+                ...(set.rpe ? { rpe: set.rpe } : {}),
               };
             }),
           })),

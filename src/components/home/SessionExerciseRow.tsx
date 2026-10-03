@@ -34,6 +34,7 @@ interface Props {
   onUndo: () => void;
   onToggleSet: (setId: string) => void;
   onChangeSet: (setId: string, field: 'weight' | 'reps', value: number) => void;
+  onSetRpe?: (setId: string, rpe: number | null) => void;
   onAddSet: () => void;
   onCopySet: (setId: string) => void;
   onRemoveSet: (setId: string) => void;
@@ -49,7 +50,7 @@ const valueOf = (s: ExerciseEntry['sets'][number], f: 'weight' | 'reps') =>
   s[f] ?? (f === 'weight' ? s.planned_weight : s.planned_reps) ?? null;
 
 export const SessionExerciseRow: React.FC<Props> = ({
-  exercise, isNext, expanded, onToggleExpand, onDone, onUndo, onToggleSet, onChangeSet, onAddSet, onCopySet, onRemoveSet,
+  exercise, isNext, expanded, onToggleExpand, onDone, onUndo, onToggleSet, onChangeSet, onSetRpe, onAddSet, onCopySet, onRemoveSet,
 }) => {
   const { overrides } = useExerciseOverrides();
   const done = exerciseDone(exercise);
@@ -121,6 +122,7 @@ export const SessionExerciseRow: React.FC<Props> = ({
                 set={s}
                 weightUnit="lbs"
                 onMarkDone={() => { haptics.tick(); onToggleSet(s.id); }}
+                onSetRpe={onSetRpe ? (rpe) => onSetRpe(s.id, rpe) : undefined}
                 onOpenDial={(field) => openDial(s, field)}
                 onAdjust={(field, delta) => onChangeSet(s.id, field, Math.max(0, parseFloat((Number(valueOf(s, field) || 0) + delta).toFixed(2))))}
                 primary={{ field: binding.primary, label: labels.primary, value: valueOf(s, binding.primary), displayValue: formatSetValue(kinds.primary, valueOf(s, binding.primary)) }}

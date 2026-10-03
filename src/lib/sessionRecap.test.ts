@@ -27,6 +27,15 @@ describe('buildRecap', () => {
   });
 });
 
+describe('recap RPE', () => {
+  it('reports the hardest RPE logged on a lift', () => {
+    const w = workout([{ name: 'Bench', sets: [{ ...set(145, 6), rpe: 8 }, { ...set(145, 5), rpe: 9.5 }] as any }]);
+    const r = buildRecap(w, before);
+    expect(r.exercises[0].rpe).toBe(9.5);
+    expect(recapFacts(r)[0]).toContain('hardest set RPE 9.5');
+  });
+});
+
 describe('recapFacts / fallbackRecap', () => {
   it('writes the change vs last time and flags the PR', () => {
     const r = buildRecap(workout([{ name: 'Bench', sets: [set(145, 6)] }]), before);

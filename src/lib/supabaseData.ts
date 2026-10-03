@@ -1676,7 +1676,7 @@ export const saveWorkout = async (
       name: string;
       muscle_group?: string;
       exercise_db_id?: string | null;
-      completed_sets: Array<{ reps: number; weight: number; unit?: ExerciseSetUnit }>;
+      completed_sets: Array<{ reps: number; weight: number; unit?: ExerciseSetUnit; rpe?: number }>;
     }>;
   },
 ) => {

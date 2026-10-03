@@ -369,6 +369,19 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
     [setWorkout],
   );
 
+  const setSetRpe = useCallback(
+    (setId: string, rpe: number | null) => {
+      setWorkout((prev) => prev ? {
+        ...prev,
+        exercises: prev.exercises.map((exercise) => ({
+          ...exercise,
+          sets: exercise.sets.map((set) => (set.id === setId ? { ...set, rpe } : set)),
+        })),
+      } : null);
+    },
+    [setWorkout],
+  );
+
   const handleOpenDial = useCallback(
     (setId: string, field: 'weight' | 'reps') => {
       const exercise = workout.exercises[activeIndex];
@@ -1304,6 +1317,7 @@ export const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({
                   onWeightUnitChange={(unit) => onWeightUnitChange?.(unit)}
                   onDistanceUnitChange={(unit) => onDistanceUnitChange?.(unit)}
                   onUpdateSet={updateSetField}
+                  onSetRpe={setSetRpe}
                   onMarkSetDone={handleMarkSetDone}
                   onAddSet={handleAddSet}
                   onCopySet={handleCopySet}

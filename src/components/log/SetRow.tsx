@@ -21,7 +21,11 @@ interface SetRowProps {
   // Narrower boxes for cards (Home / coach session card) where two full-size
   // value boxes would squeeze the digits.
   compact?: boolean;
+  // Optional effort rating for a finished set — shown only when provided.
+  onSetRpe?: (rpe: number | null) => void;
 }
+
+const RPE_CHOICES = [6, 7, 8, 9, 10];
 
 const ValueBox: React.FC<{
   field: SetRowField;
@@ -94,7 +98,9 @@ export const SetRow: React.FC<SetRowProps> = ({
   onMarkDone,
   weightUnit = 'lbs',
   compact = false,
+  onSetRpe,
 }) => {
+  const [rpeOpen, setRpeOpen] = React.useState(false);
   const weightStep = weightUnit === 'kg' ? 1.25 : 2.5;
   const repsStep = 1;
 
@@ -143,13 +149,23 @@ export const SetRow: React.FC<SetRowProps> = ({
           >
             Set {index}
           </div>
-          {set.done && (
+          {set.done && !onSetRpe && (
             <span
               className="text-[10px] font-semibold tracking-[0.08em] uppercase"
               style={{ color: 'rgba(200,255,0,0.70)' }}
             >
               Done
             </span>
+          )}
+          {set.done && onSetRpe && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); setRpeOpen((o) => !o); }}
+              aria-label={set.rpe ? `Effort RPE ${set.rpe}, change` : 'Rate effort (RPE)'}
+              className="rounded-lg px-2 py-[3px] text-[10px] font-bold tracking-[0.08em] uppercase transition-colors"
+              style={set.rpe
+                ? { background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)' }
+                : { background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)' }}>
+              {set.rpe ? `RPE ${set.rpe}` : '+ RPE'}
+            </button>
           )}
           {!set.done && plannedLabel && (
             <span className="text-[10px] font-medium tabular-nums" style={{ color: 'var(--text-muted)' }}>
@@ -179,6 +195,22 @@ export const SetRow: React.FC<SetRowProps> = ({
           <Check className="w-4 h-4" />
         </button>
       </div>
+
+      {/* RPE picker — one tap per set, then it folds away. */}
+      {set.done && onSetRpe && rpeOpen && (
+        <div className="flex items-center gap-1.5 px-4 pb-2 pl-5" role="group" aria-label="How hard was it? RPE">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mr-0.5">Effort</span>
+          {RPE_CHOICES.map((v) => (
+            <button key={v} type="button" onClick={(e) => { e.stopPropagation(); onSetRpe(set.rpe === v ? null : v); setRpeOpen(false); }}
+              className="h-8 min-w-[34px] rounded-lg text-[13px] font-bold tabular-nums transition-colors"
+              style={set.rpe === v
+                ? { background: 'var(--accent)', color: '#000' }
+                : { background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', color: 'var(--text-primary)' }}>
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Value boxes with steppers */}
       <div className={`grid gap-2 px-3 pb-3 pl-4 ${secondary ? 'grid-cols-2' : 'grid-cols-1'}`}>

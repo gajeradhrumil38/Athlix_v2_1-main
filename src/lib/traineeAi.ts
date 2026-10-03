@@ -24,7 +24,7 @@ export function buildTraineeContext(dash: TraineeDashboard, now = Date.now()): s
     lines.push(`Workouts, last 8 weeks (${recent.length}):`);
     if (!recent.length) lines.push('- none');
     for (const w of recent) {
-      const ex = w.exercises.map((e) => `${e.name} ${e.sets}x${e.reps}${e.weight ? ` @ ${Math.round(e.weight)}` : ''}`).join('; ');
+      const ex = w.exercises.map((e) => `${e.name} ${e.sets}x${e.reps}${e.weight ? ` @ ${Math.round(e.weight)}` : ''}${e.rpe ? ` RPE ${e.rpe}` : ''}`).join('; ');
       lines.push(`- ${w.date} ${w.title}${w.duration_minutes ? ` (${w.duration_minutes} min)` : ''}: ${ex || 'no sets'}`);
     }
   }
