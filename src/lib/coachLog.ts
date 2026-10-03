@@ -3,6 +3,11 @@ import type { TraineeDashboard, TraineeWorkout } from './coachData';
 import { groupByDay, type AssignedPlan, type AssignedPlanExercise } from './assignedPlans';
 import { getExerciseMuscleProfile } from './exerciseMuscles';
 import { isWorkoutUnnamed } from './workoutTitle';
+import { format } from 'date-fns';
+import { saveWorkout } from './supabaseData';
+import { resolveEffectiveInputType, type ExerciseInputType } from './exerciseTypes';
+import { setsToSave } from './sessionChecklist';
+import type { Exercise } from '../components/log/ExercisePicker';
 
 // Starting points for a coach logging a session for a trainee. Shared by the
 // start popup on the trainee page and the logger page, so the popup can hand
@@ -123,4 +128,71 @@ export function seedSession(start: CoachLogStart, dash: TraineeDashboard, plans:
     case 'blank':
       return { workout: newWorkout([]), sourcePlanId: null, sourcePlanDay: null, openPicker: true };
   }
+}
+
+// The trainee's own exercises (newest first) for the picker's Recent tab,
+// each carrying its last session's per-set numbers for prefill.
+export function traineeRecentExercises(workouts: TraineeWorkout[]): Exercise[] {
+  const seen = new Set<string>();
+  const out: Exercise[] = [];
+  for (const w of workouts) {
+    for (const e of w.exercises || []) {
+      const key = e.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const sameSession = (w.exercises || []).filter((x) => x.name === e.name);
+      const top = sameSession.reduce((a, b) => (b.weight > a.weight ? b : a));
+      out.push({
+        id: `${e.name}-${w.id}`,
+        name: e.name,
+        muscleGroup: muscleFor(e.name, e.muscle_group),
+        exercise_db_id: e.exercise_db_id ?? undefined,
+        lastSession: {
+          weight: top.weight, reps: top.reps, date: w.date, sets: sameSession.length, unit: 'lbs',
+          perSetData: sameSession.map((x) => ({ weight: x.weight, reps: x.reps })),
+        },
+      });
+    }
+  }
+  return out;
+}
+
+// Save a coach-run session to the trainee's log and clear the draft. Throws a
+// user-facing message on validation problems.
+export async function saveCoachSession(traineeId: string, draft: CoachLogDraft, overrides: Record<string, ExerciseInputType>): Promise<void> {
+  const { workout } = draft;
+  const items = setsToSave(workout);
+  if (!items.length) throw new Error('Add at least one set with weight or reps.');
+  const startDate = new Date(workout.startAt);
+  const endDate = new Date(workout.endAt);
+  const date = format(Number.isNaN(startDate.getTime()) ? new Date() : startDate, 'yyyy-MM-dd');
+  if (date > format(new Date(), 'yyyy-MM-dd')) throw new Error("Can't log a session in the future.");
+  const spanSec = Math.round((endDate.getTime() - startDate.getTime()) / 1000);
+  const seconds = spanSec > 0 ? spanSec : workout.elapsedSeconds;
+
+  await saveWorkout(traineeId, {
+    title: workout.title.trim() || 'Workout',
+    date,
+    duration_minutes: Math.max(1, Math.round(seconds / 60)),
+    notes: workout.notes || null,
+    source_plan_id: draft.sourcePlanId,
+    source_plan_day: draft.sourcePlanDay ?? null,
+    trainee_id: traineeId,
+    exercises: items.map(({ exercise, sets }) => {
+      const type = resolveEffectiveInputType(exercise.name, overrides);
+      const isDistance = type === 'distance_time' || type === 'distance_only';
+      const repsOnly = type === 'reps_only' && !exercise.optionalWeight;
+      return {
+        name: exercise.name,
+        muscle_group: exercise.muscleGroup,
+        exercise_db_id: exercise.exercise_db_id || null,
+        completed_sets: sets.map((s) => ({
+          reps: Math.max(0, Math.round(Number(s.reps || 0))),
+          weight: repsOnly ? 0 : Math.max(0, Math.min(9999, Number(s.weight || 0))),
+          unit: isDistance ? 'km' as const : 'lbs' as const,
+        })),
+      };
+    }),
+  });
+  writeCoachDraft(traineeId, null);
 }
