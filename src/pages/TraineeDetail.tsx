@@ -17,6 +17,7 @@ import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } 
 import { getTraineeDashboard, peekTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { CoachLogStartModal } from '../components/coach/CoachLogStart';
 import { CoachSessionCard } from '../components/coach/CoachSessionCard';
+import { CenterModal } from '../components/shared/CenterModal';
 import { getAssignedPlansFor, peekAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
 import { dayOfSession } from '../lib/planProgress';
 import { updateCoachNotes } from '../lib/coachLinks';
@@ -83,6 +84,9 @@ function reconcileColumns(saved: string[][], availableIds: string[]): string[][]
 const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
+type Alert = { level: 'high' | 'warn'; text: string; hint?: string };
+const ALERT_COLOR: Record<Alert['level'] | 'ok', string> = { high: '#ff8080', warn: '#ffc857', ok: '#4dff91' };
+
 type MusclePeriod = 'today' | 'week' | 'month';
 const PERIOD_LABEL: Record<MusclePeriod, string> = { today: 'today', week: 'last 7 days', month: 'last 30 days' };
 // Relative to a week of training, for the radar's spokes and goal ring.
@@ -127,6 +131,7 @@ export const TraineeDetail: React.FC = () => {
   const [plans, setPlans] = useState<AssignedPlan[]>(() => (id ? peekAssignedPlansFor(id) ?? [] : []));
   const [assign, setAssign] = useState(false);
   const [logStart, setLogStart] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
@@ -299,25 +304,34 @@ export const TraineeDetail: React.FC = () => {
     { key: 'calendar' as const, label: 'Calendar' },
   ];
 
-  // Coaching triage — surface the things a trainer should act on, up front.
-  const flags: string[] = (() => {
+  // Coaching triage — the things a trainer should act on, most serious first.
+  const alerts: Alert[] = (() => {
     if (!dash.workouts.shared) return [];
     const ws = dash.workouts.data;
     const now = Date.now();
-    const out: string[] = [];
+    const out: Alert[] = [];
     const last = ws.reduce((m, w) => Math.max(m, parseDay(w.date)), 0);
     const daysAgo = last ? Math.floor((now - last) / DAY) : null;
-    if (daysAgo == null) out.push('No workouts logged yet');
-    else if (daysAgo >= 7) out.push(`No workout in ${daysAgo} days`);
+    if (daysAgo == null) out.push({ level: 'warn', text: 'No workouts logged yet', hint: 'Nothing logged since connecting — log a session together or check in.' });
+    else if (daysAgo >= 7) out.push({ level: 'high', text: `No workout in ${daysAgo} days`, hint: 'They’ve gone quiet — worth a check-in.' });
     else {
       const week = new Set(ws.filter((w) => now - parseDay(w.date) <= 7 * DAY).map((w) => w.date)).size;
-      if (week < 3) out.push(`Only ${week} session${week === 1 ? '' : 's'} this week`);
+      if (week < 3) out.push({ level: 'warn', text: `Only ${week} session${week === 1 ? '' : 's'} this week`, hint: 'Below the 3-a-week mark.' });
     }
     const notStarted = plans.filter((p) => !ws.some((w) => w.source_plan_id === p.id));
-    if (notStarted.length) out.push(`${notStarted.length} assigned plan${notStarted.length > 1 ? 's' : ''} not started`);
-    if (dash.recovery.shared && dash.recovery.data != null && dash.recovery.data < 40) out.push(`Low recovery (${dash.recovery.data}%)`);
-    return out;
+    if (notStarted.length) {
+      out.push({
+        level: 'warn',
+        text: `${notStarted.length} assigned plan${notStarted.length > 1 ? 's' : ''} not started`,
+        hint: notStarted.map((p) => p.title).join(', '),
+      });
+    }
+    if (dash.recovery.shared && dash.recovery.data != null && dash.recovery.data < 40) {
+      out.push({ level: 'high', text: `Low recovery (${dash.recovery.data}%)`, hint: 'Consider a lighter session today.' });
+    }
+    return out.sort((x, y) => (x.level === y.level ? 0 : x.level === 'high' ? -1 : 1));
   })();
+  const topLevel: Alert['level'] | 'ok' = alerts[0]?.level ?? 'ok';
 
   // Fires on blur — skip the write when nothing changed, and never flash
   // "Saved" for a write that actually failed.
@@ -344,14 +358,14 @@ export const TraineeDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* The two things a coach does here, side by side and equally easy to hit. */}
-      <div className={`grid gap-2 pb-4 md:max-w-md ${dash.workouts.shared ? 'grid-cols-2' : 'grid-cols-1'}`}>
+      {/* The two things a coach does here, plus the alerts — one row. */}
+      <div className="flex items-stretch gap-2 pb-4">
         {dash.workouts.shared && (
           <button
             type="button"
             onClick={() => setLogStart(true)}
             title="Record a session you did together"
-            className="h-12 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-1.5"
+            className="flex-1 md:flex-none md:w-[200px] h-12 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-1.5"
             style={{ background: 'color-mix(in srgb, var(--accent) 14%, transparent)', color: 'var(--accent)', border: '1.5px solid color-mix(in srgb, var(--accent) 55%, transparent)' }}
           >
             <AppIcon name="Plus" size="sm" /> Log session
@@ -361,31 +375,65 @@ export const TraineeDetail: React.FC = () => {
           type="button"
           onClick={() => { setEditingPlan(null); setAssign(true); }}
           title="Give them a plan to follow"
-          className="h-12 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-1.5"
+          className="flex-1 md:flex-none md:w-[200px] h-12 rounded-2xl font-bold text-[15px] flex items-center justify-center gap-1.5"
           style={{ background: 'var(--accent)', color: '#000' }}
         >
           <AppIcon name="Clipboard" size="sm" /> Assign plan
         </button>
+        {dash.workouts.shared && (
+          <button
+            type="button"
+            onClick={() => setAlertsOpen(true)}
+            aria-label={alerts.length ? `${alerts.length} alert${alerts.length > 1 ? 's' : ''}` : 'On track'}
+            className="ml-auto shrink-0 h-12 px-3 sm:px-4 rounded-2xl font-bold text-[14px] flex items-center gap-2"
+            style={{ background: `color-mix(in srgb, ${ALERT_COLOR[topLevel]} 12%, transparent)`, color: ALERT_COLOR[topLevel], border: `1px solid color-mix(in srgb, ${ALERT_COLOR[topLevel]} 35%, transparent)` }}
+          >
+            <span className="h-2 w-2 rounded-full" style={{ background: ALERT_COLOR[topLevel] }} />
+            <span className="hidden sm:inline">{alerts.length ? 'Needs attention' : 'On track'}</span>
+            {alerts.length > 0 && (
+              <span className="min-w-[22px] h-[22px] px-1.5 rounded-full text-[12px] flex items-center justify-center" style={{ background: ALERT_COLOR[topLevel], color: '#000' }}>
+                {alerts.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Coaching triage banner — red flags first, or an all-clear */}
-      {flags.length > 0 ? (
-        <div className="mb-4 rounded-2xl px-4 py-3" style={{ background: 'rgba(255,128,128,0.10)', border: '1px solid rgba(255,128,128,0.28)' }}>
-          <p className="text-[12px] font-bold uppercase tracking-[0.1em] mb-1.5" style={{ color: '#ff8080' }}>Needs attention</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
-            {flags.map((f, i) => (
-              <span key={i} className="text-[13px] text-[var(--text-primary)] flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: '#ff8080' }} />{f}
-              </span>
-            ))}
+      <CenterModal open={alertsOpen} onClose={() => setAlertsOpen(false)}>
+        <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[20px] font-bold text-[var(--text-primary)] leading-tight">{alerts.length ? 'Needs attention' : 'On track'}</h2>
+            <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
+              {dash.name} · {alerts.length ? `${alerts.length} alert${alerts.length > 1 ? 's' : ''}` : 'no flags this week'}
+            </p>
           </div>
+          <button type="button" onClick={() => setAlertsOpen(false)} aria-label="Close" className="shrink-0 h-9 w-9 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+            <AppIcon name="Close" size="sm" />
+          </button>
         </div>
-      ) : dash.workouts.shared ? (
-        <div className="mb-4 rounded-2xl px-4 py-2.5 flex items-center gap-2" style={{ background: 'rgba(77,255,145,0.08)', border: '1px solid rgba(77,255,145,0.22)' }}>
-          <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#4dff91' }} />
-          <span className="text-[13px] font-medium" style={{ color: '#4dff91' }}>On track — no flags this week</span>
+        <div className="px-5 pb-5 space-y-2 overflow-y-auto">
+          {alerts.length === 0 ? (
+            <div className="rounded-2xl px-4 py-3 flex items-center gap-2.5" style={{ background: `color-mix(in srgb, ${ALERT_COLOR.ok} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${ALERT_COLOR.ok} 25%, transparent)` }}>
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: ALERT_COLOR.ok }} />
+              <span className="text-[14px] font-semibold" style={{ color: ALERT_COLOR.ok }}>Training on schedule — nothing to act on.</span>
+            </div>
+          ) : alerts.map((a, i) => (
+            <div key={i} className="relative rounded-2xl pl-4 pr-3 py-3 overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+              <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: ALERT_COLOR[a.level] }} />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[15px] font-bold text-[var(--text-primary)]">{a.text}</p>
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                  style={{ background: `color-mix(in srgb, ${ALERT_COLOR[a.level]} 16%, transparent)`, color: ALERT_COLOR[a.level] }}>
+                  {a.level === 'high' ? 'Urgent' : 'Watch'}
+                </span>
+              </div>
+              {a.hint && <p className="text-[13px] text-[var(--text-secondary)] mt-1 leading-snug">{a.hint}</p>}
+            </div>
+          ))}
         </div>
-      ) : null}
+      </CenterModal>
+
 
       {/* Menu bar — sticky so it stays put while scrolling; jumps between views */}
       <div className="sticky top-0 z-30 -mx-4 px-4 pt-1 pb-3" style={{ background: 'var(--bg-base)' }}>
