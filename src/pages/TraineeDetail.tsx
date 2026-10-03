@@ -15,6 +15,7 @@ import { MuscleRadar } from '../components/home/MuscleRadar';
 import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, peekTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { CoachLogStartModal } from '../components/coach/CoachLogStart';
+import { CoachSessionCard } from '../components/coach/CoachSessionCard';
 import { getAssignedPlansFor, peekAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
 import { dayOfSession } from '../lib/planProgress';
 import { updateCoachNotes } from '../lib/coachLinks';
@@ -494,6 +495,10 @@ export const TraineeDetail: React.FC = () => {
         // stale id never renders a blank slot for one tick.
         const renderColumns = columns.map((col) => col.filter((k) => WIDGETS[k] != null));
         return (
+          <>
+          <div className="mb-3 md:max-w-xl">
+            <CoachSessionCard key={id} traineeId={id!} dash={dash} plans={plans} onSaved={() => { void loadDash(); }} />
+          </div>
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
             {/* Balanced masonry — each column is its own droppable +
                 SortableContext (dnd-kit's multi-container pattern), so a
@@ -517,6 +522,7 @@ export const TraineeDetail: React.FC = () => {
               ) : null}
             </DragOverlay>
           </DndContext>
+          </>
         );
       })()}
 
