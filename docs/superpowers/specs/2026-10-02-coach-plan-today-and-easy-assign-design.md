@@ -160,7 +160,7 @@ Minimal typing and choosing:
   - `doneToday`
   - a single-day plan
 - Add **section 10** to `docs/trainer-dashboard-test-plan.md` with manual cases for the card, Switch, Other day, Done today, the four Assign starting points, the day scheme chips, and Preview & send.
-- Add migration checks to `supabase/tests/coach_permissions_check.sql`:
+- Add a separate rolled-back check script, `supabase/tests/plan_day_check.sql` (the permissions script revokes the link midway, so it is kept separate):
   - A foreign `p_source_plan_id` is stored as NULL.
   - A valid plan and day are stored.
 
