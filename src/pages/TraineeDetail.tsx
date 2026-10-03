@@ -608,12 +608,15 @@ const SortableCard: React.FC<{ id: string; children: React.ReactNode }> = ({ id,
     >
       {/* Inset within the card's own bounds (not overlapping the gap
           between cards) so it never gets clipped or fights the neighboring
-          column for hit-testing space. */}
+          column for hit-testing space. z-20, not z-10: some cards (the
+          dot-grid ones) lift their own content to z-10, which painted over
+          the handle and left only its top edge grabbable. Below the sticky
+          tab bar (z-30) so handles never paint over it while scrolling. */}
       <button
         {...attributes}
         {...listeners}
         aria-label="Drag to rearrange"
-        className="absolute top-2.5 right-2.5 z-10 touch-none cursor-grab active:cursor-grabbing h-7 w-7 flex items-center justify-center rounded-lg text-[14px]"
+        className="absolute top-2 right-2 z-20 touch-none cursor-grab active:cursor-grabbing h-8 w-8 flex items-center justify-center rounded-lg text-[15px]"
         style={{ background: 'color-mix(in srgb, var(--bg-elevated) 88%, transparent)', backdropFilter: 'blur(4px)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
       >
         ⠿
