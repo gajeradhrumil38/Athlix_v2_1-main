@@ -93,7 +93,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
       {menu && (
         <div className="mt-3 rounded-2xl overflow-hidden divide-y divide-[var(--border)]" style={{ background: 'var(--bg-elevated)' }}>
           <button type="button" onClick={() => { setMenu(false); onOpenLogger(); }} className="w-full px-4 py-3 text-left text-[14px] font-semibold text-[var(--text-primary)]">Open full logger</button>
-          <button type="button" onClick={() => { setMenu(false); onDiscard(); }} className="w-full px-4 py-3 text-left text-[14px] font-semibold" style={{ color: '#ff8080' }}>Discard session</button>
+          <button type="button" onClick={() => { setMenu(false); onDiscard(); }} className="w-full px-4 py-3 text-left text-[14px] font-semibold" style={{ color: 'var(--red)' }}>Discard session</button>
         </div>
       )}
 

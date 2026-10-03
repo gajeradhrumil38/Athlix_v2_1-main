@@ -25,9 +25,12 @@ import { Calendar, ReadOnlyWorkoutCards } from './Calendar';
 import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { RunHistory } from '../features/running/pages/RunHistory';
 import { muscleColor } from '../lib/muscleColors';
-import { DotGridCard, GlowSparkline } from '../components/shared/GlowChart';
+import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
+import { BigNumber, Delta, EmptyState, StatLabel, TONE, WidgetCard } from '../components/coach/overview/Widget';
+import { palette } from '../theme/colors';
 
-const ACCENT = '#c8ff00';
+// Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
+const ACCENT = 'var(--accent)';
 
 // Muscle group for an exercise — prefer the group actually stored on the
 // logged set; fall back to name-pattern inference so every exercise still
@@ -85,7 +88,7 @@ const DAY = 86_400_000;
 const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
 type Alert = { level: 'high' | 'warn'; text: string; hint?: string };
-const ALERT_COLOR: Record<Alert['level'] | 'ok', string> = { high: '#ff8080', warn: '#ffc857', ok: '#4dff91' };
+const ALERT_COLOR: Record<Alert['level'] | 'ok', string> = { high: TONE.bad, warn: TONE.warn, ok: TONE.good };
 
 type MusclePeriod = 'today' | 'week' | 'month';
 const PERIOD_LABEL: Record<MusclePeriod, string> = { today: 'today', week: 'last 7 days', month: 'last 30 days' };
@@ -499,84 +502,64 @@ export const TraineeDetail: React.FC = () => {
           session: shared
             ? <CoachSessionCard key={id} traineeId={id!} dash={dash} plans={plans} onSaved={() => { void loadDash(); }} menuInset />
             : <NotShared label="Sessions" />,
-          stats: <WeeklyStats workouts={shared ? dash.workouts.data : null} />,
-          gauge: <GaugeRing pct={weekSessions / GOAL} centerTop={`${weekSessions}/${GOAL}`} centerBottom="sessions this week" caption="Weekly goal" />,
+          stats: shared ? <WeeklyStats workouts={dash.workouts.data} /> : <NotShared label="This week" />,
+          gauge: shared ? <GaugeRing value={weekSessions} goal={GOAL} /> : <NotShared label="Weekly goal" />,
           trend: shared ? (
-            <Card>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-3">This week vs last</p>
-              <div className="grid grid-cols-2 gap-3">
-                <TrendStat label="Sessions" now={weekSessions} prev={lastSessions} delta={pctDelta(weekSessions, lastSessions)} />
-                <TrendStat label="Volume" now={thisVol} prev={lastVol} delta={pctDelta(thisVol, lastVol)} />
+            <WidgetCard title="This week vs last">
+              <div className="grid grid-cols-2 gap-2">
+                <TrendStat label="Sessions" now={weekSessions} delta={pctDelta(weekSessions, lastSessions)} />
+                <TrendStat label="Volume" now={thisVol} unit="lb" delta={pctDelta(thisVol, lastVol)} />
               </div>
-            </Card>
-          ) : <NotShared label="Workouts" />,
+            </WidgetCard>
+          ) : <NotShared label="This week vs last" />,
           focus: shared ? (
-            <Card>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">Focus next</p>
+            <WidgetCard title="Focus next" meta="last 7 days">
               {anyTrained ? (
                 <>
                   <p className="text-[24px] font-bold text-[var(--text-primary)] leading-none">{focusPick.r}</p>
-                  <p className="text-[13px] text-[var(--text-muted)] mt-1.5">Least-trained this week ({focusPick.sets} set{focusPick.sets === 1 ? '' : 's'}) — worth programming next.</p>
+                  <p className="text-[13px] text-[var(--text-secondary)] mt-1.5 leading-snug">Least trained ({focusPick.sets} set{focusPick.sets === 1 ? '' : 's'}) — worth programming next.</p>
                 </>
-              ) : <p className="text-[14px] text-[var(--text-muted)] py-2">No training logged this week yet.</p>}
-            </Card>
-          ) : <NotShared label="Workouts" />,
+              ) : <EmptyState text="No training logged this week yet." />}
+            </WidgetCard>
+          ) : <NotShared label="Focus next" />,
           radar: shared ? (
-            <Card>
+            <WidgetCard title="Muscle load" meta={PERIOD_LABEL[radarPeriod]}>
               <div className="mb-3"><PeriodToggle value={radarPeriod} onChange={setRadarPeriod} /></div>
-              <MuscleRadar muscleData={muscle.radar} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
-            </Card>
-          ) : <NotShared label="Muscle balance" />,
-          // The map draws its own gradient panel — it IS the card here, so no
-          // outer Card (that left a plain frame around the gradient).
+              <MuscleRadar muscleData={muscle.radar} showTitle={false} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
+            </WidgetCard>
+          ) : <NotShared label="Muscle load" />,
           map: shared ? (
-            <MuscleMap muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView}
-              title={`Trained muscles · ${PERIOD_LABEL[mapPeriod]}`} unit="lbs" gender={dash.sex}
-              controls={<PeriodToggle value={mapPeriod} onChange={setMapPeriod} />}
-              headerInsetRight={34} radius="var(--radius-xl)" />
-          ) : <NotShared label="Muscle map" />,
+            <WidgetCard title="Trained muscles" meta={PERIOD_LABEL[mapPeriod]}>
+              <MuscleMap bare muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} unit="lbs" gender={dash.sex}
+                controls={<PeriodToggle value={mapPeriod} onChange={setMapPeriod} />} />
+            </WidgetCard>
+          ) : <NotShared label="Trained muscles" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
           notes: (
-            <Card className="!p-0 overflow-hidden">
-              <div className="px-4 pt-3.5 pb-1 flex items-center justify-between">
-                <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Coach notes</p>
-                {notesSaved && <span className="text-[11px] font-semibold" style={{ color: '#4dff91' }}>Saved</span>}
-              </div>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Private notes — injuries, goals, cues…" rows={4}
-                className="w-full bg-transparent px-4 py-3 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-muted)]" />
-            </Card>
+            <WidgetCard title="Coach notes" icon="Edit"
+              right={<span className="text-[11px] font-semibold" style={{ color: notesSaved ? TONE.good : 'var(--text-secondary)' }}>{notesSaved ? 'Saved ✓' : 'Private · saves automatically'}</span>}>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="Injuries, goals, cues…" rows={4}
+                className="w-full rounded-xl px-3 py-2.5 text-[14px] text-[var(--text-primary)] outline-none resize-none placeholder:text-[var(--text-secondary)] placeholder:opacity-60"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }} />
+            </WidgetCard>
           ),
           plans: (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <AppIcon name="Clipboard" size="sm" />
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                    Assigned plans{plans.length ? ` · ${plans.length}` : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setEditingPlan(null); setAssign(true); }}
-                  aria-label="Assign a new plan"
-                  className="h-7 w-7 flex items-center justify-center rounded-lg shrink-0"
-                  style={{ background: 'rgba(200,255,0,0.1)', color: ACCENT, border: '1px solid rgba(200,255,0,0.25)' }}
-                >
+            <WidgetCard title="Assigned plans" icon="Clipboard" meta={plans.length ? String(plans.length) : undefined}
+              right={
+                <button type="button" onClick={() => { setEditingPlan(null); setAssign(true); }} aria-label="Assign a new plan"
+                  className="h-7 w-7 flex items-center justify-center rounded-lg"
+                  style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}>
                   <AppIcon name="Plus" size="sm" />
                 </button>
-              </div>
+              }>
               {plans.length === 0 ? (
-                <Card className="flex flex-col items-center text-center py-6 gap-1.5">
-                  <p className="text-[14px] text-[var(--text-muted)]">No plans assigned yet.</p>
-                  <button type="button" onClick={() => { setEditingPlan(null); setAssign(true); }} className="text-[13px] font-bold" style={{ color: ACCENT }}>
-                    + Assign a plan
-                  </button>
-                </Card>
+                <EmptyState icon="Clipboard" text="No plans assigned yet."
+                  action={<button type="button" onClick={() => { setEditingPlan(null); setAssign(true); }} className="text-[13px] font-bold text-[var(--accent)]">+ Assign a plan</button>} />
               ) : (
-                <div className="grid gap-3">
+                <div className="space-y-2">
                   {plans.map((p) => (
                     <PlanCard
                       key={p.id}
@@ -594,7 +577,7 @@ export const TraineeDetail: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
+            </WidgetCard>
           ),
         };
         // Columns may briefly lag a fresh 'plans' widget (reconciled by the
@@ -774,24 +757,28 @@ const MasonryColumn: React.FC<{ id: string; itemIds: string[]; children: React.R
   );
 };
 
-/* ── Circular gauge (BI-style, like the 82.6% ring) ──────── */
-const GaugeRing: React.FC<{ pct: number; centerTop: string; centerBottom: string; caption: string }> = ({ pct, centerTop, centerBottom, caption }) => {
-  const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct));
+/* ── Weekly goal ring ─────────────────────────────────────── */
+// SVG attributes need a real colour, not a CSS variable — palette hex.
+const GaugeRing: React.FC<{ value: number; goal: number }> = ({ value, goal }) => {
+  const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, value / goal));
+  const left = Math.max(0, goal - value);
   return (
-    <Card className="flex flex-col items-center justify-center py-5">
-      <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)] self-start mb-1">{caption}</p>
-      <div className="relative flex items-center justify-center" style={{ width: 132, height: 132 }}>
-        <svg width={132} height={132} className="-rotate-90">
-          <circle cx={66} cy={66} r={r} fill="none" stroke="var(--bg-elevated)" strokeWidth={10} />
-          <circle cx={66} cy={66} r={r} fill="none" stroke={ACCENT} strokeWidth={10} strokeLinecap="round"
-            strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[26px] font-bold leading-none text-[var(--text-primary)]">{centerTop}</span>
-          <span className="text-[11px] text-[var(--text-muted)] mt-1">{centerBottom}</span>
+    <WidgetCard title="Weekly goal" meta={`${goal} sessions`}>
+      <div className="flex items-center gap-4">
+        <div className="relative shrink-0" style={{ width: 112, height: 112 }}>
+          <svg width={112} height={112} viewBox="0 0 132 132" className="-rotate-90">
+            <circle cx={66} cy={66} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={10} />
+            <circle cx={66} cy={66} r={r} fill="none" stroke={palette.accent} strokeWidth={10} strokeLinecap="round"
+              strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center"><BigNumber value={`${value}/${goal}`} size="md" /></div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold text-[var(--text-primary)] leading-snug">{left === 0 ? 'Goal hit this week' : `${left} more to hit the goal`}</p>
+          <StatLabel>Sessions in the last 7 days</StatLabel>
         </div>
       </div>
-    </Card>
+    </WidgetCard>
   );
 };
 
@@ -853,7 +840,7 @@ const SetGrid: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' 
         <div key={i} className="grid overflow-hidden rounded-[10px]"
           style={{ gridTemplateColumns: weighted ? '38px 1fr 1fr' : '38px 1fr', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.012)' }}>
           <div className="flex items-center justify-center font-victory text-[22px]"
-            style={{ background: 'rgba(200,255,0,0.05)', color: ACCENT, borderRight: '1px solid var(--border)' }}>
+            style={{ background: 'color-mix(in srgb, var(--accent) 5%, transparent)', color: ACCENT, borderRight: '1px solid var(--border)' }}>
             {i + 1}
           </div>
           {weighted && (
@@ -876,13 +863,11 @@ const SetGrid: React.FC<{ sets: SetT[]; unit?: string }> = ({ sets, unit = 'lb' 
 };
 
 /* ── This-vs-last stat (trend card) ──────────────────────── */
-const TrendStat: React.FC<{ label: string; now: number; prev: number; delta: number }> = ({ label, now, delta }) => (
+const TrendStat: React.FC<{ label: string; now: number; unit?: string; delta: number }> = ({ label, now, unit, delta }) => (
   <div className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
-    <p className="text-[12px] text-[var(--text-muted)]">{label}</p>
-    <p className="text-[22px] font-bold text-[var(--text-primary)] leading-none mt-1 tabular-nums">{now.toLocaleString()}</p>
-    <p className="text-[12px] font-semibold mt-1" style={{ color: delta === 0 ? 'var(--text-muted)' : delta > 0 ? '#4dff91' : '#ff8080' }}>
-      {delta > 0 ? '▲' : delta < 0 ? '▼' : '—'} {Math.abs(delta)}% vs last
-    </p>
+    <BigNumber value={now.toLocaleString()} unit={unit} size="md" />
+    <StatLabel>{label}</StatLabel>
+    <div className="mt-1"><Delta pct={delta} /></div>
   </div>
 );
 
@@ -897,20 +882,17 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
   }, [workouts]);
 
   return (
-    <Card className="!p-0 overflow-hidden">
-      <div className="px-4 pt-3.5 pb-1">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Recent sessions · 2 weeks</p>
-      </div>
+    <WidgetCard title="Recent sessions" meta="2 weeks" flush>
       {recent.length === 0 ? (
-        <p className="text-[13px] text-[var(--text-muted)] text-center py-6">No sessions in the last 2 weeks.</p>
+        <div className="px-4 pb-4"><EmptyState icon="History" text="No sessions in the last 2 weeks." /></div>
       ) : (
         // The same cards the trainee sees in their own Calendar, read-only —
         // so a session looks identical on both sides.
-        <div className="max-h-[520px] overflow-y-auto p-3 space-y-3">
+        <div className="max-h-[520px] overflow-y-auto px-3 pb-3 space-y-3">
           <ReadOnlyWorkoutCards workouts={recent} />
         </div>
       )}
-    </Card>
+    </WidgetCard>
   );
 };
 
@@ -1025,7 +1007,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                     <div className="flex flex-col items-end gap-0.5">
                       <Metric reps={ex.best.r} weight={ex.best.w || undefined} />
                       {ex.trendLb != null && ex.trendLb !== 0 && (
-                        <span className="text-[11px] font-semibold" style={{ color: ex.trendLb > 0 ? '#4dff91' : '#ff8080' }}>
+                        <span className="text-[11px] font-semibold" style={{ color: ex.trendLb > 0 ? TONE.good : TONE.bad }}>
                           {ex.trendLb > 0 ? '▲' : '▼'} {Math.abs(ex.trendLb)} lb vs last
                         </span>
                       )}
@@ -1045,16 +1027,18 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
                   return (
                     <div className="px-4 pb-3 -mt-1 space-y-3">
                       {chart.length >= 2 && (
-                        <DotGridCard accent={accent} className="!p-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] mb-1" style={{ color: accent }}>{weighted ? 'Top weight' : 'Top reps'} over time</p>
-                          <GlowSparkline
-                            points={chart.map((c) => ({ label: c.date, value: c.value }))}
-                            color={accent}
-                            unit={weighted ? ' lb' : ' reps'}
-                            height={100}
-                            flagPlateaus
-                          />
-                        </DotGridCard>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.12em] mb-1.5 text-[var(--text-secondary)]">{weighted ? 'Top weight' : 'Top reps'} over time</p>
+                          <PlotGrid accent={accent}>
+                            <GlowSparkline
+                              points={chart.map((c) => ({ label: c.date, value: c.value }))}
+                              color={accent}
+                              unit={weighted ? ' lb' : ' reps'}
+                              height={100}
+                              flagPlateaus
+                            />
+                          </PlotGrid>
+                        </div>
                       )}
                       {ex.byDate.slice(0, 12).map((h) => (
                         <div key={h.date}>
@@ -1074,42 +1058,29 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
   );
 };
 
-/* ── Weekly headline stats ───────────────────────────────── */
-// "At a glance" — the three things a coach checks first: is this person still
-// active (last trained), training consistently (sessions this week), and how
-// much (sets). Shows even with zero workouts so a quiet trainee is obvious.
-const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ workouts }) => {
+/* ── This week at a glance ───────────────────────────────── */
+// One card, three numbers. "Last trained" lives in the header status line now.
+const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => {
   const stat = useMemo(() => {
-    if (!workouts) return null;
     const now = Date.now();
     const wk = workouts.filter((w) => now - parseDay(w.date) <= 7 * DAY);
-    const sessions = new Set(wk.map((w) => w.date)).size;
-    const sets = wk.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0), 0), 0);
-    const last = workouts.reduce((m, w) => Math.max(m, parseDay(w.date)), 0);
-    const daysAgo = last ? Math.floor((now - last) / DAY) : null;
-    return { sessions, sets, daysAgo };
+    return {
+      sessions: new Set(wk.map((w) => w.date)).size,
+      sets: wk.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0), 0), 0),
+      exercises: new Set(wk.flatMap((w) => (w.exercises || []).map((e) => e.name.toLowerCase()))).size,
+    };
   }, [workouts]);
-  if (!stat) return null;
-
-  const lastLabel = stat.daysAgo == null ? '—' : stat.daysAgo === 0 ? 'Today' : stat.daysAgo === 1 ? '1d' : `${stat.daysAgo}d`;
-  // Flag a trainee who's gone quiet (no session in a week).
-  const stale = stat.daysAgo != null && stat.daysAgo >= 7;
-
   return (
-    <div className="grid grid-cols-3 gap-3">
-      <Card className="text-center py-4">
-        <p className="text-[30px] font-bold leading-none" style={{ color: stale ? '#ff8080' : 'var(--text-primary)' }}>{lastLabel}</p>
-        <p className="text-[12px] text-[var(--text-muted)] mt-1.5">last trained</p>
-      </Card>
-      <Card className="text-center py-4">
-        <p className="text-[30px] font-bold leading-none text-[var(--text-primary)]">{stat.sessions}</p>
-        <p className="text-[12px] text-[var(--text-muted)] mt-1.5">this week</p>
-      </Card>
-      <Card className="text-center py-4">
-        <p className="text-[30px] font-bold leading-none text-[var(--text-primary)]">{stat.sets}</p>
-        <p className="text-[12px] text-[var(--text-muted)] mt-1.5">sets</p>
-      </Card>
-    </div>
+    <WidgetCard title="This week" meta="last 7 days">
+      <div className="grid grid-cols-3 gap-2">
+        {([['Sessions', stat.sessions], ['Sets', stat.sets], ['Exercises', stat.exercises]] as const).map(([label, v]) => (
+          <div key={label} className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
+            <BigNumber value={v} size="md" />
+            <StatLabel>{label}</StatLabel>
+          </div>
+        ))}
+      </div>
+    </WidgetCard>
   );
 };
 
@@ -1128,8 +1099,9 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
     return w8.map((v, idx) => ({ label: idx === 7 ? 'Now' : `${7 - idx}w`, value: Math.round(v) }));
   }, [workouts]);
   const weeks = points.map((p) => p.value);
-  const empty = weeks.every((v) => v === 0);
-  if (empty) return <Card><Empty text="No workouts logged yet." /></Card>;
+  if (weeks.every((v) => v === 0)) {
+    return <WidgetCard title="Training volume"><EmptyState icon="Trending" text="No workouts logged yet." /></WidgetCard>;
+  }
 
   const thisWk = weeks[weeks.length - 1];
   const lastWk = weeks[weeks.length - 2] || 0;
@@ -1138,91 +1110,86 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
   const avg = Math.round(weeks.reduce((a, b) => a + b, 0) / weeks.length);
 
   return (
-    <DotGridCard accent={ACCENT}>
-      <span className="text-[10px] font-black uppercase tracking-[0.24em]" style={{ color: ACCENT }}>Training volume</span>
-      <div className="flex items-baseline gap-2 mt-2 mb-1.5">
-        <span className="font-victory text-[40px] font-black leading-none text-white tabular-nums">{thisWk.toLocaleString()}</span>
-        <span className="font-victory text-[15px] font-black" style={{ color: ACCENT }}>this wk</span>
+    <WidgetCard title="Training volume" meta="8 weeks">
+      <div className="flex items-end justify-between gap-3 mb-3">
+        <div>
+          <BigNumber value={thisWk.toLocaleString()} unit="lb" />
+          <StatLabel>This week</StatLabel>
+        </div>
+        <Delta pct={deltaPct} suffix="vs last week" />
       </div>
-      {deltaPct != null && (
-        <div className="text-[12px] font-semibold mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          <span style={{ color: deltaPct >= 0 ? ACCENT : 'rgba(255,100,100,0.9)' }}>{deltaPct >= 0 ? '+' : ''}{deltaPct}%</span> vs last week
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--bg-elevated)' }}>
+          <BigNumber value={avg.toLocaleString()} unit="lb" size="sm" /><StatLabel>8-week average</StatLabel>
         </div>
-      )}
-      <div className="flex gap-6 mb-4">
-        <div>
-          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">8wk avg</span>
-          <p className="font-victory text-[16px] font-black text-white mt-1">{avg.toLocaleString()}</p>
-        </div>
-        <div>
-          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">Peak wk</span>
-          <p className="font-victory text-[16px] font-black text-white mt-1">{peak.toLocaleString()}</p>
+        <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--bg-elevated)' }}>
+          <BigNumber value={peak.toLocaleString()} unit="lb" size="sm" /><StatLabel>Peak week</StatLabel>
         </div>
       </div>
-      <GlowSparkline points={points} color={ACCENT} flagPlateaus />
-    </DotGridCard>
+      <PlotGrid accent={palette.accent}>
+        <GlowSparkline points={points} color={palette.accent} unit=" lb" flagPlateaus />
+      </PlotGrid>
+    </WidgetCard>
   );
 };
 
 /* ── PRs ─────────────────────────────────────────────────── */
-const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best_reps: number; unit: string }[] }> = ({ prs }) => {
-  return (
-    <Card className="!p-0 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 pt-3.5 pb-1">
-        <AppIcon name="Trophy" size="sm" />
-        <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">Personal records</p>
-      </div>
-      {!prs.length ? (
-        <Empty text="No personal records yet." />
-      ) : (
-        <div className="p-3 space-y-3 max-h-[320px] overflow-y-auto">
-          {prs.map((p, i) => (
-            <ExerciseAccent key={i} name={p.exercise_name} muscleGroup={resolveMuscleGroup(p.exercise_name)}>
-              <div className="grid overflow-hidden rounded-[10px] mt-2"
-                style={{ gridTemplateColumns: p.best_weight ? '1fr 1fr' : '1fr', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.012)' }}>
-                {p.best_weight ? (
-                  <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2" style={{ borderRight: '1px solid var(--border)' }}>
-                    <span className="font-victory text-[26px] leading-none text-white tabular-nums">{p.best_weight.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
-                    <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>{p.unit || 'lb'}</span>
-                  </div>
-                ) : null}
-                <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-2">
-                  <span className="font-victory text-[26px] leading-none text-white tabular-nums">{p.best_reps}</span>
-                  <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--text-secondary)' }}>reps</span>
-                </div>
+// One compact row per lift — name + muscle on the left, best set on the right.
+const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best_reps: number; unit: string }[] }> = ({ prs }) => (
+  <WidgetCard title="Personal records" icon="Trophy" meta={prs.length ? String(prs.length) : undefined} flush>
+    {!prs.length ? (
+      <div className="px-4 pb-4"><EmptyState icon="Trophy" text="No personal records yet." /></div>
+    ) : (
+      <div className="max-h-[360px] overflow-y-auto px-3 pb-3 space-y-1.5">
+        {prs.map((p, i) => {
+          const group = resolveMuscleGroup(p.exercise_name);
+          const color = muscleColor(group);
+          return (
+            <div key={i} className="relative flex items-center justify-between gap-3 rounded-xl pl-4 pr-3 py-2.5 overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
+              <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: color }} />
+              <div className="min-w-0">
+                <p className="text-[14px] font-bold text-[var(--text-primary)] truncate">{p.exercise_name}</p>
+                <p className="text-[11px] font-semibold mt-0.5" style={{ color }}>{group}</p>
               </div>
-            </ExerciseAccent>
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-};
+              <div className="shrink-0 text-right">
+                {p.best_weight ? <BigNumber value={p.best_weight.toLocaleString(undefined, { maximumFractionDigits: 1 })} unit="lb" size="sm" /> : null}
+                <p className="text-[11px] font-semibold text-[var(--text-secondary)] mt-0.5">{p.best_reps} reps</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </WidgetCard>
+);
 
 /* ── Body weight ─────────────────────────────────────────── */
-const WEIGHT_BLUE = '#4FC3F7';
 const fmtShort = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: string }[] }> = ({ weights }) => {
-  if (weights.length < 2) return <Card><Empty text="Not enough body-weight logs." /></Card>;
-  const unit = weights[weights.length - 1].unit;
+  if (weights.length < 2) {
+    return <WidgetCard title="Body weight"><EmptyState icon="Trending" text="Not enough body-weight logs yet." /></WidgetCard>;
+  }
   const latest = weights[weights.length - 1].weight;
   const first = weights[0].weight;
   const delta = Math.round((latest - first) * 10) / 10;
 
   return (
-    <DotGridCard accent={WEIGHT_BLUE}>
-      <span className="text-[10px] font-black uppercase tracking-[0.24em]" style={{ color: WEIGHT_BLUE }}>Body weight</span>
-      <div className="flex items-baseline gap-2 mt-2 mb-1.5">
-        <span className="font-victory text-[40px] font-black leading-none text-white tabular-nums">{latest.toFixed(1)}</span>
-        <span className="font-victory text-[15px] font-black" style={{ color: WEIGHT_BLUE }}>{unit}</span>
-      </div>
-      {delta !== 0 && (
-        <div className="text-[12px] font-semibold mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          <span style={{ color: 'rgba(255,255,255,0.85)' }}>{delta > 0 ? '+' : ''}{delta} {unit}</span> since {fmtShort(weights[0].date)}
+    <WidgetCard title="Body weight" meta={`since ${fmtShort(weights[0].date)}`}>
+      <div className="flex items-end justify-between gap-3 mb-3">
+        <div>
+          <BigNumber value={latest.toFixed(1)} unit="lb" />
+          <StatLabel>Latest</StatLabel>
         </div>
-      )}
-      <GlowSparkline points={weights.map((w) => ({ label: fmtShort(w.date), value: w.weight }))} color={WEIGHT_BLUE} unit={` ${unit}`} />
-    </DotGridCard>
+        {delta !== 0 && (
+          <span className="text-[12px] font-semibold text-[var(--text-primary)]">
+            {delta > 0 ? '+' : ''}{delta} lb <span className="text-[var(--text-secondary)] font-medium">overall</span>
+          </span>
+        )}
+      </div>
+      <PlotGrid accent={palette.ringVolume}>
+        <GlowSparkline points={weights.map((w) => ({ label: fmtShort(w.date), value: w.weight }))} color={palette.ringVolume} unit=" lb" />
+      </PlotGrid>
+    </WidgetCard>
   );
 };
 
@@ -1254,7 +1221,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
   const donePct = latest && scored.length ? doneCount / scored.length : 0;
 
   return (
-    <Card className="!p-0 overflow-hidden">
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-3.5 text-left">
         <div className="min-w-0">
           <p className="text-[17px] font-semibold text-[var(--text-primary)] truncate">{plan.title}</p>
@@ -1286,7 +1253,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
                 onClick={onRemove}
                 aria-label="Delete plan"
                 className="flex items-center gap-1 h-7 px-2 rounded-lg text-[12px] font-semibold transition-colors"
-                style={{ color: '#ff8080', background: 'rgba(255,128,128,0.08)' }}
+                style={{ color: TONE.bad, background: 'color-mix(in srgb, var(--red) 8%, transparent)' }}
               >
                 <AppIcon name="Trash" size="sm" /> Delete
               </button>
@@ -1300,12 +1267,12 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
                 <p className="text-[13px] font-semibold text-[var(--text-primary)]">
                   {doneCount}/{scored.length} exercises done{dayGroups.length > 1 && sessionDay ? ` · ${sessionDay}` : ''}
                 </p>
-                <p className="text-[12px] font-bold" style={{ color: donePct === 1 ? '#4dff91' : donePct > 0 ? ACCENT : '#ff8080' }}>
+                <p className="text-[12px] font-bold" style={{ color: donePct === 1 ? TONE.good : donePct > 0 ? ACCENT : TONE.bad }}>
                   {Math.round(donePct * 100)}%
                 </p>
               </div>
               <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
-                <div className="h-full rounded-full" style={{ width: `${donePct * 100}%`, background: donePct === 1 ? '#4dff91' : ACCENT }} />
+                <div className="h-full rounded-full" style={{ width: `${donePct * 100}%`, background: donePct === 1 ? TONE.good : ACCENT }} />
               </div>
             </div>
           )}
@@ -1327,8 +1294,8 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
                       muscleGroup={group}
                       right={latest && dayLabel === sessionDay ? (
                         act
-                          ? <span className="text-[11px] font-bold" style={{ color: '#4dff91' }}>✓ Done</span>
-                          : <span className="text-[11px] font-bold" style={{ color: '#ff8080' }}>Missed</span>
+                          ? <span className="text-[11px] font-bold" style={{ color: TONE.good }}>✓ Done</span>
+                          : <span className="text-[11px] font-bold" style={{ color: TONE.bad }}>Missed</span>
                       ) : undefined}
                     >
                       <p className="text-[12px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>{rx}</p>
@@ -1341,10 +1308,6 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
 };
-
-const Empty: React.FC<{ text: string }> = ({ text }) => (
-  <p className="text-[14px] text-[var(--text-muted)] text-center py-6">{text}</p>
-);

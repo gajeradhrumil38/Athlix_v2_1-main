@@ -19,6 +19,9 @@ interface MuscleMapProps {
   headerInsetRight?: number
   // Corner radius when the map is a card on its own rather than nested.
   radius?: number | string
+  // Inside a card shell: no panel of its own (background, border, glow, title)
+  // — the controls take the title's place in the header row.
+  bare?: boolean
 }
 
 const VALID_SLUGS = new Set<Slug>(Object.keys(MUSCLE_SLUG_LABELS) as MuscleSlug[])
@@ -73,7 +76,7 @@ const loadToIntensity = (load: number, maxLoad: number): number => {
 const getMetric = (entry: MuscleEntry) => entry.relativeLoad || entry.load || entry.sets || 0
 
 export const MuscleMap: React.FC<MuscleMapProps> = ({
-  muscleData, view, onViewChange, title, unit = 'lbs', gender = 'male', controls, headerInsetRight = 0, radius = 14
+  muscleData, view, onViewChange, title, unit = 'lbs', gender = 'male', controls, headerInsetRight = 0, radius = 14, bare = false
 }) => {
   const [tooltip, setTooltip] = useState<{ slug: string; x: number; y: number } | null>(null)
 
@@ -123,9 +126,9 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
 
   return (
     <div style={{
-      background: 'linear-gradient(160deg, rgba(14,24,36,0.95) 0%, rgba(10,18,28,0.98) 65%, rgba(8,12,18,1) 100%)',
-      borderRadius: radius,
-      border: '0.5px solid var(--border)',
+      background: bare ? 'transparent' : 'linear-gradient(160deg, rgba(14,24,36,0.95) 0%, rgba(10,18,28,0.98) 65%, rgba(8,12,18,1) 100%)',
+      borderRadius: bare ? 0 : radius,
+      border: bare ? 'none' : '0.5px solid var(--border)',
       width: '100%',
       height: '100%',
       display: 'flex',
@@ -133,13 +136,15 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
       position: 'relative',
       overflow: 'hidden',
     }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 0%, rgba(200,255,0,0.12), transparent 55%)', pointerEvents: 'none' }} />
+      {!bare && <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 0%, rgba(200,255,0,0.12), transparent 55%)', pointerEvents: 'none' }} />}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `10px ${10 + headerInsetRight}px 6px 10px`, position: 'relative', zIndex: 2, flexShrink: 0 }}>
-        <span style={{ fontSize: 9, letterSpacing: '1.2px', color: 'rgba(255,255,255,0.8)', fontWeight: 700, textTransform: 'uppercase' }}>
-          {title || 'Muscle Map'}
-        </span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: bare ? '0 0 8px' : `10px ${10 + headerInsetRight}px 6px 10px`, position: 'relative', zIndex: 2, flexShrink: 0 }}>
+        {bare ? (controls ?? <span />) : (
+          <span style={{ fontSize: 9, letterSpacing: '1.2px', color: 'rgba(255,255,255,0.8)', fontWeight: 700, textTransform: 'uppercase' }}>
+            {title || 'Muscle Map'}
+          </span>
+        )}
         <div style={{ display: 'flex', gap: 4, background: 'rgba(12,20,30,0.7)', padding: 3, borderRadius: 999, border: '0.5px solid var(--border)' }}>
           {(['front', 'back'] as const).map(v => (
             <button key={v} onClick={() => onViewChange(v)}
@@ -157,7 +162,7 @@ export const MuscleMap: React.FC<MuscleMapProps> = ({
         </div>
       </div>
 
-      {controls && <div style={{ padding: '0 10px 8px', position: 'relative', zIndex: 2 }}>{controls}</div>}
+      {controls && !bare && <div style={{ padding: '0 10px 8px', position: 'relative', zIndex: 2 }}>{controls}</div>}
 
       {/* Body: split row */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 4, padding: '0 6px 8px', position: 'relative', zIndex: 1 }}>

@@ -123,7 +123,7 @@ const StartCard: React.FC<{
     </button>
     {onDismiss && (
       <button type="button" onClick={onDismiss} aria-label="Discard draft"
-        className="absolute top-1/2 -translate-y-1/2 right-3 h-8 w-8 rounded-lg flex items-center justify-center" style={{ color: '#ff8080' }}>
+        className="absolute top-1/2 -translate-y-1/2 right-3 h-8 w-8 rounded-lg flex items-center justify-center" style={{ color: 'var(--red)' }}>
         <AppIcon name="Trash" size="sm" />
       </button>
     )}

@@ -1,19 +1,11 @@
 import React, { useId, useMemo, useRef, useState } from 'react';
 
 /**
- * Frosted, dot-grid-textured card shell — the "Weekly Summary" card language
- * from the Run History page (dot grid tinted to the card's accent, soft
- * border, inset highlight). Drop any content inside; the grid sits behind it.
+ * Grid texture for a chart's plot area only — the card around it stays the
+ * plain shared card. Tinted to the chart's accent.
  */
-export const DotGridCard: React.FC<{ accent?: string; children: React.ReactNode; className?: string }> = ({ accent = '#c8ff00', children, className = '' }) => (
-  <div
-    className={`relative overflow-hidden rounded-2xl p-4 ${className}`}
-    style={{
-      background: 'linear-gradient(160deg,#111821 0%,#090d13 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      boxShadow: '0 1px 0 rgba(255,255,255,0.04) inset',
-    }}
-  >
+export const PlotGrid: React.FC<{ accent?: string; children: React.ReactNode; className?: string }> = ({ accent = 'var(--accent)', children, className = '' }) => (
+  <div className={`relative overflow-hidden rounded-xl ${className}`} style={{ background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)', border: '1px solid var(--border-subtle)' }}>
     <div
       aria-hidden
       className="absolute inset-0 pointer-events-none"
@@ -23,7 +15,7 @@ export const DotGridCard: React.FC<{ accent?: string; children: React.ReactNode;
         backgroundSize: '26px 26px',
       }}
     />
-    <div className="relative z-10">{children}</div>
+    <div className="relative px-1 pt-2">{children}</div>
   </div>
 );
 

@@ -14,6 +14,8 @@ interface MuscleRadarProps {
   // Sets scale with the window: a month holds ~4 weeks of sets, a single day
   // a fraction of one. Keeps the spokes and goal ring meaningful per period.
   scale?: number;
+  // Hide the built-in "MUSCLE LOAD" title when a card shell already shows it.
+  showTitle?: boolean;
 }
 
 const SPOKES = [
@@ -30,7 +32,7 @@ const SPOKES = [
 const MAX_SETS = 15;
 const TARGET_SETS = 10;
 
-export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabel = 'this week', scale = 1 }) => {
+export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabel = 'this week', scale = 1, showTitle = true }) => {
   const maxSets = MAX_SETS * scale;
   const targetSets = Math.max(1, Math.round(TARGET_SETS * scale));
   const normalize = (sets: number) => Math.min(sets / maxSets, 1);
@@ -97,12 +99,14 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
     <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <h3 className="text-[10px] uppercase tracking-[0.8px] text-[var(--text-secondary)] font-semibold">
-            MUSCLE LOAD
-          </h3>
-          <span className="text-[10px] text-[var(--text-secondary)]">· {periodLabel}</span>
-        </div>
+        {showTitle ? (
+          <div className="flex items-center gap-2">
+            <h3 className="text-[10px] uppercase tracking-[0.8px] text-[var(--text-secondary)] font-semibold">
+              MUSCLE LOAD
+            </h3>
+            <span className="text-[10px] text-[var(--text-secondary)]">· {periodLabel}</span>
+          </div>
+        ) : <span />}
         {dominant && (
           <span
             className="text-[9px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
@@ -272,7 +276,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
             <svg width="14" height="5">
               <line x1="0" y1="2.5" x2="14" y2="2.5" stroke="rgba(255,255,255,0.4)" strokeWidth="0.8" strokeDasharray="2,2.5" />
             </svg>
-            <span className="text-[7px] text-[var(--text-muted)]">Goal ({targetSets} sets)</span>
+            <span className="text-[10px] text-[var(--text-secondary)]">Goal ({targetSets} sets)</span>
           </div>
         )}
       </div>
