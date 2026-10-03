@@ -7,7 +7,7 @@ import {
 import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import { getSentLinks, type CoachLink } from '../../lib/coachLinks';
-import { createAppointment, updateAppointment, type TrainerAppointment } from '../../lib/appointments';
+import { createAppointment, updateAppointment, getMyCreatedAppointments, type TrainerAppointment } from '../../lib/appointments';
 import { getAssignedPlansFor, type AssignedPlan } from '../../lib/assignedPlans';
 import { DialPicker } from '../log/DialPicker';
 
@@ -64,13 +64,15 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointme
       setNotes(editingAppointment.notes ?? '');
       setPlanId(editingAppointment.assigned_plan_id);
     } else {
-      // Default to today, next half-hour — a reasonable starting point the
-      // coach can adjust rather than a blank/invalid date.
-      const now = new Date();
-      setDate(now.toISOString().slice(0, 10));
-      const mins = now.getMinutes() < 30 ? 30 : 0;
-      const hour = now.getMinutes() < 30 ? now.getHours() : now.getHours() + 1;
-      setTime(`${String(hour % 24).padStart(2, '0')}:${String(mins).padStart(2, '0')}`);
+      // Default to the next half-hour, in LOCAL time. Rounding a real Date
+      // (instead of patching hour/minute strings) rolls 11:40pm over to
+      // tomorrow 12:00am rather than today 12:00am; toISOString() was UTC and
+      // put the evening default on the wrong day.
+      const next = new Date();
+      next.setSeconds(0, 0);
+      next.setMinutes(next.getMinutes() < 30 ? 30 : 60);
+      setDate(format(next, 'yyyy-MM-dd'));
+      setTime(format(next, 'HH:mm'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingAppointment?.id]);
@@ -98,21 +100,46 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointme
     if (!traineeId) { setError('Pick a trainee.'); return; }
     if (!title.trim()) { setError('Give the appointment a title.'); return; }
     if (!date || !time) { setError('Pick a date and time.'); return; }
-    const scheduledAt = new Date(`${date}T${time}`).toISOString();
+    const start = new Date(`${date}T${time}`);
+    if (Number.isNaN(start.getTime())) { setError('Pick a valid date and time.'); return; }
+    const timeChanged = !editingAppointment || start.getTime() !== new Date(editingAppointment.scheduled_at).getTime();
+    if (timeChanged && start.getTime() < Date.now()) { setError('That time has already passed.'); return; }
+    const scheduledAt = start.toISOString();
     setBusy(true);
+
+    // Soft double-booking guard across ALL of this coach's trainees.
+    const durMs = (Number(durationMinutes) || 60) * 60_000;
+    const dayStart = new Date(start); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(start); dayEnd.setHours(23, 59, 59, 999);
+    const sameDay = await getMyCreatedAppointments({ startDate: dayStart.toISOString(), endDate: dayEnd.toISOString() });
+    const clash = sameDay.find((a) => {
+      if (a.status !== 'scheduled' || a.id === editingAppointment?.id) return false;
+      const aStart = new Date(a.scheduled_at).getTime();
+      const aEnd = aStart + (a.duration_minutes || 60) * 60_000;
+      return start.getTime() < aEnd && aStart < start.getTime() + durMs;
+    });
+    if (clash && !window.confirm(`This overlaps "${clash.title}" with ${clash.trainee_name || 'another trainee'} at ${format(new Date(clash.scheduled_at), 'h:mm a')}. Schedule anyway?`)) {
+      setBusy(false);
+      return;
+    }
+
     const selectedPlan = plans.find((p) => p.id === planId);
+    // An attached plan that's since been archived isn't in the active list —
+    // keep its existing title instead of blanking it.
+    const planTitle = selectedPlan?.title
+      ?? (editingAppointment && planId === editingAppointment.assigned_plan_id ? editingAppointment.assigned_plan_title : null);
     const res = editingAppointment
       ? await updateAppointment(editingAppointment.id, {
           title, notes: notes.trim() || null, scheduledAt,
           durationMinutes: durationMinutes ? Number(durationMinutes) : null,
           assignedPlanId: planId,
-          assignedPlanTitle: selectedPlan?.title ?? null,
+          assignedPlanTitle: planTitle,
         })
       : await createAppointment(traineeId, selectedTrainee?.trainee_name ?? null, {
           title, notes: notes.trim() || undefined, scheduledAt,
           durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
           assignedPlanId: planId,
-          assignedPlanTitle: selectedPlan?.title ?? null,
+          assignedPlanTitle: planTitle,
         });
     setBusy(false);
     if (!res.ok) { setError(res.error || `Could not ${editingAppointment ? 'save' : 'create'} appointment.`); return; }

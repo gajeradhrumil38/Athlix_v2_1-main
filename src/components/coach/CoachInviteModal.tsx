@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import { getIncomingInvites, respondToInvite, type CoachLink, type ScopeKey } from '../../lib/coachLinks';
 import { ShareScopeSheet } from './ShareScopeSheet';
@@ -44,16 +45,19 @@ export const CoachInviteModal: React.FC = () => {
 
   const decline = async () => {
     setBusy(true);
-    await respondToInvite(current.id, false);
+    const res = await respondToInvite(current.id, false);
     setBusy(false);
+    if (!res.ok) { toast.error(res.error || 'Could not decline.'); load(); return; }
     setInvites((p) => p.slice(1));
   };
 
   const accept = async (scopes: Partial<Record<ScopeKey, boolean>>) => {
     setBusy(true);
-    await respondToInvite(current.id, true, scopes);
+    const res = await respondToInvite(current.id, true, scopes);
     setBusy(false);
     setScopeSheet(false);
+    if (!res.ok) { toast.error(res.error || 'Could not accept.'); load(); return; }
+    toast.success(`Connected with ${current.trainer_name || 'your coach'}`);
     setInvites((p) => p.slice(1));
     window.dispatchEvent(new CustomEvent('athlix:coaches-changed'));
   };

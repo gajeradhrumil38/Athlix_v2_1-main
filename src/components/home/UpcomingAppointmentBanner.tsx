@@ -40,7 +40,8 @@ export const UpcomingAppointmentBanner: React.FC = () => {
   const [, forceTick] = useState(0);
 
   const load = useCallback(async () => {
-    const all = await getMyAppointments();
+    // Only what could still be upcoming — not the trainee's whole history every 20s.
+    const all = await getMyAppointments({ startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), endDate: '9999-12-31T00:00:00Z' });
     setAppts(all.filter((a) => a.status === 'scheduled'));
   }, []);
 

@@ -108,6 +108,7 @@ export const TraineeDetail: React.FC = () => {
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
+  const savedNotesRef = React.useRef('');
   // Responsive column count for the masonry distribution (1 / 2 / 3).
   const [cols, setCols] = useState(3);
   useEffect(() => {
@@ -230,7 +231,7 @@ export const TraineeDetail: React.FC = () => {
   const loadDash = React.useCallback(async () => {
     if (!id) return;
     const d = await getTraineeDashboard(id);
-    if (!d) setMissing(true); else { setDash(d); setNotes(d.link.coach_notes ?? ''); }
+    if (!d) setMissing(true); else { setDash(d); setNotes(d.coachNotes); savedNotesRef.current = d.coachNotes; }
   }, [id]);
 
   useEffect(() => {
@@ -281,8 +282,13 @@ export const TraineeDetail: React.FC = () => {
     return out;
   })();
 
+  // Fires on blur — skip the write when nothing changed, and never flash
+  // "Saved" for a write that actually failed.
   const saveNotes = async () => {
-    await updateCoachNotes(dash.link.id, notes);
+    if (notes === savedNotesRef.current) return;
+    const res = await updateCoachNotes(dash.link.id, notes);
+    if (!res.ok) { toast.error(res.error || 'Could not save notes.'); return; }
+    savedNotesRef.current = notes;
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 1500);
   };
@@ -1122,8 +1128,23 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
     return rows.map((e) => ({ reps: e.reps, weight: e.weight }));
   };
 
-  const doneCount = latest ? plan.exercises.filter((ex) => actualFor(ex.name) != null).length : 0;
-  const donePct = latest && plan.exercises.length ? doneCount / plan.exercises.length : 0;
+  // A multi-day plan is performed one day per session, so the latest session
+  // is scored against the day it best matches — not the whole program (which
+  // marked every other day's exercises "Missed" and capped adherence at ~1/N).
+  const dayGroups = groupByDay(plan.exercises);
+  const sessionDay = (() => {
+    if (!latest || dayGroups.length <= 1) return dayGroups[0]?.[0] ?? '';
+    let best = dayGroups[0][0];
+    let bestHits = -1;
+    for (const [label, exs] of dayGroups) {
+      const hits = exs.filter((ex) => actualFor(ex.name) != null).length;
+      if (hits > bestHits) { best = label; bestHits = hits; }
+    }
+    return best;
+  })();
+  const scored = dayGroups.find(([label]) => label === sessionDay)?.[1] ?? plan.exercises;
+  const doneCount = latest ? scored.filter((ex) => actualFor(ex.name) != null).length : 0;
+  const donePct = latest && scored.length ? doneCount / scored.length : 0;
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -1169,7 +1190,9 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
           {latest && (
             <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[13px] font-semibold text-[var(--text-primary)]">{doneCount}/{plan.exercises.length} exercises done</p>
+                <p className="text-[13px] font-semibold text-[var(--text-primary)]">
+                  {doneCount}/{scored.length} exercises done{dayGroups.length > 1 && sessionDay ? ` · ${sessionDay}` : ''}
+                </p>
                 <p className="text-[12px] font-bold" style={{ color: donePct === 1 ? '#4dff91' : donePct > 0 ? ACCENT : '#ff8080' }}>
                   {Math.round(donePct * 100)}%
                 </p>
@@ -1180,7 +1203,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
             </div>
           )}
 
-          {groupByDay(plan.exercises).map(([dayLabel, exs], gi) => (
+          {dayGroups.map(([dayLabel, exs], gi) => (
             <div key={gi} className={gi > 0 ? 'mt-5' : ''}>
               {dayLabel && (
                 <p className="text-[13px] font-bold mb-2.5" style={{ color: ACCENT }}>{dayLabel}</p>
@@ -1195,7 +1218,7 @@ const PlanCard: React.FC<{ plan: AssignedPlan; workouts: TraineeWorkout[]; onEdi
                       key={i}
                       name={ex.name}
                       muscleGroup={group}
-                      right={latest ? (
+                      right={latest && dayLabel === sessionDay ? (
                         act
                           ? <span className="text-[11px] font-bold" style={{ color: '#4dff91' }}>✓ Done</span>
                           : <span className="text-[11px] font-bold" style={{ color: '#ff8080' }}>Missed</span>

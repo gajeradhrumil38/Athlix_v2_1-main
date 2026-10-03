@@ -38,6 +38,7 @@ export const PlanPreviewModal: React.FC<Props> = ({ open, plan, loading, role, o
       sets: e.default_sets,
       reps: String(e.default_reps),
       rest: e.rest_seconds ?? null,
+      weight: e.default_weight || null,
     }));
     navigate('/log', { state: { recommendedExercises, suggestedTitle: plan.title, sourcePlanId: plan.id } });
   };

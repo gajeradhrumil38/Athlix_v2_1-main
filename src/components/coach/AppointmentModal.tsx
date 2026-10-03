@@ -7,29 +7,61 @@ import { getMyAppointments, formatApptTimeRange, type TrainerAppointment } from 
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
-// App-wide popup: when a trainer schedules an appointment, this surfaces it
-// live (Realtime push, same as AssignedPlanModal for a new plan) so the
-// trainee doesn't have to go looking for it. Shows once per appointment
-// (persisted), then it lives on in the trainee's own calendar.
+// App-wide popup: when a trainer schedules, reschedules or cancels an
+// appointment, this surfaces it live (Realtime push, same as
+// AssignedPlanModal for a new plan) so the trainee doesn't have to go looking
+// for it. "Seen" is tracked per VERSION of the appointment (id|time|status),
+// so a reschedule or cancellation pops again even though the id was seen.
 const SEEN_KEY = 'athlix:seen_appointments';
 const readSeen = (): string[] => {
   try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '[]'); } catch { return []; }
 };
-const markSeen = (id: string) => {
-  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...new Set([...readSeen(), id])])); } catch { /* ignore */ }
+const markSeen = (key: string) => {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...new Set([...readSeen(), key])])); } catch { /* ignore */ }
 };
+const versionKey = (a: TrainerAppointment) => `${a.id}|${a.scheduled_at}|${a.status}`;
+
+type Kind = 'new' | 'rescheduled' | 'cancelled';
+type Pending = { appt: TrainerAppointment; kind: Kind };
+
+// Only recent/upcoming rows matter for a popup — don't pull full history.
+const lookbackRange = () => ({
+  startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  endDate: '9999-12-31T00:00:00Z',
+});
 
 const POLL_MS = 30_000;
+
+function pendingAppointmentPopups(all: TrainerAppointment[], seen: string[]): Pending[] {
+  const now = Date.now();
+  const out: Pending[] = [];
+  for (const a of all) {
+    const key = versionKey(a);
+    if (seen.includes(key)) continue;
+    // Legacy entries were the bare id — treat that as "seen this version".
+    const legacySeen = seen.includes(a.id) && !seen.some((k) => k.startsWith(`${a.id}|`));
+    if (legacySeen) continue;
+    const knew = seen.includes(a.id) || seen.some((k) => k.startsWith(`${a.id}|`));
+    const start = new Date(a.scheduled_at).getTime();
+    if (a.status === 'scheduled') {
+      // Already over — a "new appointment" popup for the past is noise.
+      if (start < now - 60_000) continue;
+      out.push({ appt: a, kind: knew ? 'rescheduled' : 'new' });
+    } else if (a.status === 'cancelled' && knew) {
+      out.push({ appt: a, kind: 'cancelled' });
+    }
+  }
+  return out;
+}
 
 export const AppointmentModal: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [appts, setAppts] = useState<TrainerAppointment[]>([]);
+  const [appts, setAppts] = useState<Pending[]>([]);
 
   const load = useCallback(async () => {
-    const all = await getMyAppointments();
-    const seen = readSeen();
-    setAppts(all.filter((a) => a.status === 'scheduled' && !seen.includes(a.id)));
+    const all = await getMyAppointments(lookbackRange());
+    setAppts(pendingAppointmentPopups(all, readSeen()));
   }, []);
 
   useEffect(() => {
@@ -40,7 +72,7 @@ export const AppointmentModal: React.FC = () => {
           .channel(`trainer-appointments-${user.id}`)
           .on(
             'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'trainer_appointments', filter: `trainee_id=eq.${user.id}` },
+            { event: '*', schema: 'public', table: 'trainer_appointments', filter: `trainee_id=eq.${user.id}` },
             () => load(),
           )
           .subscribe()
@@ -59,13 +91,19 @@ export const AppointmentModal: React.FC = () => {
     };
   }, [load, user]);
 
-  const current = appts[0];
-  if (!current) return null;
+  const pending = appts[0];
+  if (!pending) return null;
+  const current = pending.appt;
 
-  const dismiss = () => { markSeen(current.id); setAppts((p) => p.slice(1)); };
-  const viewInCalendar = () => { markSeen(current.id); setAppts((p) => p.slice(1)); navigate('/calendar'); };
+  const dismiss = () => { markSeen(versionKey(current)); setAppts((p) => p.slice(1)); };
+  const viewInCalendar = () => { dismiss(); navigate('/calendar'); };
 
   const when = new Date(current.scheduled_at);
+  const who = current.trainer_name || 'your trainer';
+  const heading = pending.kind === 'cancelled' ? `Cancelled by ${who}`
+    : pending.kind === 'rescheduled' ? `Updated by ${who}`
+    : `New appointment from ${who}`;
+  const tone = pending.kind === 'cancelled' ? '#ff8080' : '#4FC3F7';
 
   return (
     <AnimatePresence>
@@ -94,14 +132,15 @@ export const AppointmentModal: React.FC = () => {
             </button>
 
             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl mb-4"
-              style={{ background: '#4FC3F7', color: '#000' }}>
+              style={{ background: tone, color: '#000' }}>
               <AppIcon name="History" size="xl" />
             </span>
             <p className="text-[14px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-              New appointment from {current.trainer_name || 'your trainer'}
+              {heading}
             </p>
-            <h2 className="text-[23px] font-bold text-[var(--text-primary)] leading-tight mt-1.5">{current.title}</h2>
-            <p className="text-[15px] font-semibold mt-1.5" style={{ color: '#4FC3F7' }}>
+            <h2 className="text-[23px] font-bold text-[var(--text-primary)] leading-tight mt-1.5"
+              style={pending.kind === 'cancelled' ? { textDecoration: 'line-through' } : undefined}>{current.title}</h2>
+            <p className="text-[15px] font-semibold mt-1.5" style={{ color: tone }}>
               {format(when, 'EEEE, MMM d')} · {formatApptTimeRange(when, current.duration_minutes)}
             </p>
             {current.notes && <p className="text-[14px] text-[var(--text-secondary)] mt-1.5 leading-snug">{current.notes}</p>}

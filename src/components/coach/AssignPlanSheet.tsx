@@ -238,7 +238,15 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
   };
 
   const submit = async () => {
-    setBusy(true); setError('');
+    setError('');
+    // Days are stored as a plain day_label per exercise, so two days with the
+    // same (or blank) name would silently merge into one day for the trainee.
+    if (days.length > 1) {
+      const used = days.filter((d) => rows.some((r) => r.dayId === d.id)).map((d) => d.label.trim().toLowerCase());
+      if (used.some((l) => !l)) { setError('Give every day a name.'); return; }
+      if (new Set(used).size !== used.length) { setError('Two days have the same name — rename one.'); return; }
+    }
+    setBusy(true);
     // Flatten in day order (not raw insertion order) so order_index — and
     // therefore the prescribed order shown to the trainee — matches what's
     // actually rendered, grouped by day.

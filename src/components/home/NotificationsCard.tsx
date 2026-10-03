@@ -79,7 +79,8 @@ export const NotificationsCard: React.FC = () => {
       at: a.created_at,
       title: a.title,
       trainerName: a.trainer_name,
-      read: seenAppts.includes(a.id),
+      // AppointmentModal records per-version keys ("id|time|status").
+      read: seenAppts.some((k) => k === a.id || k.startsWith(`${a.id}|`)),
       onOpen: () => { markSeen(APPT_SEEN_KEY, a.id); navigate('/calendar'); },
     });
   }

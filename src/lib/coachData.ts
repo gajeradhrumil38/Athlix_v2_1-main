@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import { getSentLinks, SHARE_SCOPES, type CoachLink, type ScopeKey } from './coachLinks';
+import { getSentLinks, getCoachNotes, SHARE_SCOPES, type CoachLink, type ScopeKey } from './coachLinks';
+import { convertWeight, isWeightUnit } from './units';
 
 // Trainer-side reads of a trainee's data. Every query filters by the trainee's
 // user_id; the database (coach_can_see + per-table policies) is what actually
@@ -20,6 +21,7 @@ export interface TraineeWeight { date: string; weight: number; unit: string; }
 
 export interface TraineeDashboard {
   link: CoachLink;
+  coachNotes: string;
   name: string;
   sex: 'male' | 'female';
   workouts: Section<TraineeWorkout[]>;
@@ -30,6 +32,12 @@ export interface TraineeDashboard {
   sleep: Section<number | null>;      // latest sleep hours
   strain: Section<number | null>;     // latest day strain
 }
+
+// The coach dashboard renders every weight as lb, but a trainee may log in kg
+// (per set, or per body-weight entry). Normalize at the boundary so a 100 kg
+// squat never shows as "100 lb" and volumes never sum kg with lb.
+const toLbs = (weight: number, unit: string | null | undefined): number =>
+  isWeightUnit(unit) ? convertWeight(Number(weight) || 0, unit, 'lbs') : Number(weight) || 0;
 
 function on(link: CoachLink, scope: ScopeKey): boolean {
   return !!link.shared_scopes?.[scope];
@@ -63,8 +71,8 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
   const wantSleep = on(link, 'sleep');
   const wantStrain = on(link, 'strain');
 
-  const [profileRes, workoutRes, prRes, runRes, bwRes, recRes, sleepRes, strainRes] = await Promise.all([
-    supabase.from('profiles').select('full_name, trainer_display_name, sex').eq('id', traineeId).maybeSingle(),
+  const [profileRes, workoutRes, prRes, runRes, bwRes, recRes, sleepRes, strainRes, coachNotes] = await Promise.all([
+    supabase.rpc('coach_trainee_identity', { _trainee: traineeId }).maybeSingle(),
     wantWorkouts
       ? supabase.from('workouts')
           .select('id, date, title, duration_minutes, muscle_groups, source_plan_id, exercises(name, muscle_group, sets, reps, weight, unit)')
@@ -80,7 +88,7 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
       : Promise.resolve({ data: null }),
     wantBW
       ? supabase.from('body_weight_logs').select('date, weight, unit')
-          .eq('user_id', traineeId).order('date', { ascending: true }).limit(120)
+          .eq('user_id', traineeId).order('date', { ascending: false }).limit(120)
       : Promise.resolve({ data: null }),
     wantRec
       ? supabase.from('whoop_cache').select('cache_key, data').eq('user_id', traineeId).like('cache_key', 'recovery:%')
@@ -91,19 +99,33 @@ export async function getTraineeDashboard(traineeId: string): Promise<TraineeDas
     wantStrain
       ? supabase.from('whoop_cache').select('cache_key, data').eq('user_id', traineeId).like('cache_key', 'cycles:%')
       : Promise.resolve({ data: null }),
+    getCoachNotes(link.id),
   ]);
+
+  const workouts = (((workoutRes as any).data ?? []) as TraineeWorkout[]).map((w) => ({
+    ...w,
+    exercises: (w.exercises ?? []).map((e) =>
+      isWeightUnit(e.unit) ? { ...e, weight: toLbs(e.weight, e.unit), unit: 'lbs' } : e),
+  }));
+  const prs = (((prRes as any).data ?? []) as TraineePR[]).map((p) =>
+    isWeightUnit(p.unit) ? { ...p, best_weight: toLbs(p.best_weight, p.unit), unit: 'lbs' } : p);
+  // Fetched newest-first so the limit keeps the RECENT 120 (ascending + limit
+  // returned the oldest 120 and froze the trend); charts want oldest-first.
+  const bodyWeight = (((bwRes as any).data ?? []) as TraineeWeight[]).reverse().map((b) =>
+    ({ ...b, weight: toLbs(b.weight, b.unit), unit: 'lbs' }));
 
   const name = link.trainee_name || (profileRes as any)?.data?.full_name || link.invited_email;
   const sex: 'male' | 'female' = (profileRes as any)?.data?.sex === 'female' ? 'female' : 'male';
 
   return {
     link,
+    coachNotes,
     name,
     sex,
-    workouts: { shared: wantWorkouts, data: ((workoutRes as any).data ?? []) as TraineeWorkout[] },
-    prs: { shared: wantPRs, data: ((prRes as any).data ?? []) as TraineePR[] },
+    workouts: { shared: wantWorkouts, data: workouts },
+    prs: { shared: wantPRs, data: prs },
     runs: { shared: wantRuns, data: ((runRes as any).data ?? []) as TraineeRun[] },
-    bodyWeight: { shared: wantBW, data: ((bwRes as any).data ?? []) as TraineeWeight[] },
+    bodyWeight: { shared: wantBW, data: bodyWeight },
     recovery: { shared: wantRec, data: latestFromCache((recRes as any).data, (r) => r?.score?.recovery_score ?? r?.recovery_score ?? null) },
     sleep: { shared: wantSleep, data: latestFromCache((sleepRes as any).data, (r) => {
       const ms = r?.score?.stage_summary?.total_in_bed_time_milli ?? r?.total_in_bed_time_milli ?? null;

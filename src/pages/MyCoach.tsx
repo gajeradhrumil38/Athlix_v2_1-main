@@ -25,6 +25,7 @@ export const MyCoach: React.FC = () => {
       sets: e.default_sets,
       reps: String(e.default_reps),
       rest: e.rest_seconds ?? null,
+      weight: e.default_weight || null,
     }));
     const suggestedTitle = dayLabel ? `${plan.title} — ${dayLabel}` : plan.title;
     navigate('/log', { state: { recommendedExercises, suggestedTitle, sourcePlanId: plan.id } });
@@ -77,7 +78,7 @@ export const MyCoach: React.FC = () => {
                           <div className="flex items-center justify-between">
                             <p className="text-[16px] font-medium text-[var(--text-primary)] truncate pr-3">{e.name}</p>
                             <p className="text-[14px] text-[var(--text-muted)] shrink-0 tabular-nums">
-                              {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight}` : ''}{e.rest_seconds ? ` · ${formatRest(e.rest_seconds)} rest` : ''}
+                              {e.default_sets} × {e.default_reps}{e.default_weight ? ` @ ${e.default_weight} lb` : ''}{e.rest_seconds ? ` · ${formatRest(e.rest_seconds)} rest` : ''}
                             </p>
                           </div>
                           {e.note && <p className="text-[13px] mt-1 leading-snug" style={{ color: 'var(--accent)' }}>{e.note}</p>}

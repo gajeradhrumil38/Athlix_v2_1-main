@@ -86,7 +86,9 @@ export async function updatePlan(
 
   const { error: updateErr } = await supabase
     .from('assigned_plans')
-    .update({ title: plan.title.trim(), notes: plan.notes?.trim() || null })
+    // notes is only touched when the caller passes it — the edit sheet has no
+    // notes field, and sending undefined→null wiped the plan's existing notes.
+    .update(plan.notes !== undefined ? { title: plan.title.trim(), notes: plan.notes.trim() || null } : { title: plan.title.trim() })
     .eq('id', planId);
   if (updateErr) return { ok: false, error: updateErr.message };
 

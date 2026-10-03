@@ -31,7 +31,6 @@ export interface CoachLink {
   shared_scopes: Partial<Record<ScopeKey, boolean>>;
   trainer_name: string | null;
   trainee_name: string | null;
-  coach_notes: string | null;
   created_at: string;
   responded_at: string | null;
 }
@@ -105,20 +104,49 @@ export async function getSentLinks(): Promise<CoachLink[]> {
   return (data ?? []) as CoachLink[];
 }
 
-// Trainer's private notes on a trainee (they own the link row → RLS allows it).
+// Trainer's private notes on a trainee. Kept in their own trainer-only table,
+// not on the link row — the trainee can read the link row.
+export async function getCoachNotes(linkId: string): Promise<string> {
+  const { data } = await supabase.from('coach_private_notes').select('notes').eq('link_id', linkId).maybeSingle();
+  return data?.notes ?? '';
+}
+
 export async function updateCoachNotes(linkId: string, notes: string): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.from('coach_links').update({ coach_notes: notes }).eq('id', linkId);
+  const u = await me();
+  if (!u) return { ok: false, error: 'Not signed in.' };
+  const { error } = await supabase
+    .from('coach_private_notes')
+    .upsert({ link_id: linkId, trainer_id: u.id, notes, updated_at: new Date().toISOString() });
   return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+// Trainer withdraws a pending invite (or ends a link from their side).
+export async function cancelInvite(linkId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('coach_links')
+    .update({ status: 'revoked' as LinkStatus })
+    .eq('id', linkId)
+    .select('id');
+  if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: 'Invite not found.' };
+  return { ok: true };
 }
 
 // ── Trainee side ────────────────────────────────────────────────────
 
-// Pending invites addressed to my email (RLS already scopes this to me).
+// Pending invites addressed to my email. RLS alone isn't enough here: a coach
+// can also SELECT the invites they SENT, so without these filters a coach got
+// a "<their own name> wants to coach you" popup for every outgoing invite —
+// and accepting it linked them as their own trainee.
 export async function getIncomingInvites(): Promise<CoachLink[]> {
+  const u = await me();
+  if (!u?.email) return [];
   const { data } = await supabase
     .from('coach_links')
     .select('*')
     .eq('status', 'pending')
+    .ilike('invited_email', u.email.replace(/[\\%_]/g, (c) => `\\${c}`))
+    .neq('trainer_id', u.id)
     .order('created_at', { ascending: false });
   return (data ?? []) as CoachLink[];
 }
@@ -147,8 +175,9 @@ export async function respondToInvite(
   const patch = accept
     ? { status: 'accepted' as LinkStatus, trainee_id: u.id, shared_scopes: scopes, trainee_name: await myDisplayName(u.id), responded_at: new Date().toISOString() }
     : { status: 'declined' as LinkStatus, responded_at: new Date().toISOString() };
-  const { error } = await supabase.from('coach_links').update(patch).eq('id', id);
+  const { data, error } = await supabase.from('coach_links').update(patch).eq('id', id).select('id');
   if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: 'This invite is no longer available.' };
   return { ok: true };
 }
 
@@ -157,17 +186,20 @@ export async function updateShareScopes(
   id: string,
   scopes: Partial<Record<ScopeKey, boolean>>,
 ): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.from('coach_links').update({ shared_scopes: scopes }).eq('id', id);
+  const { data, error } = await supabase.from('coach_links').update({ shared_scopes: scopes }).eq('id', id).select('id');
   if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: 'Could not update sharing.' };
   return { ok: true };
 }
 
 // Trainee cuts a coach off (revoke). Access stops on the coach's next query.
 export async function disconnect(id: string): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('coach_links')
     .update({ status: 'revoked', shared_scopes: {}, responded_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: 'Could not disconnect.' };
   return { ok: true };
 }

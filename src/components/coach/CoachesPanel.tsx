@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import {
   getIncomingInvites, getMyCoaches, respondToInvite, updateShareScopes, disconnect,
@@ -27,7 +28,8 @@ export const CoachesPanel: React.FC = () => {
 
   const decline = async (link: CoachLink) => {
     setBusyId(link.id);
-    await respondToInvite(link.id, false);
+    const res = await respondToInvite(link.id, false);
+    if (!res.ok) toast.error(res.error || 'Could not decline.');
     await load();
     setBusyId(null);
   };
@@ -35,16 +37,22 @@ export const CoachesPanel: React.FC = () => {
   const confirmSheet = async (scopes: Partial<Record<ScopeKey, boolean>>) => {
     if (!sheet) return;
     setBusyId(sheet.link.id);
-    if (sheet.mode === 'accept') await respondToInvite(sheet.link.id, true, scopes);
-    else await updateShareScopes(sheet.link.id, scopes);
+    const res = sheet.mode === 'accept'
+      ? await respondToInvite(sheet.link.id, true, scopes)
+      : await updateShareScopes(sheet.link.id, scopes);
+    if (!res.ok) toast.error(res.error || 'Could not save.');
+    else if (sheet.mode === 'accept') window.dispatchEvent(new CustomEvent('athlix:coaches-changed'));
     setSheet(null);
     await load();
     setBusyId(null);
   };
 
+  // One mis-tap used to cut the coach off instantly, with no undo.
   const cut = async (link: CoachLink) => {
+    if (!window.confirm(`Disconnect from ${link.trainer_name || 'this coach'}? They'll immediately lose access to your data.`)) return;
     setBusyId(link.id);
-    await disconnect(link.id);
+    const res = await disconnect(link.id);
+    if (!res.ok) toast.error(res.error || 'Could not disconnect.');
     await load();
     setBusyId(null);
   };

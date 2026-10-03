@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { AppIcon } from '../config/icons';
-import { getSentLinks, SHARE_SCOPES, type CoachLink } from '../lib/coachLinks';
+import { getSentLinks, cancelInvite, SHARE_SCOPES, type CoachLink } from '../lib/coachLinks';
 import { getRosterStatus, type RosterStatus } from '../lib/coachData';
 import { InviteTraineeSheet } from '../components/coach/InviteTraineeSheet';
 
@@ -78,7 +79,19 @@ export const CoachDashboard: React.FC = () => {
           {trainees.map((l) => (
             <TraineeCard key={l.id} link={l} status={l.trainee_id ? status[l.trainee_id] : undefined} onOpen={() => navigate(`/coach/trainee/${l.trainee_id}`)} />
           ))}
-          {pending.map((l) => <PendingCard key={l.id} link={l} />)}
+          {pending.map((l) => (
+            <PendingCard
+              key={l.id}
+              link={l}
+              onCancel={async () => {
+                if (!window.confirm(`Cancel the invite to ${l.invited_email}?`)) return;
+                const res = await cancelInvite(l.id);
+                if (!res.ok) { toast.error(res.error || 'Could not cancel invite.'); return; }
+                toast.success('Invite cancelled');
+                load();
+              }}
+            />
+          ))}
         </div>
       )}
 
@@ -119,8 +132,8 @@ const TraineeCard: React.FC<{ link: CoachLink; status?: RosterStatus; onOpen: ()
   );
 };
 
-const PendingCard: React.FC<{ link: CoachLink }> = ({ link }) => (
-  <div className="glass-card px-5 py-4 flex items-center gap-4 opacity-80">
+const PendingCard: React.FC<{ link: CoachLink; onCancel: () => void }> = ({ link, onCancel }) => (
+  <div className="glass-card px-5 py-4 flex items-center gap-4">
     <span className="shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl text-[var(--text-muted)]"
       style={{ background: 'var(--bg-elevated)' }}>
       <AppIcon name="Mail" size="md" />
@@ -131,6 +144,10 @@ const PendingCard: React.FC<{ link: CoachLink }> = ({ link }) => (
     </div>
     <span className="text-[12px] font-semibold px-2.5 py-1 rounded-full"
       style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Pending</span>
+    <button type="button" onClick={onCancel} aria-label={`Cancel invite to ${link.invited_email}`}
+      className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center" style={{ color: '#ff8080' }}>
+      <AppIcon name="Close" size="sm" />
+    </button>
   </div>
 );
 

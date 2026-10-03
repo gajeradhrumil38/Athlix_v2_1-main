@@ -71,18 +71,21 @@ const DRAFT_TTL = 8 * 60 * 60 * 1000;
 // Build workout entries from a Train Today recommendation: resolve each
 // exercise's muscle group from the catalog (fallback to the plan's primary
 // muscle), N empty sets, with the plan's target reps seeded as a hint.
-type PlanExercise = { name: string; sets: number; reps: string; rest?: number | null };
+// weight is the coach's prescription, always in lb (assigned_plan_exercises.unit).
+type PlanExercise = { name: string; sets: number; reps: string; rest?: number | null; weight?: number | null };
 function planRepTarget(reps: string): number | null {
   const m = /(\d+)/.exec(reps || '');
   return m ? Number(m[1]) : null;
 }
-function buildEntriesFromPlan(exercises: PlanExercise[], planMuscles?: string[]): ExerciseEntry[] {
+function buildEntriesFromPlan(exercises: PlanExercise[], planMuscles?: string[], weightUnit: 'kg' | 'lbs' = 'lbs'): ExerciseEntry[] {
   return exercises.map((ex) => {
     const assetId = OPENTRAINING_ID_BY_NAME[normalizeExerciseName(ex.name)];
     const asset = assetId ? OPENTRAINING_ASSETS_BY_ID[assetId] : undefined;
     const muscleGroup = asset?.muscleGroup || planMuscles?.[0] || 'Core';
-    const nSets = Math.max(1, Math.min(6, Number(ex.sets) || 3));
+    // A coach can prescribe up to 20 sets — the old cap of 6 silently trimmed them.
+    const nSets = Math.max(1, Math.min(20, Number(ex.sets) || 3));
     const target = planRepTarget(ex.reps);
+    const plannedWeight = ex.weight && ex.weight > 0 ? convertWeight(ex.weight, 'lbs', weightUnit) : null;
     return {
       id: crypto.randomUUID(),
       name: ex.name,
@@ -95,6 +98,7 @@ function buildEntriesFromPlan(exercises: PlanExercise[], planMuscles?: string[])
         reps: null,
         done: false,
         planned_reps: target,
+        planned_weight: plannedWeight,
       })),
     };
   });
@@ -292,7 +296,7 @@ export const Log: React.FC = () => {
         setOpenPickerOnStart(false);
       } else {
         const st = location.state as { suggestedTitle?: string; preselectedMuscles?: string[] } | null;
-        const entries = buildEntriesFromPlan(recExercises, st?.preselectedMuscles);
+        const entries = buildEntriesFromPlan(recExercises, st?.preselectedMuscles, weightUnit);
         const state = createWorkoutState(entries, st?.suggestedTitle, forcedWorkoutDate);
         setWorkout(state);
         setShowQuickStart(false);

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
 import { ExercisePicker, type Exercise } from '../log/ExercisePicker';
+import { format } from 'date-fns';
 import { saveWorkout } from '../../lib/supabaseData';
 import type { TraineeWorkout } from '../../lib/coachData';
 
@@ -16,16 +17,20 @@ interface Props { open: boolean; traineeId: string; traineeName: string; trainee
 
 type Row = { name: string; muscleGroup: string; sets: number; reps: number; weight: number };
 
+// Local calendar date — toISOString() is UTC, which after ~5pm in US time
+// zones defaulted the session to TOMORROW and let it be logged in the future.
+const today = () => format(new Date(), 'yyyy-MM-dd');
+
 export const LogForTraineeSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], onClose, onLogged }) => {
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => today());
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [picking, setPicking] = useState(false);
 
   const hasContent = title.trim().length > 0 || rows.length > 0;
-  const reset = () => { setTitle(''); setDate(new Date().toISOString().slice(0, 10)); setRows([]); setError(''); setBusy(false); setPicking(false); };
+  const reset = () => { setTitle(''); setDate(today()); setRows([]); setError(''); setBusy(false); setPicking(false); };
   const close = () => { onClose(); reset(); };
   const requestClose = () => {
     if (hasContent && !window.confirm('Discard this session? Your entries will be lost.')) return;
@@ -61,6 +66,7 @@ export const LogForTraineeSheet: React.FC<Props> = ({ open, traineeId, traineeNa
   const submit = async () => {
     setBusy(true); setError('');
     if (!rows.length) { setError('Add at least one exercise.'); setBusy(false); return; }
+    if (date > today()) { setError("Can't log a session in the future."); setBusy(false); return; }
     try {
       await saveWorkout(traineeId, {
         title: title.trim() || 'Workout',
@@ -69,7 +75,9 @@ export const LogForTraineeSheet: React.FC<Props> = ({ open, traineeId, traineeNa
         exercises: rows.map((r) => ({
           name: r.name,
           muscle_group: r.muscleGroup,
-          completed_sets: Array.from({ length: r.sets }, () => ({ reps: r.reps, weight: r.weight })),
+          // The tiles are in lb. Without an explicit unit the save RPC falls
+          // back to 'kg', so "135 lb" was being stored as 135 kg.
+          completed_sets: Array.from({ length: r.sets }, () => ({ reps: r.reps, weight: r.weight, unit: 'lbs' as const })),
         })),
         trainee_id: traineeId,
       });
@@ -123,7 +131,7 @@ export const LogForTraineeSheet: React.FC<Props> = ({ open, traineeId, traineeNa
                 <input
                   type="date"
                   value={date}
-                  max={new Date().toISOString().slice(0, 10)}
+                  max={today()}
                   onChange={(e) => setDate(e.target.value)}
                   className="w-[132px] shrink-0 h-13 rounded-2xl px-3 text-[14px] font-semibold outline-none"
                   style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
