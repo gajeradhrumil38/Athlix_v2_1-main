@@ -83,3 +83,18 @@ export function exerciseSummary(e: ExerciseEntry): string {
   if (same) return `${vals.length} × ${vals[0].r}${vals[0].w ? ` @ ${vals[0].w} lb` : ''}`;
   return vals.map((v) => (v.w ? `${v.w}×${v.r}` : `${v.r}`)).join(' · ');
 }
+
+// What a coach save writes. If any set is ticked, the coach is marking what
+// was done — save only ticked sets (same rule as the athlete's logger).
+// Otherwise every set with a value counts, so logging after the fact doesn't
+// require ticking each set.
+export function setsToSave(workout: WorkoutState) {
+  const anyDone = workout.exercises.some((e) => e.sets.some((s) => s.done));
+  return workout.exercises
+    .map((exercise, index) => ({
+      exercise,
+      index,
+      sets: exercise.sets.filter((s) => (anyDone ? s.done : true) && (Number(s.weight || 0) > 0 || Number(s.reps || 0) > 0)),
+    }))
+    .filter((x) => x.sets.length > 0);
+}

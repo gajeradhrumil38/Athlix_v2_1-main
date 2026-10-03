@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ExerciseEntry, WorkoutState } from '../pages/Log';
 import {
   addExercises, addSet, exerciseDone, exerciseSummary, markExerciseDone, markExerciseUndone,
-  removeSet, sessionProgress, toggleSetDone, updateSetValue,
+  removeSet, sessionProgress, setsToSave, toggleSetDone, updateSetValue,
 } from './sessionChecklist';
 
 const set = (id: string, over: Partial<ExerciseEntry['sets'][number]> = {}) => ({
@@ -85,5 +85,21 @@ describe('exerciseSummary', () => {
   it('omits weight for bodyweight work', () => {
     const e = ex('e1', 'Push-Ups', [set('a', { planned_weight: null, planned_reps: 15 }), set('b', { planned_weight: null, planned_reps: 15 })]);
     expect(exerciseSummary(e)).toBe('2 × 15');
+  });
+});
+
+describe('setsToSave', () => {
+  it('saves only ticked sets once any set is ticked', () => {
+    const s = toggleSetDone(w([ex('e1', 'A'), ex('e2', 'B')]), 'e1', 'e1a');
+    const out = setsToSave(s);
+    expect(out.map((x) => x.exercise.name)).toEqual(['A']);
+    expect(out[0].sets.map((x) => x.id)).toEqual(['e1a']);
+  });
+  it('saves every set with a value when nothing is ticked', () => {
+    const s = updateSetValue(w([ex('e1', 'A')]), 'e1', 'e1a', 'weight', 100);
+    expect(setsToSave(s)[0].sets.map((x) => x.id)).toEqual(['e1a']);
+  });
+  it('drops exercises with no values', () => {
+    expect(setsToSave(w([ex('e1', 'A')]))).toEqual([]);
   });
 });

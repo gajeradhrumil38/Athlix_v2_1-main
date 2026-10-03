@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AssignedPlan } from './assignedPlans';
+import type { TraineeWorkout } from './coachData';
 import { currentPlan, dayOfSession, planProgress, type PlanSession } from './planProgress';
 
 const NOW = new Date('2026-10-02T12:00:00').getTime();
@@ -79,6 +80,14 @@ describe('planProgress', () => {
   });
   it('ignores sessions from another plan', () => {
     expect(planProgress(ppl, [s({ source_plan_id: 'other', source_plan_day: 'Push' })], NOW).nextDay).toBe('Push');
+  });
+  it('accepts trainee workouts exactly as the coach loads them', () => {
+    const tw: TraineeWorkout = {
+      id: 'w1', date: '2026-10-01', created_at: null, title: 'Push', duration_minutes: 40, muscle_groups: [],
+      source_plan_id: 'p1', source_plan_day: 'Push',
+      exercises: [{ name: 'Bench Press', muscle_group: null, sets: 1, reps: 5, weight: 135, unit: 'lbs' }],
+    };
+    expect(planProgress(ppl, [tw], NOW).nextDay).toBe('Pull');
   });
   it('counts single-day sessions this week', () => {
     const p = planProgress(single, [s({ source_plan_id: 'p2', date: '2026-10-01' }), s({ source_plan_id: 'p2', date: '2026-09-29' })], NOW);
