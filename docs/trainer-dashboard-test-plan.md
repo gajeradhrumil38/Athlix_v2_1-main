@@ -200,6 +200,25 @@ Use the browser console on a signed-in session. `supabase` is the app client, or
 | ASG-10 | Close with exercises added | Confirm "Discard this plan?". On the starting screen it closes freely. |
 | DB-1 | Run `supabase/tests/plan_day_check.sql` | 3 lines, no BAD. |
 
+## 11. Today's session card (trainee Home)
+
+| ID | Steps | Expected |
+|---|---|---|
+| TS-1 | Trainee with a coach plan taps Start on the "From your coach" card | Stays on Home; the coach card is replaced by "Today's session" with the day's exercises, "0 of N done", the first row marked Up next. |
+| TS-2 | Tap ✓ on the first exercise | Every set ticked at the prescribed numbers; the row dims and strikes through; progress bar and "1 of N done" update; Up next moves down. |
+| TS-3 | Tap ✓ again | Undone; numbers kept. |
+| TS-4 | Tap a row → change set 2 to 140 lb × 8, tick it | Summary shows the differing sets ("135×10 · 140×8 · 135×10"), "1/3 sets". |
+| TS-5 | + Set / × on a set | Adds a copy of the last set / removes it (can't remove the last one). |
+| TS-6 | Add exercise → pick two | Both appear at the bottom, prefilled from the trainee's last session where they have one. |
+| TS-7 | ⋯ → Open full logger | The logger shows the same exercises and ticks. Tick another set there, go back to Home → the card shows it. |
+| TS-8 | Finish session (after ticking some) | The logger opens straight onto the finish screen; saving shows the celebration; back on Home the card is gone, and the coach card shows that day done and the next day suggested. |
+| TS-9 | Finish with nothing ticked | Button disabled. |
+| TS-10 | ⋯ → Discard session → confirm | Card disappears; nothing saved; the coach card is back. |
+| TS-11 | Start a day while a session with ticked sets exists | Confirm "Replace your in-progress workout?"; Cancel keeps the old one. |
+| TS-12 | Start a session, fully close the app, reopen | The card is still there with its ticks (localStorage). |
+| TS-13 | My Coach → Start a day | Goes to Home with that day as Today's session. |
+| TS-14 | Start a normal workout in /log, add an exercise, go to Home | The card shows it (Resume via Open full logger). |
+
 ## Known gaps (not fixed, worth deciding on)
 
 - **Email enumeration.** `email_is_registered()` lets any signed-in user check whether an email has an account. It returns a boolean only, but it is still enumeration. One option is to rate-limit it or restrict it to trainers.
