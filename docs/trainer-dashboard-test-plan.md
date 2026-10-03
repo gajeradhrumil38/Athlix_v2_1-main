@@ -219,6 +219,22 @@ Use the browser console on a signed-in session. `supabase` is the app client, or
 | TS-13 | My Coach → Start a day | Goes to Home with that day as Today's session. |
 | TS-14 | Start a normal workout in /log, add an exercise, go to Home | The card shows it (Resume via Open full logger). |
 
+## 12. Coach session card (trainee Overview)
+
+| ID | Steps | Expected |
+|---|---|---|
+| CS-1 | Coach opens a sharing trainee with an active plan | Top of Overview: "Next for <name>", day strip ticked from their logged sessions, next day's exercises, Start <day>. |
+| CS-2 | Tap Start <day> | Card becomes "Session with <name>" with that day's exercises, 0 of N done, Up next. |
+| CS-3 | ✓ an exercise / tap a row and change a set / + Set | Same behaviour as the trainee card (TS-2…TS-5). |
+| CS-4 | + Add exercise → pick two | Added, prefilled from the **trainee's** last session; the picker's Recent tab lists the trainee's exercises. |
+| CS-5 | Leave the page and come back | The session is still running with its ticks. |
+| CS-6 | ⋯ → Open full logger | Full-screen coach logger shows the same session; Back returns to the card with any changes. |
+| CS-7 | Finish → Save session | Toast "Saved to <name>'s log"; the card returns to "Next for <name>" with that day ticked and the next day suggested; Recent sessions shows it. |
+| CS-8 | Trainee with no plan | Card reads "Train with <name>" + Start session → start popup; picking starts in the card (not the full logger). |
+| CS-9 | "Repeat last session, another plan, or start blank" | Popup; Start blank → empty card with "No exercises yet"; Add exercise works. |
+| CS-10 | ⋯ → Discard → confirm | Card returns to idle; nothing saved. |
+| CS-11 | Trainee stops sharing Workouts | No card. |
+
 ## Known gaps (not fixed, worth deciding on)
 
 - **Email enumeration.** `email_is_registered()` lets any signed-in user check whether an email has an account. It returns a boolean only, but it is still enumeration. One option is to rate-limit it or restrict it to trainers.
