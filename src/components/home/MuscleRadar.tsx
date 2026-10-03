@@ -126,7 +126,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
       )}
 
       {/* Radar SVG — fills the card width */}
-      <div className="relative w-full" style={{ aspectRatio: '1/1', maxHeight: 360 }}>
+      <div className="relative w-full" style={{ aspectRatio: '1/1', maxHeight: 440 }}>
         {/* Widen the viewBox horizontally so long edge labels (CORE / BACK /
             SHOULDERS) render fully instead of clipping at the SVG edge. */}
         <svg viewBox={`-30 -4 ${SIZE + 62} ${SIZE + 8}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
@@ -145,7 +145,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
               through the chart itself — only around it. */}
           <path
             d={spoke.map((s, i) => `${i === 0 ? 'M' : 'L'}${s.axisx.toFixed(2)},${s.axisy.toFixed(2)}`).join(' ') + ' Z'}
-            fill="#121316"
+            fill="#0c0d10"
           />
           <circle cx={cx} cy={cy} r={R + 2} fill="url(#chartBg2)" />
 
@@ -165,12 +165,12 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
                 fill="none"
                 stroke={
                   r === 1.0
-                    ? 'rgba(255,255,255,0.16)'
+                    ? 'rgba(255,255,255,0.22)'
                     : r === 0.6
                       ? 'rgba(255,255,255,0.10)'
                       : 'rgba(255,255,255,0.06)'
                 }
-                strokeWidth={r === 1.0 ? 1 : 0.6}
+                strokeWidth={r === 1.0 ? 1.3 : 0.6}
                 strokeDasharray={r === 0.6 ? '2,3' : undefined}
               />
             );
@@ -245,7 +245,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
                     />
                   </circle>
                   {/* Solid dot */}
-                  <circle cx={s.px} cy={s.py} r="4.2" fill={s.hex} stroke="#121316" strokeWidth="1.5" />
+                  <circle cx={s.px} cy={s.py} r="4.2" fill={s.hex} stroke="#0c0d10" strokeWidth="1.5" />
                 </g>
               ) : null,
             )}
@@ -263,9 +263,9 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
                 y={s.ly}
                 textAnchor={anchor(s.lx)}
                 dominantBaseline="middle"
-                fontSize="12"
-                fontWeight="700"
-                fill={isActive ? s.hex : 'rgba(255,255,255,0.38)'}
+                fontSize="13"
+                fontWeight="800"
+                fill={isActive ? s.hex : 'rgba(255,255,255,0.45)'}
                 letterSpacing="0.5"
               >
                 {s.key.toUpperCase()}
