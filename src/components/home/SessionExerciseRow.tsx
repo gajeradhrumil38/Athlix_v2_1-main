@@ -84,7 +84,7 @@ export const SessionExerciseRow: React.FC<Props> = ({
   };
 
   return (
-    <div className="relative rounded-2xl overflow-hidden" style={{ background: isNext ? 'color-mix(in srgb, var(--accent) 7%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4.5%, transparent)', opacity: done && !expanded ? 0.62 : 1 }}>
+    <div className="relative rounded-2xl overflow-hidden" style={{ background: isNext ? 'color-mix(in srgb, var(--text-primary) 6.5%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4.5%, transparent)', opacity: done && !expanded ? 0.62 : 1 }}>
       <div className="absolute inset-y-0 left-0 w-[3px]" style={{ background: color }} />
       <div className="flex items-center gap-3 pl-4 pr-3 py-3">
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
@@ -97,7 +97,7 @@ export const SessionExerciseRow: React.FC<Props> = ({
             {exerciseSummary(exercise)}{ticked > 0 && !done ? ` · ${ticked}/${exercise.sets.length} sets` : ''}
             <span className="text-[var(--text-muted)]"> · {expanded ? 'tap to close' : 'tap to edit'}</span>
           </p>
-          {exercise.note && <p className="text-[12px] mt-1 leading-snug" style={{ color: 'var(--accent)' }}>{exercise.note}</p>}
+          {exercise.note && <p className="text-[12px] mt-1 leading-snug italic" style={{ color: 'var(--text-secondary)' }}>{exercise.note}</p>}
         </button>
         <button
           type="button"

@@ -74,7 +74,8 @@ const ValueBox: React.FC<{
         type="button"
         onClick={(e) => { e.stopPropagation(); onAdjust(step); }}
         className={`flex h-full ${compact ? 'w-[34px]' : 'w-[48px]'} shrink-0 flex-col items-center justify-center gap-0.5 active:bg-white/[0.04] transition-colors`}
-        style={{ color: 'var(--accent)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}
+        // Compact (session cards): neutral, so the card isn't lime everywhere.
+        style={{ color: compact ? 'var(--text-primary)' : 'var(--accent)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}
       >
         <span className="text-[22px] font-light leading-none select-none">+</span>
         <span className="text-[9px] font-semibold leading-none opacity-50 select-none">{stepLabel}</span>
