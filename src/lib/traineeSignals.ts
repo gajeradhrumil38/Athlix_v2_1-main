@@ -7,7 +7,9 @@ import { exerciseSeries, type AiVisual } from './traineeAiVisuals';
 
 export interface Signal {
   id: string;
-  level: 'high' | 'warn' | 'good';
+  // info: worth asking about, not worth flagging a trainee on the roster.
+  level: 'high' | 'warn' | 'info' | 'good';
+  label: string;     // a few words, for the coach's roster
   fact: string;      // plain statement, fed to the AI
   chip: string;      // the question the coach can tap
   visual?: AiVisual;
@@ -28,7 +30,7 @@ export function computeSignals(
   const first = dash.name.split(' ')[0] || dash.name;
 
   if (dash.recovery.shared && dash.recovery.data != null && dash.recovery.data < 40) {
-    out.push({ id: 'recovery', level: 'high', fact: `WHOOP recovery is low at ${dash.recovery.data}%.`, chip: `Recovery ${dash.recovery.data}% — go lighter today?` });
+    out.push({ id: 'recovery', level: 'high', label: `Recovery ${dash.recovery.data}%`, fact: `WHOOP recovery is low at ${dash.recovery.data}%.`, chip: `Recovery ${dash.recovery.data}% — go lighter today?` });
   }
 
   if (!dash.workouts.shared) return out;
@@ -37,15 +39,15 @@ export function computeSignals(
   const last = ws.reduce((m, w) => Math.max(m, parseDay(w.date)), 0);
 
   if (!last) {
-    out.push({ id: 'none', level: 'warn', fact: `${first} hasn't logged any workouts yet.`, chip: 'How should we get started?' });
+    out.push({ id: 'none', level: 'warn', label: 'No workouts logged yet', fact: `${first} hasn't logged any workouts yet.`, chip: 'How should we get started?' });
     return out;
   }
   const quiet = daysSince(last);
-  if (quiet >= 5) out.push({ id: 'quiet', level: quiet >= 7 ? 'high' : 'warn', fact: `No workout in ${quiet} days.`, chip: `No session in ${quiet} days — what now?`, visual: { kind: 'week' } });
+  if (quiet >= 5) out.push({ id: 'quiet', level: quiet >= 7 ? 'high' : 'warn', label: `No session in ${quiet} days`, fact: `No workout in ${quiet} days.`, chip: `No session in ${quiet} days — what now?`, visual: { kind: 'week' } });
 
   const notStarted = plans.filter((p) => !ws.some((w) => w.source_plan_id === p.id));
   if (notStarted.length) {
-    out.push({ id: 'plans', level: 'warn', fact: `Assigned plan${notStarted.length > 1 ? 's' : ''} not started: ${notStarted.map((p) => p.title).join(', ')}.`, chip: `Plan "${notStarted[0].title}" not started — why?` });
+    out.push({ id: 'plans', level: 'warn', label: `Plan "${notStarted[0].title}" not started`, fact: `Assigned plan${notStarted.length > 1 ? 's' : ''} not started: ${notStarted.map((p) => p.title).join(', ')}.`, chip: `Plan "${notStarted[0].title}" not started — why?` });
   }
 
   // Stalled or slipping lifts: the most-trained exercises whose top weight
@@ -61,8 +63,8 @@ export function computeSignals(
     const lastDate = Math.max(...recent.filter((w) => w.exercises.some((e) => e.name === name)).map((w) => parseDay(w.date)));
     if (daysSince(lastDate) > 21) continue;
     const [a, b, c] = series.slice(-3).map((p) => p.value);
-    if (c < Math.max(a, b) * 0.95) stalls.push({ id: `down-${name}`, level: 'warn', fact: `${name} top weight dropped: ${a} → ${b} → ${c} lb over the last 3 sessions.`, chip: `${name} slipping — why?`, visual: { kind: 'exercise', name } });
-    else if (c <= a) stalls.push({ id: `flat-${name}`, level: 'warn', fact: `${name} has not gone up in 3 sessions (${a} → ${b} → ${c} lb).`, chip: `${name} flat for 3 sessions — next step?`, visual: { kind: 'exercise', name } });
+    if (c < Math.max(a, b) * 0.95) stalls.push({ id: `down-${name}`, level: 'warn', label: `${name} slipping`, fact: `${name} top weight dropped: ${a} → ${b} → ${c} lb over the last 3 sessions.`, chip: `${name} slipping — why?`, visual: { kind: 'exercise', name } });
+    else if (c <= a) stalls.push({ id: `flat-${name}`, level: 'info', label: `${name} flat 3 sessions`, fact: `${name} has not gone up in 3 sessions (${a} → ${b} → ${c} lb).`, chip: `${name} flat for 3 sessions — next step?`, visual: { kind: 'exercise', name } });
   }
   out.push(...stalls);
 
@@ -74,7 +76,7 @@ export function computeSignals(
       .sort((x, y) => (y.days ?? 999) - (x.days ?? 999));
     if (gaps.length) {
       const g = gaps[0];
-      out.push({ id: `gap-${g.r}`, level: 'warn', fact: g.days == null ? `${g.r} hasn't been trained in the logged history.` : `${g.r} not trained in ${g.days} days.`, chip: g.days == null ? `${g.r} never trained — add it?` : `${g.r} not trained in ${g.days} days`, visual: { kind: 'muscles' } });
+      out.push({ id: `gap-${g.r}`, level: 'warn', label: g.days == null ? `${g.r} never trained` : `${g.r} untrained ${g.days}d`, fact: g.days == null ? `${g.r} hasn't been trained in the logged history.` : `${g.r} not trained in ${g.days} days.`, chip: g.days == null ? `${g.r} never trained — add it?` : `${g.r} not trained in ${g.days} days`, visual: { kind: 'muscles' } });
     }
   }
 
@@ -85,14 +87,14 @@ export function computeSignals(
   const thisWeek = weekVol(0);
   if (avg > 0 && thisWeek < avg * 0.65 && quiet < 5) {
     const drop = Math.round((1 - thisWeek / avg) * 100);
-    out.push({ id: 'volume', level: 'warn', fact: `This week's volume (${Math.round(thisWeek)} lb) is ${drop}% under the 3-week average (${Math.round(avg)} lb).`, chip: `Volume down ${drop}% this week`, visual: { kind: 'volume' } });
+    out.push({ id: 'volume', level: 'warn', label: `Volume down ${drop}%`, fact: `This week's volume (${Math.round(thisWeek)} lb) is ${drop}% under the 3-week average (${Math.round(avg)} lb).`, chip: `Volume down ${drop}% this week`, visual: { kind: 'volume' } });
   }
 
   if (dash.prs.shared) {
     const fresh = dash.prs.data.filter((p) => now - parseDay(p.achieved_date) <= 7 * DAY).sort((a, b) => b.achieved_date.localeCompare(a.achieved_date))[0];
-    if (fresh) out.push({ id: `pr-${fresh.exercise_name}`, level: 'good', fact: `New PR this week: ${fresh.exercise_name} ${Math.round(fresh.best_weight)} lb × ${fresh.best_reps}.`, chip: `New PR on ${fresh.exercise_name} — what next?`, visual: { kind: 'exercise', name: fresh.exercise_name } });
+    if (fresh) out.push({ id: `pr-${fresh.exercise_name}`, level: 'good', label: `New PR: ${fresh.exercise_name}`, fact: `New PR this week: ${fresh.exercise_name} ${Math.round(fresh.best_weight)} lb × ${fresh.best_reps}.`, chip: `New PR on ${fresh.exercise_name} — what next?`, visual: { kind: 'exercise', name: fresh.exercise_name } });
   }
 
-  const rank = { high: 0, warn: 1, good: 2 } as const;
+  const rank = { high: 0, warn: 1, info: 2, good: 3 } as const;
   return out.sort((x, y) => rank[x.level] - rank[y.level]);
 }

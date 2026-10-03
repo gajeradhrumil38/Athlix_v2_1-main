@@ -19,7 +19,7 @@ import { ASK_TRAINEE_AI_EVENT, TONE, WidgetCard, tile } from './Widget';
 // signals. Other Overview cards can send a question here ("Ask about this").
 
 const FALLBACK_CHIPS = ['How was this week?', 'Show strength progress', 'Muscle balance', 'Any red flags?'];
-const LEVEL_COLOR: Record<Signal['level'], string> = { high: TONE.bad, warn: TONE.warn, good: TONE.good };
+const LEVEL_COLOR: Record<Signal['level'], string> = { high: TONE.bad, warn: TONE.warn, info: 'var(--text-muted)', good: TONE.good };
 
 // "- " lines become a tidy list; anything else stays a paragraph.
 const AnswerText: React.FC<{ text: string }> = ({ text }) => (

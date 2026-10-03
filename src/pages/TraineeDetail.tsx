@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners, useDroppable,
@@ -149,6 +149,15 @@ export const TraineeDetail: React.FC = () => {
   const [plans, setPlans] = useState<AssignedPlan[]>(() => (id ? peekAssignedPlansFor(id) ?? [] : []));
   const [assign, setAssign] = useState(false);
   const [logStart, setLogStart] = useState(false);
+  // "Start" on the coach's Today screen lands here and opens the start picker.
+  const location = useLocation();
+  const wantsLogStart = !!(location.state as { openLog?: boolean } | null)?.openLog;
+  useEffect(() => {
+    if (!wantsLogStart || !dash) return;
+    if (dash.workouts.shared) setLogStart(true);
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsLogStart, dash]);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
   // Ask AI hand-offs: a drafted plan opens in the Assign sheet, a check-in in

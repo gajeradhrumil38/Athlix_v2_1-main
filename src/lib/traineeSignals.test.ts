@@ -18,8 +18,9 @@ const ids = (d: TraineeDashboard, plans: { id: string; title: string }[] = []) =
 const full = (n: number, bench: number) => wo(n, [['Bench', 'Chest', 3, 8, bench], ['Row', 'Back', 3, 8, 100], ['Squat', 'Legs', 3, 8, 150], ['Press', 'Shoulders', 3, 8, 60]]);
 
 describe('computeSignals', () => {
-  it('flags a lift that has not gone up in 3 sessions', () => {
-    expect(ids(dash([full(10, 135), full(6, 135), full(2, 135)]))).toContain('flat-Bench');
+  it('notes (info only) a lift that has not gone up in 3 sessions', () => {
+    const s = computeSignals(dash([full(10, 135), full(6, 135), full(2, 135)]), [], NOW).find((x) => x.id === 'flat-Bench');
+    expect(s?.level).toBe('info');
   });
   it('flags a lift that slipped', () => {
     const s = computeSignals(dash([full(10, 150), full(6, 140), full(2, 120)]), [], NOW).find((x) => x.id === 'down-Bench');

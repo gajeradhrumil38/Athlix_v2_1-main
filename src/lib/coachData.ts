@@ -149,14 +149,15 @@ async function loadTraineeDashboard(traineeId: string): Promise<TraineeDashboard
   };
 }
 
-export interface RosterStatus { lastDate: string | null; daysAgo: number | null; weekSessions: number; }
+// weekDates: the distinct days trained in the last 7 (for the roster's dot strip).
+export interface RosterStatus { lastDate: string | null; daysAgo: number | null; weekSessions: number; weekDates: string[]; }
 
 // One batched read of every trainee's recent workout dates (RLS returns only the
 // ones who share 'workouts'), folded into a last-active + this-week count per
 // trainee — so the roster can flag who's gone quiet without N round-trips.
 export async function getRosterStatus(traineeIds: string[]): Promise<Record<string, RosterStatus>> {
   const out: Record<string, RosterStatus> = {};
-  for (const id of traineeIds) out[id] = { lastDate: null, daysAgo: null, weekSessions: 0 };
+  for (const id of traineeIds) out[id] = { lastDate: null, daysAgo: null, weekSessions: 0, weekDates: [] };
   if (!traineeIds.length) return out;
 
   const { data } = await supabase
@@ -175,7 +176,10 @@ export async function getRosterStatus(traineeIds: string[]): Promise<Record<stri
     if (!s.lastDate) { s.lastDate = row.date; s.daysAgo = Math.floor((now - t) / 86_400_000); }
     if (now - t <= 7 * 86_400_000) (week[row.user_id] ??= new Set()).add(row.date);
   }
-  for (const id of traineeIds) out[id].weekSessions = week[id]?.size ?? 0;
+  for (const id of traineeIds) {
+    out[id].weekSessions = week[id]?.size ?? 0;
+    out[id].weekDates = [...(week[id] ?? [])];
+  }
   return out;
 }
 

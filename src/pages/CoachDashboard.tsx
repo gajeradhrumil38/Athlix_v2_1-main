@@ -4,12 +4,18 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { AppIcon } from '../config/icons';
 import { getSentLinks, cancelInvite, SHARE_SCOPES, type CoachLink } from '../lib/coachLinks';
-import { getRosterStatus, type RosterStatus } from '../lib/coachData';
+import { getRosterStatus, getTraineeDashboard, type RosterStatus } from '../lib/coachData';
+import { getMyCreatedAppointments, type TrainerAppointment } from '../lib/appointments';
+import { getAssignedPlansFor } from '../lib/assignedPlans';
+import { computeSignals } from '../lib/traineeSignals';
+import { dayRange, rankNeedsYou, weekStrip, type NeedsYou } from '../lib/coachToday';
+import { format } from 'date-fns';
 import { InviteTraineeSheet } from '../components/coach/InviteTraineeSheet';
 import { confirmDialog } from '../components/shared/ConfirmDialog';
 
-// Trainer's home: the roster of accepted trainees + pending invites, and the
-// one-tap invite. Guarded by profiles.is_trainer.
+// Trainer's home, built around today: the sessions booked today (one tap to
+// start), who needs attention (ranked from the same signals the trainee page
+// and Ask AI use), then the whole roster. Guarded by profiles.is_trainer.
 export const CoachDashboard: React.FC = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -17,13 +23,34 @@ export const CoachDashboard: React.FC = () => {
   const [status, setStatus] = useState<Record<string, RosterStatus>>({});
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState(false);
+  const [today, setToday] = useState<TrainerAppointment[] | null>(null);
+  const [needs, setNeeds] = useState<NeedsYou[] | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     const l = await getSentLinks();
     setLinks(l);
     setLoading(false);
-    const traineeIds = l.filter((x) => x.status === 'accepted' && x.trainee_id).map((x) => x.trainee_id as string);
+    const accepted = l.filter((x) => x.status === 'accepted' && x.trainee_id);
+    const traineeIds = accepted.map((x) => x.trainee_id as string);
+    getMyCreatedAppointments(dayRange())
+      .then((a) => setToday(a.filter((x) => x.status === 'scheduled').sort((x, y) => x.scheduled_at.localeCompare(y.scheduled_at))))
+      .catch(() => setToday([]));
     setStatus(await getRosterStatus(traineeIds));
+    // Signals need each trainee's data; three at a time keeps it gentle, and
+    // it warms the cache so opening a trainee afterwards is instant.
+    const items: { traineeId: string; name: string; signals: ReturnType<typeof computeSignals> }[] = [];
+    const queue = [...accepted];
+    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+      for (let link = queue.shift(); link; link = queue.shift()) {
+        const tid = link.trainee_id as string;
+        try {
+          const [dash, plans] = await Promise.all([getTraineeDashboard(tid), getAssignedPlansFor(tid)]);
+          if (dash) items.push({ traineeId: tid, name: link.trainee_name || dash.name || link.invited_email, signals: computeSignals(dash, plans) });
+        } catch { /* one trainee failing shouldn't hide the rest */ }
+      }
+    }));
+    setNeeds(rankNeedsYou(items));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -32,42 +59,39 @@ export const CoachDashboard: React.FC = () => {
 
   const trainees = links.filter((l) => l.status === 'accepted');
   const pending = links.filter((l) => l.status === 'pending');
+  const needById = new Map((needs ?? []).map((n) => [n.traineeId, n]));
+  const rank = (l: CoachLink) => { const n = l.trainee_id ? needById.get(l.trainee_id) : undefined; return n ? (n.level === 'high' ? 0 : 1) : 2; };
+  const q = query.trim().toLowerCase();
+  const roster = trainees
+    .filter((l) => !q || (l.trainee_name || l.invited_email || '').toLowerCase().includes(q))
+    .sort((a, b) => rank(a) - rank(b) || (a.trainee_name || '').localeCompare(b.trainee_name || ''));
+  const open = (traineeId: string, startLog = false) => navigate(`/coach/trainee/${traineeId}`, startLog ? { state: { openLog: true } } : undefined);
+  const nowMs = Date.now();
+  const nextId = today?.find((a) => new Date(a.scheduled_at).getTime() + (a.duration_minutes || 60) * 60_000 > nowMs)?.id;
 
   return (
     <div className="max-w-2xl mx-auto px-4 pb-6">
       {/* Header */}
-      <div className="flex items-end justify-between pt-2 pb-5">
-        <div>
-          <h1 className="text-[30px] font-bold text-[var(--text-primary)] leading-none">Your trainees</h1>
-          <p className="text-[15px] text-[var(--text-muted)] mt-1.5">
-            {trainees.length} active{pending.length ? ` · ${pending.length} pending` : ''}
+      <div className="flex items-end justify-between gap-3 pt-2 pb-5">
+        <div className="min-w-0">
+          <h1 className="text-[30px] font-bold text-[var(--text-primary)] leading-none">Today</h1>
+          <p className="text-[15px] text-[var(--text-muted)] mt-1.5 truncate">
+            {format(new Date(), 'EEE, MMM d')} · {trainees.length} trainee{trainees.length === 1 ? '' : 's'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setInvite(true)}
-          className="flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
-          style={{ background: 'var(--accent)', color: '#000' }}
-        >
-          <AppIcon name="InvitePerson" size="sm" /> Invite
-        </button>
-      </div>
-
-      {/* The coach's own athlete dashboard (their Home lands here on the roster) */}
-      <button
-        type="button"
-        onClick={() => navigate('/me')}
-        className="w-full glass-card px-5 py-4 mb-4 flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
-      >
-        <span className="shrink-0 flex h-11 w-11 items-center justify-center rounded-2xl" style={{ background: 'var(--accent)', color: '#000' }}>
-          <AppIcon name="Home" size="md" />
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="text-[17px] font-semibold text-[var(--text-primary)]">My training</p>
-          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Your own dashboard, calendar &amp; stats</p>
+        <div className="flex items-center gap-2 shrink-0">
+          <button type="button" onClick={() => navigate('/me')} aria-label="My training" title="My training"
+            className="h-11 w-11 rounded-2xl flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+            <AppIcon name="Home" size="md" />
+          </button>
+          <button type="button" onClick={() => setInvite(true)}
+            className="flex items-center gap-1.5 h-11 px-4 rounded-2xl font-bold text-[15px]"
+            style={{ background: 'var(--accent)', color: '#000' }}>
+            <AppIcon name="InvitePerson" size="sm" /> Invite
+          </button>
         </div>
-        <AppIcon name="Forward" size="md" />
-      </button>
+      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-[var(--text-muted)] py-10 justify-center">
@@ -76,23 +100,101 @@ export const CoachDashboard: React.FC = () => {
       ) : trainees.length === 0 && pending.length === 0 ? (
         <EmptyState onInvite={() => setInvite(true)} />
       ) : (
-        <div className="space-y-3">
-          {trainees.map((l) => (
-            <TraineeCard key={l.id} link={l} status={l.trainee_id ? status[l.trainee_id] : undefined} onOpen={() => navigate(`/coach/trainee/${l.trainee_id}`)} />
-          ))}
-          {pending.map((l) => (
-            <PendingCard
-              key={l.id}
-              link={l}
-              onCancel={async () => {
-                if (!(await confirmDialog({ title: 'Cancel this invite?', message: `${l.invited_email} won't be able to join with it.`, confirmLabel: 'Cancel invite', cancelLabel: 'Keep', danger: true }))) return;
-                const res = await cancelInvite(l.id);
-                if (!res.ok) { toast.error(res.error || 'Could not cancel invite.'); return; }
-                toast.success('Invite cancelled');
-                load();
-              }}
-            />
-          ))}
+        <div className="space-y-6">
+          {/* Today's sessions */}
+          <section>
+            <SectionTitle title="Sessions today" right={<button type="button" onClick={() => navigate('/calendar')} className="text-[12px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Calendar</button>} />
+            {today == null ? <SkeletonRows n={1} /> : today.length === 0 ? (
+              <p className="glass-card px-5 py-4 text-[14px] text-[var(--text-muted)]">
+                Nothing booked today. <button type="button" onClick={() => navigate('/calendar')} className="font-semibold text-[var(--text-secondary)] underline">Book a session</button>
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {today.map((a) => {
+                  const start = new Date(a.scheduled_at);
+                  const done = start.getTime() + (a.duration_minutes || 60) * 60_000 <= nowMs;
+                  const isNext = a.id === nextId;
+                  return (
+                    <div key={a.id} className="glass-card px-4 py-3 flex items-center gap-3" style={{ opacity: done ? 0.55 : 1 }}>
+                      <div className="w-[58px] shrink-0 text-center">
+                        <p className="text-[16px] font-bold tabular-nums" style={{ color: isNext ? 'var(--accent)' : 'var(--text-primary)' }}>{format(start, 'h:mm')}</p>
+                        <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase">{format(start, 'a')}{a.duration_minutes ? ` · ${a.duration_minutes}m` : ''}</p>
+                      </div>
+                      <button type="button" onClick={() => open(a.trainee_id)} className="min-w-0 flex-1 text-left">
+                        <p className="text-[16px] font-semibold text-[var(--text-primary)] truncate">{a.trainee_name || 'Trainee'}</p>
+                        <p className="text-[13px] text-[var(--text-muted)] truncate">{a.title}{a.assigned_plan_title ? ` · ${a.assigned_plan_title}` : ''}</p>
+                      </button>
+                      {!done && (
+                        <button type="button" onClick={() => open(a.trainee_id, true)}
+                          className="shrink-0 h-10 px-4 rounded-xl text-[14px] font-bold"
+                          style={isNext ? { background: 'var(--accent)', color: '#000' } : { background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', color: 'var(--text-primary)' }}>
+                          Start
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Needs you */}
+          {trainees.length > 0 && (
+            <section>
+              <SectionTitle title="Needs you" />
+              {needs == null ? <SkeletonRows n={2} /> : needs.length === 0 ? (
+                <p className="glass-card px-5 py-4 text-[14px] text-[var(--text-muted)]">Everyone's on track. ✓</p>
+              ) : (
+                <div className="glass-card overflow-hidden">
+                  {needs.slice(0, 6).map((n, i) => (
+                    <button key={n.traineeId} type="button" onClick={() => open(n.traineeId)}
+                      className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/[0.02]"
+                      style={i ? { borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' } : undefined}>
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: n.level === 'high' ? 'var(--red)' : 'var(--yellow)' }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-[var(--text-primary)] truncate">{n.name}</p>
+                        <p className="text-[13px] text-[var(--text-secondary)] truncate">
+                          {n.reasons.join(' · ')}{n.wins.length ? <span style={{ color: 'var(--green)' }}> · {n.wins[0]}</span> : null}
+                        </p>
+                      </div>
+                      <AppIcon name="Forward" size="sm" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Everyone */}
+          <section>
+            <SectionTitle title="All trainees" right={trainees.length > 5 ? (
+              <label className="flex items-center gap-1.5 h-8 px-3 rounded-full text-[var(--text-muted)]" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+                <AppIcon name="Search" size="sm" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search trainees"
+                  className="w-24 bg-transparent text-[13px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]" style={{ border: 'none' }} />
+              </label>
+            ) : undefined} />
+            <div className="space-y-2">
+              {roster.map((l) => (
+                <TraineeCard key={l.id} link={l} status={l.trainee_id ? status[l.trainee_id] : undefined}
+                  need={l.trainee_id ? needById.get(l.trainee_id) : undefined} onOpen={() => open(l.trainee_id as string)} />
+              ))}
+              {q && roster.length === 0 && <p className="text-[14px] text-[var(--text-muted)] px-1">No trainee matches "{query}".</p>}
+              {pending.map((l) => (
+                <PendingCard
+                  key={l.id}
+                  link={l}
+                  onCancel={async () => {
+                    if (!(await confirmDialog({ title: 'Cancel this invite?', message: `${l.invited_email} won't be able to join with it.`, confirmLabel: 'Cancel invite', cancelLabel: 'Keep', danger: true }))) return;
+                    const res = await cancelInvite(l.id);
+                    if (!res.ok) { toast.error(res.error || 'Could not cancel invite.'); return; }
+                    toast.success('Invite cancelled');
+                    load();
+                  }}
+                />
+              ))}
+            </div>
+          </section>
         </div>
       )}
 
@@ -101,33 +203,60 @@ export const CoachDashboard: React.FC = () => {
   );
 };
 
-const TraineeCard: React.FC<{ link: CoachLink; status?: RosterStatus; onOpen: () => void }> = ({ link, status, onOpen }) => {
+const SectionTitle: React.FC<{ title: string; right?: React.ReactNode }> = ({ title, right }) => (
+  <div className="flex items-center justify-between gap-2 mb-2 px-1">
+    <h2 className="text-[12px] font-bold uppercase tracking-[0.14em] text-[var(--text-secondary)]">{title}</h2>
+    {right}
+  </div>
+);
+
+const SkeletonRows: React.FC<{ n: number }> = ({ n }) => (
+  <div className="space-y-2" aria-label="Loading">
+    {Array.from({ length: n }, (_, i) => <div key={i} className="glass-card h-[60px] animate-pulse" />)}
+  </div>
+);
+
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+const TraineeCard: React.FC<{ link: CoachLink; status?: RosterStatus; need?: NeedsYou; onOpen: () => void }> = ({ link, status, need, onOpen }) => {
   const shared = SHARE_SCOPES.filter((s) => link.shared_scopes?.[s.key]).length;
   const d = status?.daysAgo;
-  const stale = d != null && d >= 7; // gone quiet — the red flag a coach triages on
   const lastLabel = d == null ? null : d === 0 ? 'Trained today' : d === 1 ? 'Trained 1d ago' : `Trained ${d}d ago`;
-
+  const strip = status ? weekStrip(status.weekDates) : null;
+  const flag = need ? (need.level === 'high' ? 'var(--red)' : 'var(--yellow)') : null;
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="w-full glass-card px-5 py-4 flex items-center gap-4 text-left active:scale-[0.99] transition-transform"
+      className="w-full glass-card px-4 py-3.5 flex items-center gap-3.5 text-left active:scale-[0.99] transition-transform"
     >
       <span className="relative shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl text-[19px] font-bold"
-        style={{ background: 'var(--bg-elevated)', color: 'var(--accent)' }}>
+        style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--accent)' }}>
         {(link.trainee_name || link.invited_email || '?').charAt(0).toUpperCase()}
-        {stale && <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full border-2" style={{ background: '#ff8080', borderColor: 'var(--bg-surface)' }} />}
+        {flag && <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full border-2" style={{ background: flag, borderColor: 'var(--bg-base)' }} />}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[18px] font-semibold text-[var(--text-primary)] truncate">
-          {link.trainee_name || link.invited_email}
-        </p>
-        <p className="text-[13px] mt-0.5 truncate" style={{ color: stale ? '#ff8080' : 'var(--text-muted)' }}>
-          {lastLabel
-            ? `${lastLabel}${status?.weekSessions ? ` · ${status.weekSessions} this week` : ''}`
+        <p className="text-[17px] font-semibold text-[var(--text-primary)] truncate">{link.trainee_name || link.invited_email}</p>
+        <p className="text-[13px] mt-0.5 truncate" style={{ color: flag ?? 'var(--text-muted)' }}>
+          {need ? need.reasons[0]
+            : lastLabel ? <>{lastLabel}{status?.weekSessions ? <span className="hidden sm:inline"> · {status.weekSessions} this week</span> : null}</>
             : shared ? `Sharing ${shared} categor${shared === 1 ? 'y' : 'ies'}` : 'Not sharing yet'}
         </p>
       </div>
+      {/* Last 7 days at a glance — a filled dot per day trained. */}
+      {strip && (
+        <div className="flex shrink-0 items-end gap-1" aria-label={`${status?.weekSessions ?? 0} sessions in the last 7 days`}>
+          {strip.map((on, i) => {
+            const day = new Date(); day.setDate(day.getDate() - (6 - i));
+            return (
+              <span key={i} className="flex flex-col items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ background: on ? 'var(--green)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }} />
+                <span className="text-[9px] font-semibold text-[var(--text-muted)]">{DAY_LETTERS[day.getDay()]}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
       <AppIcon name="Forward" size="md" />
     </button>
   );
@@ -143,7 +272,7 @@ const PendingCard: React.FC<{ link: CoachLink; onCancel: () => void }> = ({ link
       <p className="text-[16px] font-medium text-[var(--text-primary)] truncate">{link.invited_email}</p>
       <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Invite sent — waiting to accept</p>
     </div>
-    <span className="text-[12px] font-semibold px-2.5 py-1 rounded-full"
+    <span className="hidden sm:inline-block text-[12px] font-semibold px-2.5 py-1 rounded-full"
       style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Pending</span>
     <button type="button" onClick={onCancel} aria-label={`Cancel invite to ${link.invited_email}`}
       className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center" style={{ color: '#ff8080' }}>
