@@ -29,6 +29,7 @@ import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
 import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard, tile } from '../components/coach/overview/Widget';
 import { palette } from '../theme/colors';
 import { settleColumns } from '../lib/masonry';
+import { AskAiCard } from '../components/coach/overview/AskAiCard';
 
 // Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
 const ACCENT = 'var(--accent)';
@@ -46,9 +47,9 @@ const resolveMuscleGroup = (name: string, stored?: string | null): string =>
 // the old design re-ran the guess on every render and could silently
 // relocate a card the coach had just placed.
 const OVERVIEW_COLUMNS_KEY = 'athlix:coach-overview-columns-v2';
-const DEFAULT_OVERVIEW_ORDER = ['session', 'stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
+const DEFAULT_OVERVIEW_ORDER = ['session', 'ai', 'stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
 // Rough card heights, used only to seed an initial balanced split.
-const CARD_WEIGHT: Record<string, number> = { session: 3, stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
+const CARD_WEIGHT: Record<string, number> = { session: 3, ai: 1.8, stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
 function distributeMasonry(ids: string[], cols: number): string[][] {
   const columns: string[][] = Array.from({ length: cols }, () => []);
   const heights = new Array(cols).fill(0);
@@ -628,6 +629,7 @@ export const TraineeDetail: React.FC = () => {
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
+          ai: <AskAiCard dash={{ ...dash, coachNotes: notes }} />,
           notes: (
             <WidgetCard title="Coach notes" icon="Edit"
               right={<span className="text-[11px] font-semibold" style={{ color: notesSaved ? TONE.good : 'var(--text-secondary)' }}>{notesSaved ? 'Saved ✓' : 'Private · saves automatically'}</span>}>

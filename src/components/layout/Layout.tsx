@@ -43,6 +43,7 @@ export const Layout: React.FC = () => {
   const isImmersiveRoute = location.pathname === '/log' || location.pathname.startsWith('/run')
     || /^\/coach\/trainee\/[^/]+\/log$/.test(location.pathname);
   const isHomeRoute = location.pathname === '/';
+  const isTraineeRoute = location.pathname.startsWith('/coach/trainee/');
   const isHeaderlessRoute =
     location.pathname.startsWith('/calendar') ||
     location.pathname.startsWith('/settings');
@@ -281,7 +282,9 @@ export const Layout: React.FC = () => {
       {!isImmersiveRoute && <AiChat />}
       {/* PostWorkoutCoachPill now owns the floating AI-entry-point FAB too
           (idle state), replacing the standalone button that used to live here. */}
-      <PostWorkoutCoachPill />
+      {/* A trainee's page has its own Ask AI card (about the trainee), so the
+          floating personal-coach button would only cover the cards there. */}
+      {!isTraineeRoute && <PostWorkoutCoachPill />}
 
       {/* ── Mobile bottom nav ─────────────────────────── */}
       {!isImmersiveRoute && (

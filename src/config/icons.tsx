@@ -4,7 +4,7 @@ import {
   Search, Check, X, ChevronLeft, ChevronRight, ChevronDown,
   TrendingUp, Settings, MoreHorizontal, History,
   ClipboardList, Footprints, Utensils, Sparkles,
-  Dumbbell, Loader2, Users, UserPlus, Mail, Trash2, Trophy, Pencil, Copy,
+  Dumbbell, Loader2, Users, UserPlus, Mail, Trash2, Trophy, Pencil, Copy, ArrowUp,
 } from 'lucide-react'
 
 // Central registry of all UI icons used in the app
@@ -28,6 +28,7 @@ export const ICONS = {
   Food: Utensils,
   Skincare: Sparkles,
   AICoach: Sparkles,
+  Send: ArrowUp,
   CreateExercise: Dumbbell,
   ExpandDown: ChevronDown,
   Spinner: Loader2,
