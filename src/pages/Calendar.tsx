@@ -321,6 +321,15 @@ const AppointmentCard: React.FC<{
     onChanged();
   };
 
+  const noShow = async () => {
+    setBusy(true);
+    const res = await updateAppointment(appt.id, { status: 'no_show' });
+    setBusy(false);
+    if (!res.ok) { toast.error(res.error || 'Could not update appointment.'); return; }
+    toast.success('Marked as no-show');
+    onChanged();
+  };
+
   const saveNotes = async () => {
     setBusy(true);
     const res = await updateAppointment(appt.id, { reviewNotes: notesDraft });
@@ -371,6 +380,9 @@ const AppointmentCard: React.FC<{
           )}
           {appt.status === 'cancelled' && (
             <p className="text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: '#ff8080' }}>Cancelled</p>
+          )}
+          {appt.status === 'no_show' && (
+            <p className="text-[11px] font-bold uppercase tracking-wide mt-1.5" style={{ color: 'var(--yellow)' }}>No-show</p>
           )}
           {appt.status === 'completed' && (
             <div className="mt-1.5">
@@ -432,6 +444,12 @@ const AppointmentCard: React.FC<{
               <button type="button" onClick={complete} disabled={busy} aria-label="Mark completed"
                 className="h-7 w-7 rounded-lg flex items-center justify-center disabled:opacity-40" style={{ color: '#7cd992' }}>
                 <Check className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {isPast && (
+              <button type="button" onClick={noShow} disabled={busy} aria-label="Mark no-show"
+                className="h-7 px-1.5 rounded-lg text-[10px] font-bold uppercase disabled:opacity-40" style={{ color: 'var(--yellow)' }}>
+                No-show
               </button>
             )}
             <button type="button" onClick={remove} disabled={busy} aria-label="Cancel appointment"

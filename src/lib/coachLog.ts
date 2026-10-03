@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { saveWorkout } from './supabaseData';
 import { resolveEffectiveInputType, type ExerciseInputType } from './exerciseTypes';
 import { setsToSave } from './sessionChecklist';
+import { markTodaysBookingAttended } from './packages';
 import type { Exercise } from '../components/log/ExercisePicker';
 
 // Starting points for a coach logging a session for a trainee. Shared by the
@@ -196,4 +197,6 @@ export async function saveCoachSession(traineeId: string, draft: CoachLogDraft, 
     }),
   });
   writeCoachDraft(traineeId, null);
+  // Counts the session against their package if they were booked today.
+  try { await markTodaysBookingAttended(traineeId); } catch { /* the save already succeeded */ }
 }

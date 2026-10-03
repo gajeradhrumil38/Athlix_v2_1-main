@@ -9,6 +9,8 @@ import { getMyCreatedAppointments, type TrainerAppointment } from '../lib/appoin
 import { getAssignedPlansFor } from '../lib/assignedPlans';
 import { computeSignals } from '../lib/traineeSignals';
 import { dayRange, rankNeedsYou, weekStrip, type NeedsYou } from '../lib/coachToday';
+import { getMyPackages, packageSignals, packageUsage } from '../lib/packages';
+import { updateAppointment } from '../lib/appointments';
 import { format } from 'date-fns';
 import { InviteTraineeSheet } from '../components/coach/InviteTraineeSheet';
 import { confirmDialog } from '../components/shared/ConfirmDialog';
@@ -34,8 +36,11 @@ export const CoachDashboard: React.FC = () => {
     const accepted = l.filter((x) => x.status === 'accepted' && x.trainee_id);
     const traineeIds = accepted.map((x) => x.trainee_id as string);
     getMyCreatedAppointments(dayRange())
-      .then((a) => setToday(a.filter((x) => x.status === 'scheduled').sort((x, y) => x.scheduled_at.localeCompare(y.scheduled_at))))
+      .then((a) => setToday(a.filter((x) => x.status !== 'cancelled').sort((x, y) => x.scheduled_at.localeCompare(y.scheduled_at))))
       .catch(() => setToday([]));
+    // Packages are counted from appointments, so fetch both once for everyone.
+    const since = new Date(Date.now() - 400 * 86_400_000).toISOString();
+    const pkgData = Promise.all([getMyPackages(), getMyCreatedAppointments({ startDate: since, endDate: new Date().toISOString() })]).catch(() => [[], []] as const);
     setStatus(await getRosterStatus(traineeIds));
     // Signals need each trainee's data; three at a time keeps it gentle, and
     // it warms the cache so opening a trainee afterwards is instant.
@@ -46,7 +51,9 @@ export const CoachDashboard: React.FC = () => {
         const tid = link.trainee_id as string;
         try {
           const [dash, plans] = await Promise.all([getTraineeDashboard(tid), getAssignedPlansFor(tid)]);
-          if (dash) items.push({ traineeId: tid, name: link.trainee_name || dash.name || link.invited_email, signals: computeSignals(dash, plans) });
+          const [pkgs, appts] = await pkgData;
+          const pkgSignals = packageSignals(packageUsage(pkgs.filter((p) => p.trainee_id === tid), appts));
+          if (dash) items.push({ traineeId: tid, name: link.trainee_name || dash.name || link.invited_email, signals: [...pkgSignals, ...computeSignals(dash, plans)] });
         } catch { /* one trainee failing shouldn't hide the rest */ }
       }
     }));
@@ -67,7 +74,13 @@ export const CoachDashboard: React.FC = () => {
     .sort((a, b) => rank(a) - rank(b) || (a.trainee_name || '').localeCompare(b.trainee_name || ''));
   const open = (traineeId: string, startLog = false) => navigate(`/coach/trainee/${traineeId}`, startLog ? { state: { openLog: true } } : undefined);
   const nowMs = Date.now();
-  const nextId = today?.find((a) => new Date(a.scheduled_at).getTime() + (a.duration_minutes || 60) * 60_000 > nowMs)?.id;
+  const nextId = today?.find((a) => a.status === 'scheduled' && new Date(a.scheduled_at).getTime() + (a.duration_minutes || 60) * 60_000 > nowMs)?.id;
+  const markAppt = async (a: TrainerAppointment, status: 'completed' | 'no_show') => {
+    const res = await updateAppointment(a.id, { status });
+    if (!res.ok) { toast.error(res.error || 'Could not update.'); return; }
+    setToday((t) => t?.map((x) => (x.id === a.id ? { ...x, status } : x)) ?? t);
+    toast.success(status === 'completed' ? 'Marked attended' : 'Marked no-show');
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 pb-6">
@@ -112,10 +125,11 @@ export const CoachDashboard: React.FC = () => {
               <div className="space-y-2">
                 {today.map((a) => {
                   const start = new Date(a.scheduled_at);
-                  const done = start.getTime() + (a.duration_minutes || 60) * 60_000 <= nowMs;
+                  const ended = start.getTime() + (a.duration_minutes || 60) * 60_000 <= nowMs;
+                  const done = a.status !== 'scheduled';
                   const isNext = a.id === nextId;
                   return (
-                    <div key={a.id} className="glass-card px-4 py-3 flex items-center gap-3" style={{ opacity: done ? 0.55 : 1 }}>
+                    <div key={a.id} className="glass-card px-4 py-3 flex items-center gap-3" style={{ opacity: done ? 0.6 : 1 }}>
                       <div className="w-[58px] shrink-0 text-center">
                         <p className="text-[16px] font-bold tabular-nums" style={{ color: isNext ? 'var(--accent)' : 'var(--text-primary)' }}>{format(start, 'h:mm')}</p>
                         <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase">{format(start, 'a')}{a.duration_minutes ? ` · ${a.duration_minutes}m` : ''}</p>
@@ -124,7 +138,16 @@ export const CoachDashboard: React.FC = () => {
                         <p className="text-[16px] font-semibold text-[var(--text-primary)] truncate">{a.trainee_name || 'Trainee'}</p>
                         <p className="text-[13px] text-[var(--text-muted)] truncate">{a.title}{a.assigned_plan_title ? ` · ${a.assigned_plan_title}` : ''}</p>
                       </button>
-                      {!done && (
+                      {a.status === 'completed' && <span className="shrink-0 text-[12px] font-bold" style={{ color: 'var(--green)' }}>✓ Attended</span>}
+                      {a.status === 'no_show' && <span className="shrink-0 text-[12px] font-bold" style={{ color: 'var(--yellow)' }}>No-show</span>}
+                      {/* Over but not marked: one tap each — this is what counts the session. */}
+                      {!done && ended && (
+                        <div className="shrink-0 flex gap-1.5">
+                          <button type="button" onClick={() => markAppt(a, 'completed')} aria-label="Attended" className="h-9 px-3 rounded-xl text-[13px] font-bold" style={{ background: 'color-mix(in srgb, var(--green) 16%, transparent)', color: 'var(--green)' }}><span className="sm:hidden">✓</span><span className="hidden sm:inline">Attended</span></button>
+                          <button type="button" onClick={() => markAppt(a, 'no_show')} className="h-9 px-2.5 rounded-xl text-[13px] font-bold" style={{ background: 'color-mix(in srgb, var(--yellow) 12%, transparent)', color: 'var(--yellow)' }}>No-show</button>
+                        </div>
+                      )}
+                      {!done && !ended && (
                         <button type="button" onClick={() => open(a.trainee_id, true)}
                           className="shrink-0 h-10 px-4 rounded-xl text-[14px] font-bold"
                           style={isNext ? { background: 'var(--accent)', color: '#000' } : { background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', color: 'var(--text-primary)' }}>

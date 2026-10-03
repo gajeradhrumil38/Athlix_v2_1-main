@@ -13,6 +13,7 @@ export const IDENTITY = {
   records: 'var(--pr-gold)',
   consistency: 'var(--green)',
   plans: 'var(--purple)',
+  packages: 'var(--accent)',
 } as const;
 
 // Semantic tones, all theme variables.

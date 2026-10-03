@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 // plan, but works standalone too (a check-in call, a session with notes
 // but no formal prescription).
 
-export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled';
+export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
 
 export interface TrainerAppointment {
   id: string;

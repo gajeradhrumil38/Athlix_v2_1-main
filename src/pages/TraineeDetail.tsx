@@ -30,6 +30,7 @@ import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard, ti
 import { palette } from '../theme/colors';
 import { settleColumns } from '../lib/masonry';
 import { AskAiCard, type AiCardActions } from '../components/coach/overview/AskAiCard';
+import { PackageCard } from '../components/coach/overview/PackageCard';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
 import type { PlanStarter } from '../lib/planStarters';
 import { confirmDialog } from '../components/shared/ConfirmDialog';
@@ -50,9 +51,9 @@ const resolveMuscleGroup = (name: string, stored?: string | null): string =>
 // the old design re-ran the guess on every render and could silently
 // relocate a card the coach had just placed.
 const OVERVIEW_COLUMNS_KEY = 'athlix:coach-overview-columns-v2';
-const DEFAULT_OVERVIEW_ORDER = ['session', 'ai', 'stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
+const DEFAULT_OVERVIEW_ORDER = ['session', 'ai', 'package', 'stats', 'trend', 'gauge', 'focus', 'radar', 'map', 'volume', 'weight', 'prs', 'recent', 'notes', 'plans'];
 // Rough card heights, used only to seed an initial balanced split.
-const CARD_WEIGHT: Record<string, number> = { session: 3, ai: 1.8, stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
+const CARD_WEIGHT: Record<string, number> = { session: 3, ai: 1.8, package: 1.8, stats: 1, gauge: 2, trend: 1.3, focus: 1, radar: 3, map: 3, volume: 2.2, weight: 2.2, prs: 2, recent: 3, notes: 2, plans: 2.5 };
 function distributeMasonry(ids: string[], cols: number): string[][] {
   const columns: string[][] = Array.from({ length: cols }, () => []);
   const heights = new Array(cols).fill(0);
@@ -660,6 +661,7 @@ export const TraineeDetail: React.FC = () => {
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
+          package: id ? <PackageCard traineeId={id} traineeName={dash.name} /> : null,
           ai: <AskAiCard dash={{ ...dash, coachNotes: notes }} plans={plans} actions={aiActions} />,
           notes: (
             <WidgetCard title="Coach notes" icon="Edit"
