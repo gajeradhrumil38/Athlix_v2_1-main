@@ -19,6 +19,7 @@ import { AppIcon } from '../config/icons';
 import { TrainingRecommendationCard } from '../components/home/TrainingRecommendationCard';
 import { UpcomingAppointmentBanner } from '../components/home/UpcomingAppointmentBanner';
 import { NotificationsCard } from '../components/home/NotificationsCard';
+import { CoachPlanCard } from '../components/home/CoachPlanCard';
 
 // --- Utility Functions ---
 const calculateStreak = (workouts: { date: string }[]) => {
@@ -928,6 +929,7 @@ export const Home: React.FC = () => {
   return (
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-24 md:pb-0 font-sans">
       <div className="max-w-[480px] mx-auto pb-6 flex flex-col gap-2">
+        <CoachPlanCard />
         <UpcomingAppointmentBanner />
         <NotificationsCard />
         {renderWidgets()}
