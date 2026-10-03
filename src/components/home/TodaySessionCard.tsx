@@ -24,6 +24,8 @@ interface Props {
   historyUserId?: string;
   recentExercises?: Exercise[];
   readCurrent?: () => WorkoutState | null;
+  // Leave room for a drag handle in the top-right corner (coach Overview grid).
+  menuInset?: boolean;
 }
 
 const uid = () => crypto.randomUUID();
@@ -40,7 +42,7 @@ const setsFrom = (ex: Exercise): ExerciseEntry['sets'] => {
 
 // Home "Today's session": the in-progress workout as a tick-off list. Same
 // draft as the full logger, so either can continue or finish it.
-export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard, onOpenLogger, onFinish, label, historyUserId, recentExercises, readCurrent }) => {
+export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard, onOpenLogger, onFinish, label, historyUserId, recentExercises, readCurrent, menuInset }) => {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
@@ -78,7 +80,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
           </p>
         </div>
         <button type="button" onClick={() => setMenu((v) => !v)} aria-label="Session options"
-          className="shrink-0 h-9 w-9 rounded-full flex items-center justify-center text-[18px] leading-none"
+          className={`shrink-0 h-9 w-9 rounded-full flex items-center justify-center text-[18px] leading-none ${menuInset ? 'mr-8' : ''}`}
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>⋯</button>
       </div>
 

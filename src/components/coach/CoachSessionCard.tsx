@@ -15,9 +15,9 @@ import { CoachSessionReview } from './CoachSessionReview';
 
 // Trainee Overview, top: what's next for this trainee and, once started, the
 // in-person session as a tick-off card. Same draft as the full coach logger.
-interface Props { traineeId: string; dash: TraineeDashboard; plans: AssignedPlan[]; onSaved: () => void }
+interface Props { traineeId: string; dash: TraineeDashboard; plans: AssignedPlan[]; onSaved: () => void; menuInset?: boolean }
 
-export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSaved }) => {
+export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSaved, menuInset }) => {
   const navigate = useNavigate();
   const { overrides } = useExerciseOverrides();
   const [draft, setDraft] = useState<CoachLogDraft | null>(() => readCoachDraft(traineeId));
@@ -66,6 +66,7 @@ export const CoachSessionCard: React.FC<Props> = ({ traineeId, dash, plans, onSa
           onDiscard={() => { if (window.confirm('Discard this session? Nothing will be saved.')) store(null); }}
           onOpenLogger={() => navigate(`/coach/trainee/${traineeId}/log`, { state: { start: { kind: 'resume' } } })}
           onFinish={() => setReviewing(true)}
+          menuInset={menuInset}
         />
         <CoachSessionReview open={reviewing} onClose={() => !saving && setReviewing(false)} traineeName={dash.name}
           workout={draft.workout} onTitle={(title) => update({ ...draft.workout, title })} saving={saving} onSave={save} />
