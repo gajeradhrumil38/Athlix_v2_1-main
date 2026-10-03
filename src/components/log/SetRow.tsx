@@ -36,10 +36,10 @@ const ValueBox: React.FC<{
   return (
     <div
       className={`relative flex ${compact ? 'h-[68px]' : 'h-[82px]'} w-full overflow-hidden rounded-xl border transition-colors duration-200`}
-      style={{
-        background: 'var(--bg-base)',
-        borderColor: isDone ? 'rgba(200,255,0,0.12)' : 'var(--border)',
-      }}
+      style={compact
+        // Compact (session cards): a soft fill that blends into the card, no outline.
+        ? { background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', borderColor: 'transparent' }
+        : { background: 'var(--bg-base)', borderColor: isDone ? 'rgba(200,255,0,0.12)' : 'var(--border)' }}
     >
       {/* shimmer line */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
@@ -119,10 +119,9 @@ export const SetRow: React.FC<SetRowProps> = ({
   return (
     <div
       className="relative overflow-hidden rounded-2xl border transition-all duration-200"
-      style={{
-        background: 'var(--bg-base)',
-        borderColor: set.done ? 'rgba(200,255,0,0.12)' : 'var(--border)',
-      }}
+      style={compact
+        ? { background: set.done ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'color-mix(in srgb, var(--text-primary) 3%, transparent)', borderColor: 'transparent' }
+        : { background: 'var(--bg-base)', borderColor: set.done ? 'rgba(200,255,0,0.12)' : 'var(--border)' }}
     >
       {/* Left accent bar */}
       <div
@@ -138,7 +137,7 @@ export const SetRow: React.FC<SetRowProps> = ({
             style={
               set.done
                 ? { border: '1px solid rgba(200,255,0,0.28)', color: 'var(--accent)', background: 'transparent' }
-                : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }
+                : { background: compact ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'var(--bg-elevated)', color: 'var(--text-secondary)' }
             }
           >
             Set {index}
@@ -170,9 +169,9 @@ export const SetRow: React.FC<SetRowProps> = ({
                   color: 'var(--accent)',
                 }
               : {
-                  background: 'var(--bg-elevated)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-muted)',
+                  background: compact ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'var(--bg-elevated)',
+                  borderColor: compact ? 'transparent' : 'var(--border)',
+                  color: compact ? 'var(--text-secondary)' : 'var(--text-muted)',
                 }
           }
         >

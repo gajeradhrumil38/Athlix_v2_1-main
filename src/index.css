@@ -172,6 +172,20 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  /* Thin, theme-tinted scrollbars app-wide — the default grey bar stood out
+     against the dark cards. Hidden scrollbars (.no-scrollbar) still win. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--text-primary) 16%, transparent) transparent;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text-primary) 28%, transparent); }
+
   .hide-scrollbar::-webkit-scrollbar,
   .no-scrollbar::-webkit-scrollbar {
     display: none;

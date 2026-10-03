@@ -18,6 +18,7 @@ import { getTraineeDashboard, peekTraineeDashboard, type TraineeDashboard, type 
 import { CoachLogStartModal } from '../components/coach/CoachLogStart';
 import { CoachSessionCard } from '../components/coach/CoachSessionCard';
 import { CenterModal } from '../components/shared/CenterModal';
+import { ScrollArea } from '../components/shared/ScrollArea';
 import { getAssignedPlansFor, peekAssignedPlansFor, deletePlan, groupByDay, type AssignedPlan } from '../lib/assignedPlans';
 import { dayOfSession } from '../lib/planProgress';
 import { updateCoachNotes } from '../lib/coachLinks';
@@ -950,9 +951,9 @@ const RecentSessions: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ worko
       ) : (
         // The same cards the trainee sees in their own Calendar, read-only —
         // so a session looks identical on both sides.
-        <div className="max-h-[520px] overflow-y-auto px-3 pb-3 space-y-3">
+        <ScrollArea maxHeight={520} contentClassName="px-3 pb-3 space-y-3">
           <ReadOnlyWorkoutCards workouts={recent} />
-        </div>
+        </ScrollArea>
       )}
     </WidgetCard>
   );
@@ -1048,7 +1049,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
       {filtered.length === 0 ? (
         <p className="text-[13px] text-[var(--text-muted)] text-center py-6">{list.length ? 'No match.' : 'No exercises logged.'}</p>
       ) : (
-        <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--border)]">
+        <ScrollArea maxHeight={420} contentClassName="divide-y divide-[var(--border)]">
           {filtered.map((ex) => {
             const expanded = open === ex.name;
             const group = resolveMuscleGroup(ex.name, ex.muscleGroup);
@@ -1114,7 +1115,7 @@ const ExerciseHistory: React.FC<{ workouts: TraineeWorkout[] | null }> = ({ work
               </div>
             );
           })}
-        </div>
+        </ScrollArea>
       )}
     </Card>
   );
@@ -1202,7 +1203,7 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
     {!prs.length ? (
       <div className="px-4 pb-4"><EmptyState icon="Trophy" text="No personal records yet." /></div>
     ) : (
-      <div className="max-h-[360px] overflow-y-auto px-3 pb-3 space-y-1.5">
+      <ScrollArea maxHeight={360} contentClassName="px-3 pb-3 space-y-1.5">
         {prs.map((p, i) => {
           const group = resolveMuscleGroup(p.exercise_name);
           const color = muscleColor(group);
@@ -1220,7 +1221,7 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
             </div>
           );
         })}
-      </div>
+      </ScrollArea>
     )}
   </WidgetCard>
 );

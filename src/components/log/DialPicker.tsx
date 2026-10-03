@@ -13,6 +13,9 @@ interface DialPickerProps {
   distanceUnit?: DistanceUnit;
   onClose: () => void;
   onConfirm: (value: number) => void;
+  // Render as a panel inside the surrounding card (no full-screen sheet or
+  // backdrop) — used by the session cards so the dial opens where you tapped.
+  inline?: boolean;
 }
 
 interface PickerColumn {
@@ -479,6 +482,7 @@ export const DialPicker: React.FC<DialPickerProps> = ({
   distanceUnit = 'km',
   onClose,
   onConfirm,
+  inline = false,
 }) => {
   const columns = useMemo(
     () => buildColumns(fieldKind, inputType, initialValue, weightUnit, distanceUnit),
@@ -523,26 +527,8 @@ export const DialPicker: React.FC<DialPickerProps> = ({
   // Suppress unused-variable lint — title kept in props for caller compatibility
   void title;
 
-  return (
-    <div className="fixed inset-0 z-[400]">
-      <button
-        type="button"
-        aria-label="Dismiss picker"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-      />
-
-      <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 32, stiffness: 300 }}
-        className="absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[860px] rounded-t-[16px] border-t border-x border-[var(--border)] pb-[calc(env(safe-area-inset-bottom)+20px)] pt-3 px-5"
-        style={{ background: 'var(--bg-surface)' }}
-      >
-        {/* Drag pill */}
-        <div className="mx-auto mb-5 h-[3px] w-9 rounded-full bg-white/15" />
-
+  const body = (
+    <>
         {/* Header: live value + dismiss */}
         <div
           className="flex items-center justify-between"
@@ -565,7 +551,9 @@ export const DialPicker: React.FC<DialPickerProps> = ({
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center text-[var(--text-secondary)]"
-            style={{ borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+            style={inline
+              ? { borderRadius: 8, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }
+              : { borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -573,8 +561,18 @@ export const DialPicker: React.FC<DialPickerProps> = ({
 
         {/* Wheel container */}
         <div
-          className="relative mb-4 flex overflow-hidden rounded-lg border border-[var(--border)]"
-          style={{ height: VIEW_HEIGHT, background: 'var(--bg-elevated)' }}
+          className={`relative mb-4 flex overflow-hidden rounded-lg ${inline ? '' : 'border border-[var(--border)]'}`}
+          style={inline
+            // Inline: no box — the column fades are switched off (their colour
+            // would paint dark bands on the card) and a mask fades the numbers
+            // out at the top and bottom instead.
+            ? {
+                height: VIEW_HEIGHT,
+                ['--bg-elevated' as string]: 'transparent',
+                maskImage: 'linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent)',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent, #000 28%, #000 72%, transparent)',
+              } as React.CSSProperties
+            : { height: VIEW_HEIGHT, background: 'var(--bg-elevated)' }}
         >
           {columns.map((column, columnIndex) => (
             <div
@@ -652,6 +650,45 @@ export const DialPicker: React.FC<DialPickerProps> = ({
         >
           Set
         </button>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: 'auto' }}
+        exit={{ opacity: 0, height: 0 }}
+        transition={{ duration: 0.18 }}
+        className="overflow-hidden"
+      >
+        <div className="rounded-2xl px-4 pt-3 pb-4 mt-1" style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
+          {body}
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[400]">
+      <button
+        type="button"
+        aria-label="Dismiss picker"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+      />
+
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 32, stiffness: 300 }}
+        className="absolute bottom-0 left-0 right-0 mx-auto w-full max-w-[860px] rounded-t-[16px] border-t border-x border-[var(--border)] pb-[calc(env(safe-area-inset-bottom)+20px)] pt-3 px-5"
+        style={{ background: 'var(--bg-surface)' }}
+      >
+        {/* Drag pill */}
+        <div className="mx-auto mb-5 h-[3px] w-9 rounded-full bg-white/15" />
+        {body}
       </motion.div>
     </div>
   );

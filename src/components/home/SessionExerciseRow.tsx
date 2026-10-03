@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { AppIcon } from '../../config/icons';
 import { haptics } from '../../lib/haptics';
 import { muscleColor } from '../../lib/muscleColors';
@@ -10,13 +11,13 @@ import {
 } from '../../lib/exerciseTypes';
 import { SetRow } from '../log/SetRow';
 import { SetSeparator } from '../log/ExerciseContent';
+import { DialPicker } from '../log/DialPicker';
 import type { ExerciseEntry } from '../../pages/Log';
 
-export interface SessionDialRequest {
+interface DialState {
   setId: string;
   field: 'weight' | 'reps';
   fieldKind: DialFieldKind;
-  inputType: ExerciseInputType;
   title: string;
   currentValue: number;
 }
@@ -32,7 +33,6 @@ interface Props {
   onUndo: () => void;
   onToggleSet: (setId: string) => void;
   onChangeSet: (setId: string, field: 'weight' | 'reps', value: number) => void;
-  onOpenDial: (request: SessionDialRequest) => void;
   onAddSet: () => void;
   onCopySet: (setId: string) => void;
   onRemoveSet: (setId: string) => void;
@@ -48,7 +48,7 @@ const valueOf = (s: ExerciseEntry['sets'][number], f: 'weight' | 'reps') =>
   s[f] ?? (f === 'weight' ? s.planned_weight : s.planned_reps) ?? null;
 
 export const SessionExerciseRow: React.FC<Props> = ({
-  exercise, isNext, expanded, onToggleExpand, onDone, onUndo, onToggleSet, onChangeSet, onOpenDial, onAddSet, onCopySet, onRemoveSet,
+  exercise, isNext, expanded, onToggleExpand, onDone, onUndo, onToggleSet, onChangeSet, onAddSet, onCopySet, onRemoveSet,
 }) => {
   const { overrides } = useExerciseOverrides();
   const done = exerciseDone(exercise);
@@ -63,11 +63,21 @@ export const SessionExerciseRow: React.FC<Props> = ({
   const kinds = getFieldKinds(type);
   const labels = getInputLabels(type, { weightUnit: 'lbs' });
 
+  // The dial opens inline, right under the set that was tapped — inside the
+  // card, not as a full-screen sheet.
+  const [dial, setDial] = useState<DialState | null>(null);
+  const dialRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (dial) dialRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [dial]);
+  useEffect(() => { if (!expanded) setDial(null); }, [expanded]);
+
   const openDial = (s: ExerciseEntry['sets'][number], field: 'weight' | 'reps') => {
     const fieldKind = field === binding.primary ? kinds.primary : kinds.secondary;
     if (!fieldKind) return;
-    onOpenDial({
-      setId: s.id, field, fieldKind, inputType: type,
+    const same = dial?.setId === s.id && dial.field === field;
+    setDial(same ? null : {
+      setId: s.id, field, fieldKind,
       title: `Select ${field === binding.primary ? labels.primary : labels.secondary || 'Value'}`,
       currentValue: Number(valueOf(s, field) || 0),
     });
@@ -94,7 +104,7 @@ export const SessionExerciseRow: React.FC<Props> = ({
           onClick={() => { haptics.tick(); if (done) { onUndo(); } else { onDone(); } }}
           aria-label={done ? `Undo ${exercise.name}` : `Mark ${exercise.name} done`}
           className="shrink-0 h-12 w-12 rounded-full flex items-center justify-center transition-colors"
-          style={done ? { background: 'var(--accent)', color: '#000' } : { background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1.5px solid var(--border)' }}
+          style={done ? { background: 'var(--accent)', color: '#000' } : { background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', color: 'var(--text-primary)' }}
         >
           <AppIcon name="Check" size="md" />
         </button>
@@ -120,7 +130,25 @@ export const SessionExerciseRow: React.FC<Props> = ({
                   displayValue: formatSetValue(kinds.secondary || 'reps', valueOf(s, binding.secondary)),
                 } : null}
               />
+              <div ref={dial?.setId === s.id ? dialRef : undefined}>
+                <AnimatePresence initial={false}>
+                  {dial?.setId === s.id && (
+                    <DialPicker
+                      key={`${dial.setId}-${dial.field}`}
+                      inline
+                      title={dial.title}
+                      fieldKind={dial.fieldKind}
+                      inputType={type}
+                      initialValue={dial.currentValue}
+                      weightUnit="lbs"
+                      onClose={() => setDial(null)}
+                      onConfirm={(v) => { onChangeSet(dial.setId, dial.field, v); setDial(null); }}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
               <SetSeparator
+                soft
                 onCopy={() => onCopySet(s.id)}
                 onRemove={() => {
                   if (exercise.sets.length <= 1) return;
@@ -130,7 +158,8 @@ export const SessionExerciseRow: React.FC<Props> = ({
             </React.Fragment>
           ))}
           <button type="button" onClick={onAddSet}
-            className="h-[46px] w-full rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)]/45 text-[14px] font-semibold tracking-[0.06em] text-[var(--text-secondary)] transition-all hover:border-[var(--accent)]/35 hover:text-[var(--accent)] active:scale-[0.99]">
+            className="h-[46px] w-full rounded-xl text-[14px] font-semibold tracking-[0.06em] text-[var(--text-secondary)] transition-all hover:text-[var(--accent)] active:scale-[0.99]"
+            style={{ background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
             + Add Set
           </button>
         </div>

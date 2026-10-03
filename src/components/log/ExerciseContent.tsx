@@ -58,14 +58,17 @@ const getFieldBinding = (type: ReturnType<typeof resolveExerciseInputType>) => {
   }
 };
 
-export const SetSeparator: React.FC<{ onCopy: () => void; onRemove: () => void }> = ({ onCopy, onRemove }) => (
+// soft: borderless pills for session cards, where everything blends into the card.
+export const SetSeparator: React.FC<{ onCopy: () => void; onRemove: () => void; soft?: boolean }> = ({ onCopy, onRemove, soft = false }) => (
   <div className="flex items-center gap-2 py-0.5 px-1">
     <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
     <button
       type="button"
       onClick={onCopy}
       className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[11px] font-semibold active:scale-95 transition-all"
-      style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.08)' }}
+      style={soft
+        ? { background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', color: 'var(--text-secondary)' }
+        : { background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.08)' }}
     >
       <Copy className="w-3 h-3" />
       Copy set
@@ -74,7 +77,9 @@ export const SetSeparator: React.FC<{ onCopy: () => void; onRemove: () => void }
       type="button"
       onClick={onRemove}
       className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[11px] font-semibold active:scale-95 transition-all"
-      style={{ background: 'rgba(248,113,113,0.06)', color: 'rgba(248,113,113,0.7)', border: '1px solid rgba(248,113,113,0.15)' }}
+      style={soft
+        ? { background: 'color-mix(in srgb, var(--red) 8%, transparent)', color: 'var(--red)' }
+        : { background: 'rgba(248,113,113,0.06)', color: 'rgba(248,113,113,0.7)', border: '1px solid rgba(248,113,113,0.15)' }}
     >
       <X className="w-3 h-3" />
       Remove

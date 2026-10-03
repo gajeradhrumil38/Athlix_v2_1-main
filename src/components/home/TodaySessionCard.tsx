@@ -10,9 +10,9 @@ import type { ExerciseEntry, WorkoutState } from '../../pages/Log';
 import {
   addExercises, addSet, copySet, markExerciseDone, markExerciseUndone, removeSet, sessionProgress, toggleSetDone, updateSetValue,
 } from '../../lib/sessionChecklist';
-import { SessionExerciseRow, type SessionDialRequest } from './SessionExerciseRow';
+import { SessionExerciseRow } from './SessionExerciseRow';
+import { ScrollArea } from '../shared/ScrollArea';
 import { muscleColor } from '../../lib/muscleColors';
-import { DialPicker } from '../log/DialPicker';
 
 interface Props {
   workout: WorkoutState;
@@ -49,7 +49,6 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
   const [expanded, setExpanded] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [dial, setDial] = useState<(SessionDialRequest & { exerciseId: string }) | null>(null);
   const p = sessionProgress(workout);
   // The day's colour: its most frequent muscle group (orange on a legs day).
   const dayColor = (() => {
@@ -105,7 +104,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
         </div>
       )}
 
-      <div className="mt-3 max-h-[420px] overflow-y-auto space-y-2 -mx-1 px-1">
+      <ScrollArea maxHeight={420} className="mt-3 -mx-1" contentClassName="space-y-2 px-1 pb-1">
         {workout.exercises.map((ex, i) => (
           <SessionExerciseRow
             key={ex.id}
@@ -117,13 +116,12 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
             onUndo={() => onChange(markExerciseUndone(workout, ex.id))}
             onToggleSet={(setId) => onChange(toggleSetDone(workout, ex.id, setId))}
             onChangeSet={(setId, field, value) => onChange(updateSetValue(workout, ex.id, setId, field, value))}
-            onOpenDial={(req) => setDial({ ...req, exerciseId: ex.id })}
             onAddSet={() => onChange(addSet(workout, ex.id, uid()))}
             onCopySet={(setId) => onChange(copySet(workout, ex.id, setId, uid()))}
             onRemoveSet={(setId) => onChange(removeSet(workout, ex.id, setId))}
           />
         ))}
-      </div>
+      </ScrollArea>
 
       {workout.exercises.length === 0 && (
         <p className="text-[13px] text-[var(--text-muted)] text-center py-4">No exercises yet — add what you&apos;re doing.</p>
@@ -142,20 +140,6 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
 
       {/* Portal: the card's glass background would otherwise trap the
           full-screen picker inside the card. */}
-      {/* The logger's scroll-wheel dial; portal for the same reason as the picker. */}
-      {dial && createPortal(
-        <DialPicker
-          title={dial.title}
-          fieldKind={dial.fieldKind}
-          inputType={dial.inputType}
-          initialValue={dial.currentValue}
-          weightUnit="lbs"
-          onClose={() => setDial(null)}
-          onConfirm={(v) => { onChange(updateSetValue(workout, dial.exerciseId, dial.setId, dial.field, v)); setDial(null); }}
-        />,
-        document.body,
-      )}
-
       {picking && createPortal(
         <ExercisePicker recentExercises={recentExercises ?? []} multiSelect onSelect={addPicked} onClose={() => setPicking(false)} />,
         document.body,
