@@ -1,6 +1,6 @@
 import React, { useId, useMemo, useRef, useState } from 'react';
 import { palette } from '../../theme/colors';
-import { classifyTrend, trendRuns, type TrendState } from '../../lib/trend';
+import { classifyTrend, hasTrend, MIN_TREND_POINTS, trendRuns, type TrendState } from '../../lib/trend';
 
 /**
  * Grid texture for a chart's plot area only — the card around it stays the
@@ -125,7 +125,7 @@ export const GlowSparkline: React.FC<{
     const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
     const mid = (min + max) / 2;
 
-    const states = showTrend ? classifyTrend(values) : null;
+    const states = showTrend && hasTrend(values.length) ? classifyTrend(values) : null;
     const runs = states ? trendRuns(states) : [];
 
     return { pts, line, area, min, max, yOf: y, yTicks: [max, mid, min], states, runs };
@@ -303,6 +303,12 @@ export const GlowSparkline: React.FC<{
           <span key={idx} className="relative" style={{ fontSize: 9.5, color: 'var(--text-secondary)', opacity: 0.85, fontWeight: 700 }}>{points[idx].label}</span>
         ))}
       </div>
+
+      {showTrend && !geo.states && (
+        <p className="mt-1.5" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          Trend shows after {MIN_TREND_POINTS} entries · {points.length} so far
+        </p>
+      )}
 
       {/* Legend + the latest verdict in words (colour is never the only cue). */}
       {geo.states && geo.runs.length > 0 && (() => {

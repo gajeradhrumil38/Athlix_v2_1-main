@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyTrend, ema, trendRuns } from './trend';
+import { classifyTrend, ema, hasTrend, trendRuns } from './trend';
 
 describe('ema', () => {
   it('starts at the first value and moves halfway each step (alpha 0.5)', () => {
@@ -30,6 +30,12 @@ describe('classifyTrend', () => {
   });
   it('returns the single state for one point', () => {
     expect(classifyTrend([42])).toEqual(['flat']);
+  });
+});
+
+describe('hasTrend', () => {
+  it('needs at least three entries', () => {
+    expect([0, 1, 2, 3, 10].map(hasTrend)).toEqual([false, false, false, true, true]);
   });
 });
 

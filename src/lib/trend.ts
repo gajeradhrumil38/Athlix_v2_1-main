@@ -7,6 +7,10 @@
 
 export type TrendState = 'up' | 'flat' | 'down';
 
+// Two entries are just one change — that's a difference, not a trend.
+export const MIN_TREND_POINTS = 3;
+export const hasTrend = (count: number) => count >= MIN_TREND_POINTS;
+
 export function ema(values: number[], alpha = 0.5): number[] {
   const out: number[] = [];
   values.forEach((v, i) => out.push(i === 0 ? v : alpha * v + (1 - alpha) * out[i - 1]));
