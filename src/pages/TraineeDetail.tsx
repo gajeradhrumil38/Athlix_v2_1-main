@@ -13,7 +13,7 @@ import { NotShared } from '../components/coach/NotShared';
 import { AssignPlanSheet } from '../components/coach/AssignPlanSheet';
 import { MuscleMap, type MuscleData } from '../components/home/MuscleMap';
 import { MuscleRadar } from '../components/home/MuscleRadar';
-import { getExerciseMuscleProfile, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
+import { getExerciseMuscleProfile, MUSCLE_SLUG_LABELS, PRIMARY_LOAD_WEIGHT, SECONDARY_LOAD_WEIGHT } from '../lib/exerciseMuscles';
 import { getTraineeDashboard, peekTraineeDashboard, type TraineeDashboard, type TraineeWorkout } from '../lib/coachData';
 import { CoachLogStartModal } from '../components/coach/CoachLogStart';
 import { CoachSessionCard } from '../components/coach/CoachSessionCard';
@@ -26,7 +26,7 @@ import { WhoopDashboard } from '../features/whoop/components/WhoopDashboard';
 import { RunHistory } from '../features/running/pages/RunHistory';
 import { muscleColor } from '../lib/muscleColors';
 import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
-import { BigNumber, Delta, EmptyState, StatLabel, TONE, WidgetCard } from '../components/coach/overview/Widget';
+import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard } from '../components/coach/overview/Widget';
 import { palette } from '../theme/colors';
 
 // Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
@@ -89,6 +89,16 @@ const parseDay = (d: string) => new Date(`${d}T00:00:00`).getTime();
 
 type Alert = { level: 'high' | 'warn'; text: string; hint?: string };
 const ALERT_COLOR: Record<Alert['level'] | 'ok', string> = { high: TONE.bad, warn: TONE.warn, ok: TONE.good };
+
+const REGIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Glutes', 'Core'];
+const TOTAL_MUSCLES = Object.keys(MUSCLE_SLUG_LABELS).length;
+// Ranks the body regions for a period: who led, who trailed, who was skipped.
+function regionSummary(radar: MuscleData) {
+  const ranked = REGIONS.map((r) => ({ r, sets: Math.round(radar[r]?.sets || 0) })).sort((a, b) => b.sets - a.sets);
+  const trained = ranked.filter((x) => x.sets > 0);
+  return { dominant: trained[0] ?? null, least: trained.length > 1 ? trained[trained.length - 1] : null, untrained: ranked.filter((x) => x.sets === 0).map((x) => x.r) };
+}
+const setsIn = (list: TraineeWorkout[]) => list.reduce((s, w) => s + (w.exercises || []).reduce((a, e) => a + (e.sets || 0), 0), 0);
 
 type MusclePeriod = 'today' | 'week' | 'month';
 const PERIOD_LABEL: Record<MusclePeriod, string> = { today: 'today', week: 'last 7 days', month: 'last 30 days' };
@@ -254,9 +264,15 @@ export const TraineeDetail: React.FC = () => {
     const all = dash?.workouts.shared ? dash.workouts.data : [];
     const now = Date.now();
     const pick = (p: MusclePeriod) => all.filter((w) => inPeriod(w.date, p, now));
+    const mapList = pick(mapPeriod);
+    const radarList = pick(radarPeriod);
+    const mapViz = buildMuscleViz(mapList);
     return {
-      map: buildMuscleViz(pick(mapPeriod)).map,
-      radar: buildMuscleViz(pick(radarPeriod)).radar,
+      map: mapViz.map,
+      mapRegions: mapViz.radar,
+      radar: buildMuscleViz(radarList).radar,
+      radarSets: setsIn(radarList),
+      radarSessions: new Set(radarList.map((w) => w.date)).size,
       focus: buildMuscleViz(pick('week')).radar,
     };
   }, [dash, mapPeriod, radarPeriod]);
@@ -491,7 +507,6 @@ export const TraineeDetail: React.FC = () => {
         const pctDelta = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : a > 0 ? 100 : 0);
 
         // Least-trained muscle group this week → suggest a focus.
-        const REGIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Glutes', 'Core'];
         const regionSets = REGIONS.map((r) => ({ r, sets: Math.round(muscle.focus[r]?.sets || 0) }));
         const anyTrained = regionSets.some((x) => x.sets > 0);
         const focusPick = [...regionSets].sort((a, b) => a.sets - b.sets)[0];
@@ -505,7 +520,7 @@ export const TraineeDetail: React.FC = () => {
           stats: shared ? <WeeklyStats workouts={dash.workouts.data} /> : <NotShared label="This week" />,
           gauge: shared ? <GaugeRing value={weekSessions} goal={GOAL} /> : <NotShared label="Weekly goal" />,
           trend: shared ? (
-            <WidgetCard title="This week vs last">
+            <WidgetCard title="This week vs last" tone={IDENTITY.consistency}>
               <div className="grid grid-cols-2 gap-2">
                 <TrendStat label="Sessions" now={weekSessions} delta={pctDelta(weekSessions, lastSessions)} />
                 <TrendStat label="Volume" now={thisVol} unit="lb" delta={pctDelta(thisVol, lastVol)} />
@@ -513,7 +528,7 @@ export const TraineeDetail: React.FC = () => {
             </WidgetCard>
           ) : <NotShared label="This week vs last" />,
           focus: shared ? (
-            <WidgetCard title="Focus next" meta="last 7 days">
+            <WidgetCard title="Focus next" meta="last 7 days" tone={anyTrained ? muscleColor(focusPick.r) : undefined}>
               {anyTrained ? (
                 <>
                   <p className="text-[24px] font-bold text-[var(--text-primary)] leading-none">{focusPick.r}</p>
@@ -522,18 +537,65 @@ export const TraineeDetail: React.FC = () => {
               ) : <EmptyState text="No training logged this week yet." />}
             </WidgetCard>
           ) : <NotShared label="Focus next" />,
-          radar: shared ? (
-            <WidgetCard title="Muscle load" meta={PERIOD_LABEL[radarPeriod]}>
-              <div className="mb-3"><PeriodToggle value={radarPeriod} onChange={setRadarPeriod} /></div>
-              <MuscleRadar muscleData={muscle.radar} showTitle={false} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
-            </WidgetCard>
-          ) : <NotShared label="Muscle load" />,
-          map: shared ? (
-            <WidgetCard title="Trained muscles" meta={PERIOD_LABEL[mapPeriod]}>
-              <MuscleMap bare muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} unit="lbs" gender={dash.sex}
-                controls={<PeriodToggle value={mapPeriod} onChange={setMapPeriod} />} />
-            </WidgetCard>
-          ) : <NotShared label="Trained muscles" />,
+          radar: shared ? (() => {
+            const sum = regionSummary(muscle.radar);
+            const tone = sum.dominant ? muscleColor(sum.dominant.r) : undefined;
+            return (
+              <WidgetCard title="Muscle load" tone={tone} meta={PERIOD_LABEL[radarPeriod]}>
+                <div className="mb-3"><PeriodToggle value={radarPeriod} onChange={setRadarPeriod} /></div>
+                {sum.dominant ? (
+                  <div className="flex items-end justify-between gap-3 mb-3">
+                    <div>
+                      <BigNumber value={muscle.radarSets} unit="sets" unitColor={tone} />
+                      <StatLabel>{muscle.radarSessions} session{muscle.radarSessions === 1 ? '' : 's'} · {sum.dominant.r}-led</StatLabel>
+                    </div>
+                    <div className="text-right text-[12px] leading-relaxed text-[var(--text-secondary)]">
+                      <p>Most <span className="font-bold" style={{ color: muscleColor(sum.dominant.r) }}>{sum.dominant.r} {sum.dominant.sets}</span></p>
+                      {sum.least && <p>Least <span className="font-bold" style={{ color: muscleColor(sum.least.r) }}>{sum.least.r} {sum.least.sets}</span></p>}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-[var(--text-secondary)] mb-3">No training {radarPeriod === 'today' ? 'today' : `in the ${PERIOD_LABEL[radarPeriod]}`} yet.</p>
+                )}
+                <PlotGrid accent={tone ?? palette.accent}>
+                  <MuscleRadar muscleData={muscle.radar} showTitle={false} periodLabel={PERIOD_LABEL[radarPeriod]} scale={PERIOD_SCALE[radarPeriod]} />
+                </PlotGrid>
+              </WidgetCard>
+            );
+          })() : <NotShared label="Muscle load" />,
+          map: shared ? (() => {
+            const sum = regionSummary(muscle.mapRegions);
+            const tone = sum.dominant ? muscleColor(sum.dominant.r) : undefined;
+            const hit = Object.values(muscle.map).filter((m) => (m.sets || 0) > 0).length;
+            return (
+              <WidgetCard title="Trained muscles" tone={tone} meta={PERIOD_LABEL[mapPeriod]}>
+                <div className="flex items-end justify-between gap-3 mb-2">
+                  <div>
+                    <BigNumber value={hit} unit={`/ ${TOTAL_MUSCLES} muscles`} unitColor={tone} />
+                    <StatLabel>{hit ? `Worked ${mapPeriod === 'today' ? 'today' : `in the ${PERIOD_LABEL[mapPeriod]}`}` : 'Nothing logged in this period'}</StatLabel>
+                  </div>
+                  {sum.dominant && (
+                    <span className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-full"
+                      style={{ background: `color-mix(in srgb, ${muscleColor(sum.dominant.r)} 14%, transparent)`, color: muscleColor(sum.dominant.r) }}>
+                      Most: {sum.dominant.r}
+                    </span>
+                  )}
+                </div>
+                {sum.untrained.length > 0 && hit > 0 && (
+                  <p className="text-[12px] text-[var(--text-secondary)] mb-2.5 leading-snug">
+                    Not trained yet: <span className="font-semibold text-[var(--text-primary)]">{sum.untrained.slice(0, 4).join(', ')}{sum.untrained.length > 4 ? '…' : ''}</span>
+                  </p>
+                )}
+                <PlotGrid accent={tone ?? palette.accent}>
+                  <div className="px-1 pb-1">
+                    <MuscleMap bare muscleData={muscle.map} view={muscleView} onViewChange={setMuscleView} unit="lbs" gender={dash.sex}
+                      controls={<PeriodToggle value={mapPeriod} onChange={setMapPeriod} />} />
+                  </div>
+                </PlotGrid>
+                <p className="text-[11px] text-[var(--text-secondary)] mt-2">Brighter = more volume · switch Front / Back to see the other side</p>
+              </WidgetCard>
+            );
+          })() : <NotShared label="Trained muscles" />,
           volume: shared ? <VolumeTrend workouts={dash.workouts.data} /> : <NotShared label="Training volume" />,
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
@@ -547,7 +609,7 @@ export const TraineeDetail: React.FC = () => {
             </WidgetCard>
           ),
           plans: (
-            <WidgetCard title="Assigned plans" icon="Clipboard" meta={plans.length ? String(plans.length) : undefined}
+            <WidgetCard title="Assigned plans" tone={IDENTITY.plans} icon="Clipboard" meta={plans.length ? String(plans.length) : undefined}
               right={
                 <button type="button" onClick={() => { setEditingPlan(null); setAssign(true); }} aria-label="Assign a new plan"
                   className="h-7 w-7 flex items-center justify-center rounded-lg"
@@ -763,12 +825,12 @@ const GaugeRing: React.FC<{ value: number; goal: number }> = ({ value, goal }) =
   const r = 46, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, value / goal));
   const left = Math.max(0, goal - value);
   return (
-    <WidgetCard title="Weekly goal" meta={`${goal} sessions`}>
+    <WidgetCard title="Weekly goal" tone={IDENTITY.consistency} meta={`${goal} sessions`}>
       <div className="flex items-center gap-4">
         <div className="relative shrink-0" style={{ width: 112, height: 112 }}>
           <svg width={112} height={112} viewBox="0 0 132 132" className="-rotate-90">
             <circle cx={66} cy={66} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={10} />
-            <circle cx={66} cy={66} r={r} fill="none" stroke={palette.accent} strokeWidth={10} strokeLinecap="round"
+            <circle cx={66} cy={66} r={r} fill="none" stroke={palette.green} strokeWidth={10} strokeLinecap="round"
               strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center"><BigNumber value={`${value}/${goal}`} size="md" /></div>
@@ -1071,7 +1133,7 @@ const WeeklyStats: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
     };
   }, [workouts]);
   return (
-    <WidgetCard title="This week" meta="last 7 days">
+    <WidgetCard title="This week" tone={IDENTITY.consistency} meta="last 7 days">
       <div className="grid grid-cols-3 gap-2">
         {([['Sessions', stat.sessions], ['Sets', stat.sets], ['Exercises', stat.exercises]] as const).map(([label, v]) => (
           <div key={label} className="rounded-xl px-3 py-3" style={{ background: 'var(--bg-elevated)' }}>
@@ -1100,7 +1162,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
   }, [workouts]);
   const weeks = points.map((p) => p.value);
   if (weeks.every((v) => v === 0)) {
-    return <WidgetCard title="Training volume"><EmptyState icon="Trending" text="No workouts logged yet." /></WidgetCard>;
+    return <WidgetCard title="Training volume" tone={IDENTITY.load}><EmptyState icon="Trending" text="No workouts logged yet." /></WidgetCard>;
   }
 
   const thisWk = weeks[weeks.length - 1];
@@ -1110,10 +1172,10 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
   const avg = Math.round(weeks.reduce((a, b) => a + b, 0) / weeks.length);
 
   return (
-    <WidgetCard title="Training volume" meta="8 weeks">
+    <WidgetCard title="Training volume" tone={IDENTITY.load} meta="8 weeks">
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
-          <BigNumber value={thisWk.toLocaleString()} unit="lb" />
+          <BigNumber value={thisWk.toLocaleString()} unit="lb" unitColor={IDENTITY.load} />
           <StatLabel>This week</StatLabel>
         </div>
         <Delta pct={deltaPct} suffix="vs last week" />
@@ -1136,7 +1198,7 @@ const VolumeTrend: React.FC<{ workouts: TraineeWorkout[] }> = ({ workouts }) => 
 /* ── PRs ─────────────────────────────────────────────────── */
 // One compact row per lift — name + muscle on the left, best set on the right.
 const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best_reps: number; unit: string }[] }> = ({ prs }) => (
-  <WidgetCard title="Personal records" icon="Trophy" meta={prs.length ? String(prs.length) : undefined} flush>
+  <WidgetCard title="Personal records" tone={IDENTITY.records} icon="Trophy" meta={prs.length ? String(prs.length) : undefined} flush>
     {!prs.length ? (
       <div className="px-4 pb-4"><EmptyState icon="Trophy" text="No personal records yet." /></div>
     ) : (
@@ -1167,17 +1229,17 @@ const PRList: React.FC<{ prs: { exercise_name: string; best_weight: number; best
 const fmtShort = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const WeightTrend: React.FC<{ weights: { date: string; weight: number; unit: string }[] }> = ({ weights }) => {
   if (weights.length < 2) {
-    return <WidgetCard title="Body weight"><EmptyState icon="Trending" text="Not enough body-weight logs yet." /></WidgetCard>;
+    return <WidgetCard title="Body weight" tone={IDENTITY.weight}><EmptyState icon="Trending" text="Not enough body-weight logs yet." /></WidgetCard>;
   }
   const latest = weights[weights.length - 1].weight;
   const first = weights[0].weight;
   const delta = Math.round((latest - first) * 10) / 10;
 
   return (
-    <WidgetCard title="Body weight" meta={`since ${fmtShort(weights[0].date)}`}>
+    <WidgetCard title="Body weight" tone={IDENTITY.weight} meta={`since ${fmtShort(weights[0].date)}`}>
       <div className="flex items-end justify-between gap-3 mb-3">
         <div>
-          <BigNumber value={latest.toFixed(1)} unit="lb" />
+          <BigNumber value={latest.toFixed(1)} unit="lb" unitColor={IDENTITY.weight} />
           <StatLabel>Latest</StatLabel>
         </div>
         {delta !== 0 && (

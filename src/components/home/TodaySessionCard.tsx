@@ -11,6 +11,7 @@ import {
   addExercises, addSet, copySet, markExerciseDone, markExerciseUndone, removeSet, sessionProgress, toggleSetDone, updateSetValue,
 } from '../../lib/sessionChecklist';
 import { SessionExerciseRow, type SessionDialRequest } from './SessionExerciseRow';
+import { muscleColor } from '../../lib/muscleColors';
 import { DialPicker } from '../log/DialPicker';
 
 interface Props {
@@ -50,6 +51,13 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
   const [picking, setPicking] = useState(false);
   const [dial, setDial] = useState<(SessionDialRequest & { exerciseId: string }) | null>(null);
   const p = sessionProgress(workout);
+  // The day's colour: its most frequent muscle group (orange on a legs day).
+  const dayColor = (() => {
+    const counts = new Map<string, number>();
+    for (const e of workout.exercises) counts.set(e.muscleGroup, (counts.get(e.muscleGroup) ?? 0) + 1);
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    return top ? muscleColor(top) : 'var(--accent)';
+  })();
 
   const addPicked = (picked: Exercise) => {
     const entry: ExerciseEntry = { id: uid(), name: picked.name, muscleGroup: picked.muscleGroup, exercise_db_id: picked.exercise_db_id, sets: setsFrom(picked) };
@@ -87,7 +95,7 @@ export const TodaySessionCard: React.FC<Props> = ({ workout, onChange, onDiscard
       </div>
 
       <div className="h-1.5 rounded-full overflow-hidden mt-3" style={{ background: 'var(--bg-elevated)' }}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%`, background: 'var(--accent)' }} />
+        <div className="h-full rounded-full transition-all" style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%`, background: dayColor }} />
       </div>
 
       {menu && (

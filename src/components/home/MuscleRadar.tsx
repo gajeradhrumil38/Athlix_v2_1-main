@@ -97,16 +97,15 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
 
   return (
     <div className="flex flex-col">
-      {/* Header */}
+      {/* Header — omitted inside a card shell that already says this. */}
+      {showTitle && (
       <div className="flex items-center justify-between mb-1">
-        {showTitle ? (
-          <div className="flex items-center gap-2">
-            <h3 className="text-[10px] uppercase tracking-[0.8px] text-[var(--text-secondary)] font-semibold">
-              MUSCLE LOAD
-            </h3>
-            <span className="text-[10px] text-[var(--text-secondary)]">· {periodLabel}</span>
-          </div>
-        ) : <span />}
+        <div className="flex items-center gap-2">
+          <h3 className="text-[10px] uppercase tracking-[0.8px] text-[var(--text-secondary)] font-semibold">
+            MUSCLE LOAD
+          </h3>
+          <span className="text-[10px] text-[var(--text-secondary)]">· {periodLabel}</span>
+        </div>
         {dominant && (
           <span
             className="text-[9px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
@@ -124,6 +123,7 @@ export const MuscleRadar: React.FC<MuscleRadarProps> = ({ muscleData, periodLabe
           </span>
         )}
       </div>
+      )}
 
       {/* Radar SVG — fills the card width */}
       <div className="relative w-full" style={{ aspectRatio: '1/1', maxHeight: 300 }}>

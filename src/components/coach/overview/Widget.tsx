@@ -2,8 +2,18 @@ import React from 'react';
 import { AppIcon, type IconName } from '../../../config/icons';
 
 // One visual language for every card on the coach's trainee Overview: the
-// same shell, header, number style and empty state. Colour lives inside the
-// content (chart lines, muscle colours) — never on the card itself.
+// same shell, header, number style and empty state. Each data card has an
+// identity colour (its `tone`) that tints the title, the number's unit, the
+// chart and the plot grid — the card background itself stays neutral.
+
+// Identity colours per kind of data (theme variables; charts use palette hex).
+export const IDENTITY = {
+  load: 'var(--accent)',
+  weight: 'var(--ring-volume)',
+  records: 'var(--pr-gold)',
+  consistency: 'var(--green)',
+  plans: 'var(--purple)',
+} as const;
 
 // Semantic tones, all theme variables.
 export const TONE = {
@@ -16,6 +26,8 @@ export const TONE = {
 
 interface WidgetCardProps {
   title: string;
+  // Identity colour for the title/icon. Omit for neutral cards (notes, lists).
+  tone?: string;
   icon?: IconName;
   // Small qualifier after the title, e.g. "last 7 days" or "lb".
   meta?: string;
@@ -27,13 +39,13 @@ interface WidgetCardProps {
   children: React.ReactNode;
 }
 
-export const WidgetCard: React.FC<WidgetCardProps> = ({ title, icon, meta, right, flush = false, className = '', children }) => (
+export const WidgetCard: React.FC<WidgetCardProps> = ({ title, tone, icon, meta, right, flush = false, className = '', children }) => (
   <section className={`glass-card overflow-hidden ${flush ? '' : 'p-4'} ${className}`}>
     {/* pr-9 keeps the header clear of the Overview's drag handle (top-right). */}
     <header className={`flex items-center justify-between gap-2 pr-9 ${flush ? 'px-4 pt-4 pb-3' : 'mb-3'}`}>
       <div className="flex items-center gap-1.5 min-w-0">
-        {icon && <span className="shrink-0 text-[var(--text-secondary)]"><AppIcon name={icon} size="sm" /></span>}
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)] truncate">{title}</h3>
+        {icon && <span className="shrink-0" style={{ color: tone ?? 'var(--text-secondary)' }}><AppIcon name={icon} size="sm" /></span>}
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] truncate" style={{ color: tone ?? 'var(--text-secondary)' }}>{title}</h3>
         {meta && <span className="text-[11px] text-[var(--text-secondary)] opacity-70 truncate">· {meta}</span>}
       </div>
       {right && <div className="shrink-0">{right}</div>}
@@ -43,12 +55,12 @@ export const WidgetCard: React.FC<WidgetCardProps> = ({ title, icon, meta, right
 );
 
 // Headline number: display font, tabular figures, unit beside it.
-export const BigNumber: React.FC<{ value: React.ReactNode; unit?: string; size?: 'lg' | 'md' | 'sm'; color?: string }> = ({ value, unit, size = 'lg', color }) => {
+export const BigNumber: React.FC<{ value: React.ReactNode; unit?: string; size?: 'lg' | 'md' | 'sm'; color?: string; unitColor?: string }> = ({ value, unit, size = 'lg', color, unitColor }) => {
   const px = size === 'lg' ? 'text-[36px]' : size === 'md' ? 'text-[26px]' : 'text-[19px]';
   return (
     <span className="inline-flex items-baseline gap-1 tabular-nums">
       <span className={`font-victory ${px} leading-none font-black`} style={{ color: color ?? 'var(--text-primary)' }}>{value}</span>
-      {unit && <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-secondary)]">{unit}</span>}
+      {unit && <span className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: unitColor ?? 'var(--text-secondary)' }}>{unit}</span>}
     </span>
   );
 };
