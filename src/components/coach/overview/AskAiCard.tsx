@@ -2,12 +2,26 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AppIcon } from '../../../config/icons';
 import { askTraineeAi, TraineeAiError, type AiTurn } from '../../../lib/traineeAi';
+import { parseAiAnswer } from '../../../lib/traineeAiVisuals';
+import { AiVisual } from './AiVisual';
 import type { TraineeDashboard } from '../../../lib/coachData';
 import { WidgetCard, tile } from './Widget';
 
 // Ask AI about this trainee, inside the Overview — quick questions as chips,
 // or type your own. Answers come only from what the trainee shares.
-const QUICK = ['How is progress going?', 'What should I program next?', 'Any red flags?'];
+const QUICK = ['How was this week?', 'Show strength progress', 'Muscle balance', 'Any red flags?'];
+
+// "- " lines become a tidy list; anything else stays a paragraph.
+const AnswerText: React.FC<{ text: string }> = ({ text }) => (
+  <div className="space-y-1.5 text-[13px] leading-relaxed text-[var(--text-primary)]">
+    {text.split('\n').filter((l) => l.trim()).map((l, i) => {
+      const bullet = /^\s*[-•*]\s+/.test(l);
+      return bullet ? (
+        <p key={i} className="flex gap-2"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: 'var(--purple)' }} /><span>{l.replace(/^\s*[-•*]\s+/, '')}</span></p>
+      ) : <p key={i}>{l}</p>;
+    })}
+  </div>
+);
 
 export const AskAiCard: React.FC<{ dash: TraineeDashboard }> = ({ dash }) => {
   const first = dash.name.split(' ')[0] || dash.name;
@@ -56,13 +70,23 @@ export const AskAiCard: React.FC<{ dash: TraineeDashboard }> = ({ dash }) => {
   return (
     <WidgetCard title="Ask AI" tone="var(--purple)" icon="AICoach" meta={`about ${first}`}>
       {turns.length > 0 && (
-        <div ref={listRef} className="max-h-[320px] overflow-y-auto -mx-1 px-1 mb-3 space-y-2">
+        <div ref={listRef} className="max-h-[520px] overflow-y-auto -mx-1 px-1 mb-3 space-y-2">
           {turns.map((t, i) => (
             t.role === 'user' ? (
               <p key={i} className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md px-3 py-2 text-[13px] font-medium text-[var(--text-primary)]"
                 style={tile('var(--purple)')}>{t.text}</p>
             ) : (
-              <p key={i} className="max-w-[95%] text-[13px] leading-relaxed text-[var(--text-primary)] whitespace-pre-wrap">{t.text}</p>
+              (() => {
+                // Model turns keep their tags in history (so follow-ups know
+                // what was shown); they're stripped only for display.
+                const { text, visuals } = parseAiAnswer(t.text);
+                return (
+                  <div key={i} className="space-y-2">
+                    {text && <AnswerText text={text} />}
+                    {visuals.map((v, vi) => <AiVisual key={vi} visual={v} dash={dash} />)}
+                  </div>
+                );
+              })()
             )
           ))}
           {busy && (

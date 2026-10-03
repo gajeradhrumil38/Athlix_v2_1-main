@@ -27,6 +27,11 @@ export function buildTraineeContext(dash: TraineeDashboard, now = Date.now()): s
     }
   }
 
+  if (dash.workouts.shared) {
+    const names = [...new Set(dash.workouts.data.flatMap((w) => w.exercises.map((e) => e.name)))];
+    if (names.length) lines.push(`Exercise names (use exactly in chart tags): ${names.slice(0, 60).join(' | ')}`);
+  }
+
   if (!dash.prs.shared) lines.push('Personal records: not shared.');
   else if (dash.prs.data.length) {
     lines.push('Personal records:');
@@ -55,9 +60,19 @@ export function buildTraineeContext(dash: TraineeDashboard, now = Date.now()): s
   return lines.join('\n');
 }
 
-const SYSTEM = (context: string) => `You help a fitness coach understand one of their trainees.
-Answer the coach's question using ONLY the data below — never invent sessions, weights or dates. If the data can't answer it, say what's missing.
-Be brief and concrete: at most 5 short bullet points or 4 sentences, real numbers, weights in lb. Plain text, no markdown headings.
+const SYSTEM = (name: string, context: string) => `You help a fitness coach understand their trainee, ${name}.
+You are talking to the COACH, not to the trainee: call the trainee "${name}" (or he/she/they), never "you".
+Answer using ONLY the data below — never invent sessions, weights or dates. If the data can't answer it, say what's missing.
+Be brief and concrete: at most 4 short "- " bullet points, real numbers, weights in lb. Plain text, no markdown headings or bold.
+
+The app draws charts from the real data. When one helps, end the answer with up to 2 tags, each on its own line:
+[[chart:exercise:<exact exercise name from the list>]] — top weight per session for that exercise
+[[chart:volume]] — weekly training volume, last 8 weeks
+[[chart:bodyweight]] — body weight over time
+[[chart:muscles]] — sets per muscle group, last 7 days
+[[stats:week]] — this week vs last week (sessions, sets, volume)
+[[list:prs]] — personal records
+Add a chart whenever the question is about an exercise's progress, volume, body weight, muscle balance, this week, or records. Don't describe the tags in words.
 
 ${context}`;
 
@@ -73,7 +88,7 @@ export async function askTraineeAi(dash: TraineeDashboard, history: AiTurn[], si
     body: JSON.stringify({
       model: DEFAULT_MODEL,
       stream: false,
-      system_instruction: { parts: [{ text: SYSTEM(buildTraineeContext(dash)) }] },
+      system_instruction: { parts: [{ text: SYSTEM(dash.name.split(' ')[0] || dash.name, buildTraineeContext(dash)) }] },
       contents: history.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
       generationConfig: { temperature: 0.4, maxOutputTokens: 700, thinkingConfig: { thinkingBudget: 0 } },
     }),
