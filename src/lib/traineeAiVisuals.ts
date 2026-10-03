@@ -12,14 +12,34 @@ export type AiVisual =
   | { kind: 'week' }
   | { kind: 'prs' };
 
-const TAG = /\[\[\s*(chart|stats|list)\s*:\s*([a-z]+)\s*(?::\s*([^\]]+?))?\s*\]\]/gi;
+// Actions the model can PROPOSE. Nothing runs until the coach taps it, and
+// each one is re-checked against the real data first (see traineeAiActions).
+export type AiAction =
+  | { kind: 'progress'; name: string; weight: number }
+  | { kind: 'plan' }
+  | { kind: 'checkin' };
 
-export function parseAiAnswer(raw: string): { text: string; visuals: AiVisual[] } {
+const TAG = /\[\[\s*(chart|stats|list|action)\s*:\s*([a-z]+)\s*(?::\s*([^\]]+?))?\s*\]\]/gi;
+
+export function parseAiAnswer(raw: string): { text: string; visuals: AiVisual[]; actions: AiAction[] } {
   const visuals: AiVisual[] = [];
+  const actions: AiAction[] = [];
   const seen = new Set<string>();
   for (const m of raw.matchAll(TAG)) {
     const kind = m[2].toLowerCase();
     const arg = m[3]?.trim();
+    if (m[1].toLowerCase() === 'action') {
+      let a: AiAction | null = null;
+      if (kind === 'plan' || kind === 'checkin') a = { kind };
+      else if (kind === 'progress' && arg) {
+        const cut = arg.lastIndexOf(':');
+        const weight = cut > 0 ? Number(arg.slice(cut + 1).replace(/[^\d.]/g, '')) : NaN;
+        if (cut > 0 && Number.isFinite(weight) && weight > 0) a = { kind: 'progress', name: arg.slice(0, cut).trim(), weight };
+      }
+      const key = JSON.stringify(a).toLowerCase();
+      if (a && !seen.has(key)) { seen.add(key); actions.push(a); }
+      continue;
+    }
     let v: AiVisual | null = null;
     if (kind === 'exercise' && arg) v = { kind: 'exercise', name: arg };
     else if (kind === 'volume' || kind === 'bodyweight' || kind === 'muscles' || kind === 'week' || kind === 'prs') v = { kind };
@@ -30,7 +50,7 @@ export function parseAiAnswer(raw: string): { text: string; visuals: AiVisual[] 
     visuals.push(v);
   }
   const text = raw.replace(TAG, '').replace(/\n{3,}/g, '\n\n').trim();
-  return { text, visuals: visuals.slice(0, 3) };
+  return { text, visuals: visuals.slice(0, 3), actions: actions.slice(0, 3) };
 }
 
 const DAY = 86_400_000;

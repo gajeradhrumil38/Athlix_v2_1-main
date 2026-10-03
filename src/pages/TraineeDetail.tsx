@@ -29,7 +29,9 @@ import { GlowSparkline, PlotGrid } from '../components/shared/GlowChart';
 import { BigNumber, Delta, EmptyState, IDENTITY, StatLabel, TONE, WidgetCard, tile } from '../components/coach/overview/Widget';
 import { palette } from '../theme/colors';
 import { settleColumns } from '../lib/masonry';
-import { AskAiCard } from '../components/coach/overview/AskAiCard';
+import { AskAiCard, type AiCardActions } from '../components/coach/overview/AskAiCard';
+import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
+import type { PlanStarter } from '../lib/planStarters';
 
 // Theme accent for CSS styles. (SVG attributes use palette.accent instead.)
 const ACCENT = 'var(--accent)';
@@ -148,6 +150,10 @@ export const TraineeDetail: React.FC = () => {
   const [logStart, setLogStart] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<AssignedPlan | null>(null);
+  // Ask AI hand-offs: a drafted plan opens in the Assign sheet, a check-in in
+  // the appointment sheet — the coach reviews before anything is sent.
+  const [planDraft, setPlanDraft] = useState<(PlanStarter & { message?: string }) | null>(null);
+  const [checkinNotes, setCheckinNotes] = useState<string | null>(null);
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [tab, setTab] = useState<'overview' | 'whoop' | 'training' | 'calendar'>('overview');
   const [notes, setNotes] = useState(() => (id ? peekTraineeDashboard(id)?.coachNotes ?? '' : ''));
@@ -404,6 +410,21 @@ export const TraineeDetail: React.FC = () => {
     setTimeout(() => setNotesSaved(false), 1500);
   };
 
+  const aiActions: AiCardActions = {
+    onDraftPlan: (draft) => { setEditingPlan(null); setPlanDraft(draft); setAssign(true); },
+    onBookCheckin: (text) => setCheckinNotes(text),
+    onSaveToNotes: async (text) => {
+      const stamp = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const next = `${notes.trim() ? `${notes.trimEnd()}\n\n` : ''}AI · ${stamp}: ${text}`;
+      setNotes(next);
+      const res = await updateCoachNotes(dash.link.id, next);
+      if (!res.ok) { toast.error(res.error || 'Could not save notes.'); return; }
+      savedNotesRef.current = next;
+      toast.success('Saved to coach notes');
+    },
+    onPlansChanged: loadPlans,
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 pb-10">
       {/* Header */}
@@ -629,7 +650,7 @@ export const TraineeDetail: React.FC = () => {
           weight: dash.bodyWeight.shared ? <WeightTrend weights={dash.bodyWeight.data} /> : <NotShared label="Body weight" />,
           prs: dash.prs.shared ? <PRList prs={dash.prs.data} /> : <NotShared label="Personal records" />,
           recent: shared ? <RecentSessions workouts={dash.workouts.data} /> : <NotShared label="Recent sessions" />,
-          ai: <AskAiCard dash={{ ...dash, coachNotes: notes }} plans={plans} />,
+          ai: <AskAiCard dash={{ ...dash, coachNotes: notes }} plans={plans} actions={aiActions} />,
           notes: (
             <WidgetCard title="Coach notes" icon="Edit"
               right={<span className="text-[11px] font-semibold" style={{ color: notesSaved ? TONE.good : 'var(--text-secondary)' }}>{notesSaved ? 'Saved ✓' : 'Private · saves automatically'}</span>}>
@@ -749,8 +770,16 @@ export const TraineeDetail: React.FC = () => {
         traineeName={dash.name}
         traineeWorkouts={dash.workouts.shared ? dash.workouts.data : []}
         editingPlan={editingPlan}
-        onClose={() => { setAssign(false); setEditingPlan(null); }}
+        draft={planDraft}
+        onClose={() => { setAssign(false); setEditingPlan(null); setPlanDraft(null); }}
         onAssigned={loadPlans}
+      />
+
+      <CreateAppointmentSheet
+        open={checkinNotes != null}
+        prefill={id && checkinNotes != null ? { traineeId: id, title: 'Check-in', notes: checkinNotes.replace(/^\s*[-•*]\s+/gm, '• ') } : null}
+        onClose={() => setCheckinNotes(null)}
+        onCreated={() => setCheckinNotes(null)}
       />
 
     </div>

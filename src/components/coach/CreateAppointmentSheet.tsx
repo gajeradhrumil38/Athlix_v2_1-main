@@ -21,9 +21,10 @@ import { DialPicker } from '../log/DialPicker';
 // updateAppointment() instead of createAppointment(). Which trainee it's
 // for isn't editable — reassigning an existing appointment to a different
 // person is an edge case rare enough that cancel-and-recreate is clearer.
-interface Props { open: boolean; editingAppointment?: TrainerAppointment | null; onClose: () => void; onCreated: () => void; }
+// prefill: start a new appointment with these filled in (e.g. a check-in from Ask AI).
+interface Props { open: boolean; editingAppointment?: TrainerAppointment | null; prefill?: { traineeId: string; title?: string; notes?: string } | null; onClose: () => void; onCreated: () => void; }
 
-export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointment, onClose, onCreated }) => {
+export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointment, prefill, onClose, onCreated }) => {
   const [roster, setRoster] = useState<CoachLink[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
   const [traineeId, setTraineeId] = useState<string | null>(null);
@@ -73,6 +74,11 @@ export const CreateAppointmentSheet: React.FC<Props> = ({ open, editingAppointme
       next.setMinutes(next.getMinutes() < 30 ? 30 : 60);
       setDate(format(next, 'yyyy-MM-dd'));
       setTime(format(next, 'HH:mm'));
+      if (prefill) {
+        setTraineeId(prefill.traineeId);
+        setTitle(prefill.title ?? '');
+        setNotes(prefill.notes ?? '');
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingAppointment?.id]);

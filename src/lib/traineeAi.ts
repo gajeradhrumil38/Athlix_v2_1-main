@@ -76,6 +76,12 @@ The app draws charts from the real data. When one helps, end the answer with up 
 [[list:prs]] — personal records
 Add a chart whenever the question is about an exercise's progress, volume, body weight, muscle balance, this week, or records. Don't describe the tags in words.
 
+You can also PROPOSE actions the coach approves with one tap (they run nothing by themselves):
+[[action:progress:<exact exercise name>:<new working weight in lb>]] — when a lift should go up or down; one realistic step
+[[action:plan]] — when a new or changed plan is the right move
+[[action:checkin]] — when the coach should talk to ${name} (missed sessions, low recovery, a drop)
+Only propose an action when it clearly follows from the data.
+
 ${context}`;
 
 export class TraineeAiError extends Error {
@@ -138,3 +144,6 @@ export function markVisit(key: string): string | null {
     return prev && prev !== today() ? prev : null;
   } catch { return null; }
 }
+
+export const messageRequest = (first: string, answer: string) =>
+  `Rewrite this as a short, warm message from the coach to ${first}: 2–4 sentences, speak to ${first} as "you", plain text, no tags, no bullet points.\n\n${answer}`;

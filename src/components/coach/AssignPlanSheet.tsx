@@ -19,7 +19,8 @@ import { PlanExerciseRow, type DialField } from './assign/PlanExerciseRow';
 // adjust (compact rows, day tabs, whole-day set/rep chips) → preview exactly
 // what the trainee sees, then send. Defaults everywhere, so the fastest path
 // is two taps with no typing.
-interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; editingPlan?: AssignedPlan | null; onClose: () => void; onAssigned: () => void; }
+// draft: a plan to open straight into the builder for review (the AI's draft).
+interface Props { open: boolean; traineeId: string; traineeName: string; traineeWorkouts?: TraineeWorkout[]; editingPlan?: AssignedPlan | null; draft?: (PlanStarter & { message?: string }) | null; onClose: () => void; onAssigned: () => void; }
 
 type Row = { name: string; sets: number; reps: number; weight: number; rest: number; note: string; dayId: number };
 type Day = { id: number; label: string };
@@ -29,7 +30,7 @@ const SCHEMES: [number, number][] = [[3, 5], [3, 8], [3, 10], [4, 12]];
 const DIAL_KIND: Record<DialField, DialFieldKind> = { sets: 'sets', reps: 'reps', weight: 'weight', rest: 'rest' };
 const DIAL_LABEL: Record<DialField, string> = { sets: 'Sets', reps: 'Reps', weight: 'Weight', rest: 'Rest' };
 
-export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], editingPlan, onClose, onAssigned }) => {
+export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName, traineeWorkouts = [], editingPlan, draft, onClose, onAssigned }) => {
   const { user, profile } = useAuth();
   const [step, setStep] = useState<Step>('start');
   const [title, setTitle] = useState('');
@@ -77,12 +78,15 @@ export const AssignPlanSheet: React.FC<Props> = ({ open, traineeId, traineeName,
       setActiveDayId(0);
       nextDayId.current = Math.max(1, nextDays.length);
       setStep('build');
+    } else if (draft) {
+      loadStarter(draft);
+      setMessage(draft.message ?? '');
     } else {
       setTitle(''); setMessage(''); setRows([]); setDays([{ id: 0, label: '' }]); setActiveDayId(0); nextDayId.current = 1;
       setStep('start');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editingPlan?.id]);
+  }, [open, editingPlan?.id, draft]);
 
   const hasContent = rows.length > 0;
   const close = () => { onClose(); setStep('start'); };

@@ -19,7 +19,18 @@ describe('parseAiAnswer', () => {
     expect(r.text).toBe('a');
   });
   it('leaves plain answers alone', () => {
-    expect(parseAiAnswer('Just text.')).toEqual({ text: 'Just text.', visuals: [] });
+    expect(parseAiAnswer('Just text.')).toEqual({ text: 'Just text.', visuals: [], actions: [] });
+  });
+});
+
+describe('parseAiAnswer actions', () => {
+  it('reads proposed actions and strips them from the text', () => {
+    const r = parseAiAnswer('- Add weight.\n[[action:progress:Barbell Chest Press:70 lb]]\n[[action:checkin]]\n[[action:plan]]');
+    expect(r.text).toBe('- Add weight.');
+    expect(r.actions).toEqual([{ kind: 'progress', name: 'Barbell Chest Press', weight: 70 }, { kind: 'checkin' }, { kind: 'plan' }]);
+  });
+  it('drops a progression without a usable weight', () => {
+    expect(parseAiAnswer('[[action:progress:Bench:heavier]]').actions).toEqual([]);
   });
 });
 
