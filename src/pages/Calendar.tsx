@@ -51,6 +51,7 @@ import { OPENTRAINING_EXERCISES } from '../data/opentrainingCatalog';
 import { convertWeight, isWeightUnit, type WeightUnit } from '../lib/units';
 import { muscleColor } from '../lib/muscleColors';
 import { getWorkoutDisplayTitle, isWorkoutUnnamed } from '../lib/workoutTitle';
+import { newWorkoutState, readDraft, writeDraft } from '../lib/workoutDraft';
 import { ExerciseProgressSheet } from '../components/calendar/ExerciseProgressSheet';
 import { CreateAppointmentSheet } from '../components/coach/CreateAppointmentSheet';
 import { PlanPreviewModal } from '../components/coach/PlanPreviewModal';
@@ -1480,10 +1481,7 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
   const repeatWorkout = (w: any) => {
     const groups = groupExerciseSets(w, unit);
     if (groups.length === 0) return;
-    try {
-      const existing = sessionStorage.getItem('athlix_active_workout');
-      if (existing && !window.confirm('Start a new workout from this? Your current in-progress workout draft will be replaced.')) return;
-    } catch { /* sessionStorage unavailable — proceed */ }
+    if (readDraft() && !window.confirm('Start a new workout from this? Your current in-progress workout draft will be replaced.')) return;
     const exercises = groups.map((g) => ({
       id: crypto.randomUUID(),
       name: g.name,
@@ -1491,18 +1489,7 @@ export const Calendar: React.FC<{ userId?: string; readOnly?: boolean }> = ({ us
       exercise_db_id: g.exercise_db_id || undefined,
       sets: g.sets.map((s) => ({ id: crypto.randomUUID(), weight: s.weight || null, reps: s.reps || null, done: false })),
     }));
-    const now = Date.now();
-    const startAt = format(new Date(now), "yyyy-MM-dd'T'HH:mm");
-    const draft = {
-      title: isWorkoutUnnamed(w) ? '' : (w.title || ''),
-      startTime: now,
-      startAt,
-      endAt: startAt,
-      elapsedSeconds: 0,
-      exercises,
-      notes: '',
-    };
-    try { sessionStorage.setItem('athlix_active_workout', JSON.stringify(draft)); } catch { /* ignore */ }
+    writeDraft(newWorkoutState(exercises, isWorkoutUnnamed(w) ? '' : (w.title || '')));
     navigate('/log');
   };
 

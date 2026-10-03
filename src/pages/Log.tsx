@@ -21,7 +21,7 @@ import { QuickStartSheet } from '../components/log/QuickStartSheet';
 import { PlanTodaySheet } from '../components/log/PlanTodaySheet';
 import { ActiveWorkout } from '../components/log/ActiveWorkout';
 import { FinishSheet } from '../components/log/FinishSheet';
-import { OPENTRAINING_ID_BY_NAME, OPENTRAINING_ASSETS_BY_ID, normalizeExerciseName } from '../data/opentrainingCatalog';
+import { buildEntriesFromPlan, clearDraft, readDraft, writeDraft, type PlanExercise } from '../lib/workoutDraft';
 
 export interface Set {
   id: string;
@@ -44,6 +44,8 @@ export interface ExerciseEntry {
   optionalWeight?: boolean;
   /** Rest time prescribed by the assigned plan this exercise came from, if any — overrides the global default rest duration when set. */
   restSeconds?: number | null;
+  /** The coach's cue for this exercise (from an assigned plan), shown on the Home session card. */
+  note?: string | null;
   lastSession?: {
     date: string;
     sets: number;
@@ -63,45 +65,11 @@ export interface WorkoutState {
   elapsedSeconds: number;
   exercises: ExerciseEntry[];
   notes: string;
-}
-
-const DRAFT_KEY = 'athlix_active_workout';
-const DRAFT_TTL = 8 * 60 * 60 * 1000;
-
-// Build workout entries from a Train Today recommendation: resolve each
-// exercise's muscle group from the catalog (fallback to the plan's primary
-// muscle), N empty sets, with the plan's target reps seeded as a hint.
-// weight is the coach's prescription, always in lb (assigned_plan_exercises.unit).
-type PlanExercise = { name: string; sets: number; reps: string; rest?: number | null; weight?: number | null };
-function planRepTarget(reps: string): number | null {
-  const m = /(\d+)/.exec(reps || '');
-  return m ? Number(m[1]) : null;
-}
-function buildEntriesFromPlan(exercises: PlanExercise[], planMuscles?: string[], weightUnit: 'kg' | 'lbs' = 'lbs'): ExerciseEntry[] {
-  return exercises.map((ex) => {
-    const assetId = OPENTRAINING_ID_BY_NAME[normalizeExerciseName(ex.name)];
-    const asset = assetId ? OPENTRAINING_ASSETS_BY_ID[assetId] : undefined;
-    const muscleGroup = asset?.muscleGroup || planMuscles?.[0] || 'Core';
-    // A coach can prescribe up to 20 sets — the old cap of 6 silently trimmed them.
-    const nSets = Math.max(1, Math.min(20, Number(ex.sets) || 3));
-    const target = planRepTarget(ex.reps);
-    const plannedWeight = ex.weight && ex.weight > 0 ? convertWeight(ex.weight, 'lbs', weightUnit) : null;
-    return {
-      id: crypto.randomUUID(),
-      name: ex.name,
-      muscleGroup,
-      exercise_db_id: asset?.id,
-      restSeconds: ex.rest ?? null,
-      sets: Array.from({ length: nSets }, () => ({
-        id: crypto.randomUUID(),
-        weight: null,
-        reps: null,
-        done: false,
-        planned_reps: target,
-        planned_weight: plannedWeight,
-      })),
-    };
-  });
+  // The coach plan + day this session was started from. Kept on the workout
+  // (not in page memory) so a resumed session — from the Home card or a
+  // reload — still saves with its plan link.
+  sourcePlanId?: string | null;
+  sourcePlanDay?: string | null;
 }
 
 const pad2 = (value: number) => value.toString().padStart(2, '0');
@@ -127,68 +95,6 @@ const parseDateParam = (value?: string | null) => {
 const formatLocalDate = (date: Date) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-const readDraft = (): WorkoutState | null => {
-  try {
-    const rawDraft = sessionStorage.getItem(DRAFT_KEY);
-    if (!rawDraft) return null;
-
-    const parsed = JSON.parse(rawDraft) as WorkoutState;
-    if (
-      !parsed ||
-      typeof parsed.startTime !== 'number' ||
-      !Number.isFinite(parsed.startTime) ||
-      !Array.isArray(parsed.exercises)
-    ) {
-      sessionStorage.removeItem(DRAFT_KEY);
-      return null;
-    }
-    const age = Date.now() - parsed.startTime;
-
-    if (age >= DRAFT_TTL) {
-      sessionStorage.removeItem(DRAFT_KEY);
-      return null;
-    }
-
-    const baseStartDate = new Date(parsed.startTime || Date.now());
-    const startAt = parsed.startAt || toLocalDateTimeInput(baseStartDate);
-    const endAt =
-      parsed.endAt ||
-      toLocalDateTimeInput(new Date(baseStartDate.getTime() + (parsed.elapsedSeconds || 0) * 1000));
-    const startDate = parseDateTimeInput(startAt) || baseStartDate;
-    const endDate = parseDateTimeInput(endAt) || startDate;
-    const elapsedSeconds = Math.max(
-      0,
-      Math.round((endDate.getTime() - startDate.getTime()) / 1000),
-      parsed.elapsedSeconds || 0,
-    );
-
-    return {
-      ...parsed,
-      startAt,
-      endAt,
-      elapsedSeconds,
-    };
-  } catch {
-    sessionStorage.removeItem(DRAFT_KEY);
-    return null;
-  }
-};
-
-const writeDraft = (draft: WorkoutState) => {
-  try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    // Ignore storage failures and let the workout continue in memory.
-  }
-};
-
-const clearDraft = () => {
-  try {
-    sessionStorage.removeItem(DRAFT_KEY);
-  } catch {
-    // Ignore storage failures during cleanup.
-  }
-};
 
 export const Log: React.FC = () => {
   const { user, profile, updateProfile } = useAuth();
@@ -201,6 +107,7 @@ export const Log: React.FC = () => {
   const forcePlanToday = searchParams.get('plan') === '1';
   const forcedWorkoutDate = searchParams.get('date');
   const skipQuickStart = searchParams.get('direct') === '1';
+  const finishRequested = searchParams.get('finish') === '1';
 
   const [workout, setWorkout] = useState<WorkoutState | null>(null);
   const [showQuickStart, setShowQuickStart] = useState(false);
@@ -216,8 +123,7 @@ export const Log: React.FC = () => {
   const saveInFlightRef = useRef(false);
   // Set when this session was started from a coach-assigned plan — persisted to
   // the saved workout so the trainer can see prescribed-vs-actual / adherence.
-  const sourcePlanIdRef = useRef<string | null>(null);
-  const sourcePlanDayRef = useRef<string | null>(null);
+  const pendingFinishRef = useRef(false);
   // lb-only for now — never follow a stale stored kg preference.
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('lbs');
   const [distanceUnit, setDistanceUnit] = useState<'km' | 'mi'>(() => {
@@ -282,8 +188,6 @@ export const Log: React.FC = () => {
     const recExercises = (location.state as { recommendedExercises?: PlanExercise[] } | null)?.recommendedExercises;
     if (recExercises?.length) {
       const planState = location.state as { sourcePlanId?: string; sourcePlanDay?: string } | null;
-      sourcePlanIdRef.current = planState?.sourcePlanId ?? null;
-      sourcePlanDayRef.current = planState?.sourcePlanDay ?? null;
       const draftHasWork = draft?.exercises?.some((e) => e.sets.length > 0);
       if (draft && draftHasWork) {
         setWorkout(draft);
@@ -292,7 +196,11 @@ export const Log: React.FC = () => {
       } else {
         const st = location.state as { suggestedTitle?: string; preselectedMuscles?: string[] } | null;
         const entries = buildEntriesFromPlan(recExercises, st?.preselectedMuscles, weightUnit);
-        const state = createWorkoutState(entries, st?.suggestedTitle, forcedWorkoutDate);
+        const state = {
+          ...createWorkoutState(entries, st?.suggestedTitle, forcedWorkoutDate),
+          sourcePlanId: planState?.sourcePlanId ?? null,
+          sourcePlanDay: planState?.sourcePlanDay ?? null,
+        };
         setWorkout(state);
         setShowQuickStart(false);
         setOpenPickerOnStart(false);
@@ -315,6 +223,7 @@ export const Log: React.FC = () => {
         // If user tapped the + FAB (?add=1) we still want the picker to open
         // even when resuming an existing draft.
         setOpenPickerOnStart(forceAddExercise);
+        if (finishRequested && draft.exercises.some((e) => e.sets.some((s) => s.done))) pendingFinishRef.current = true;
         return;
       }
       // Draft is for a different date — ignore it, fall through.
@@ -448,22 +357,10 @@ export const Log: React.FC = () => {
     writeDraft(initialState);
   }, [showStartSheet, skipQuickStart, workout, createWorkoutState, forceAddExercise, forcedWorkoutDate, user, location.state]);
 
-  // Write draft immediately when exercise count changes (covers unload / add / remove)
-  const prevExCountRef = useRef<number>(-1);
+  // Save on every change — the Home "Today's session" card reads this same
+  // draft, so a set ticked here must be there the moment the user goes back.
   useEffect(() => {
-    if (!workout) return;
-    const len = workout.exercises.length;
-    if (prevExCountRef.current !== len) {
-      prevExCountRef.current = len;
-      writeDraft(workout);
-    }
-  }, [workout]);
-
-  // Also auto-save every 30s for title/notes/timer changes
-  useEffect(() => {
-    if (!workout) return;
-    const interval = setInterval(() => { writeDraft(workout); }, 30000);
-    return () => clearInterval(interval);
+    if (workout) writeDraft(workout);
   }, [workout]);
 
   const startWorkout = useCallback((initialExercises: ExerciseEntry[] = [], title?: string) => {
@@ -485,6 +382,16 @@ export const Log: React.FC = () => {
       getWorkouts(user.id, { limit: 20, includeExercises: true }).then(setFinishPriorWorkouts).catch(() => setFinishPriorWorkouts([]));
     }
   };
+
+  // Home card's "Finish session" lands here as /log?finish=1: resume the
+  // shared draft, then open the normal finish flow.
+  useEffect(() => {
+    if (workout && pendingFinishRef.current) {
+      pendingFinishRef.current = false;
+      handleFinish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workout]);
 
   const handleBackToPrevious = useCallback(() => {
     if (window.history.length > 1) {
@@ -526,8 +433,8 @@ export const Log: React.FC = () => {
         date: formatLocalDate(startDate),
         duration_minutes: Math.max(1, Math.round(finalElapsedSeconds / 60)),
         notes: notes || null,
-        source_plan_id: sourcePlanIdRef.current,
-        source_plan_day: sourcePlanDayRef.current,
+        source_plan_id: workout.sourcePlanId ?? null,
+        source_plan_day: workout.sourcePlanDay ?? null,
           exercises: completedExercises.map(({ exercise, completedSets, exerciseIndex }) => ({
             name: exercise.name,
             muscle_group: exercise.muscleGroup,

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { aiCoachFetch } from '../../lib/aiCoachFetch';
 import { convertWeight, type WeightUnit } from '../../lib/units';
+import { newWorkoutState, readDraft, writeDraft } from '../../lib/workoutDraft';
 import { resolveExerciseInputType } from '../../lib/exerciseTypes';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -2563,25 +2564,10 @@ export const AiChat: React.FC = () => {
         };
       });
 
-      const DRAFT_KEY = 'athlix_active_workout';
-      const now = Date.now();
-      let draft: WorkoutState | null = null;
-      try {
-        const raw = sessionStorage.getItem(DRAFT_KEY);
-        const parsed = raw ? (JSON.parse(raw) as WorkoutState) : null;
-        if (parsed && Array.isArray(parsed.exercises) && typeof parsed.startTime === 'number' && now - parsed.startTime < 8 * 60 * 60 * 1000) {
-          draft = parsed;
-        }
-      } catch { /* ignore corrupt draft */ }
-      if (draft) {
-        draft.exercises = [...draft.exercises, ...newExercises];
-      } else {
-        const d = new Date();
-        const p = (n: number) => String(n).padStart(2, '0');
-        const local = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-        draft = { title: '', startTime: now, startAt: local, endAt: local, elapsedSeconds: 0, exercises: newExercises, notes: '' };
-      }
-      try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* ignore */ }
+      const existing = readDraft();
+      writeDraft(existing
+        ? { ...existing, exercises: [...existing.exercises, ...newExercises] }
+        : newWorkoutState(newExercises));
     }
 
     // Happy path — everything matched → straight into the logger.

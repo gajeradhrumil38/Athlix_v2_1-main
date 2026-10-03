@@ -220,6 +220,7 @@ export function planStartState(plan: AssignedPlan, dayLabel: string) {
       reps: String(e.default_reps),
       rest: e.rest_seconds ?? null,
       weight: e.default_weight || null,
+      note: e.note ?? null,
     })),
     suggestedTitle: isMulti && dayLabel ? `${plan.title} — ${dayLabel}` : plan.title,
     sourcePlanId: plan.id,
